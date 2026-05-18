@@ -7,18 +7,20 @@ options:
   generateEmptyDirectories: true
 
 # NOTE: scorly-b grows this file phase by phase.
-#  - Phase 1 (this commit): Domain + Data packages declared. Feature
-#    packages + the app target land later. `xcodegen generate` will
-#    not produce a buildable project until the Scorly/ app target is
-#    added in Phase 3.
-#  - Phase 2: ScorlyDesignSystem package + dependency added.
+#  - Phase 1: Domain + Data packages declared.
+#  - Phase 2 (this commit): ScorlyDesignSystem added (brutalist tokens
+#    + primitives + bundled fonts).
 #  - Phase 3: feature packages, app target, Info.plist mapping.
+#  `xcodegen generate` will not produce a buildable project until the
+#  Scorly/ app target lands in Phase 3.
 
 packages:
   ScorlyDomain:
     path: Packages/ScorlyDomain
   ScorlyData:
     path: Packages/ScorlyData
+  ScorlyDesignSystem:
+    path: Packages/ScorlyDesignSystem
 
 settings:
   base:
