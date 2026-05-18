@@ -1,0 +1,52 @@
+# Scorly v2 — SwiftFormat configuration
+
+--swiftversion 5.0
+
+# Indentation & whitespace
+--indent 4
+--tabwidth unspecified
+--smarttabs enabled
+--maxwidth 120
+
+# Wrapping
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--closingparen balanced
+
+# Imports
+--importgrouping testable-bottom
+
+# Misc style
+--self remove
+--selfrequired
+--patternlet hoist
+--commas always
+--trimwhitespace always
+--stripunusedargs closure-only
+--ranges no-space
+--operatorfunc spaced
+--elseposition same-line
+--guardelse next-line
+--funcattributes prev-line
+--typeattributes prev-line
+--varattributes prev-line
+--decimalgrouping 3,4
+--binarygrouping 4,8
+--hexgrouping 4,8
+--octalgrouping 4,8
+--exponentcase lowercase
+--hexliteralcase uppercase
+--ifdef no-indent
+--xcodeindentation enabled
+--semicolons never
+--header ignore
+--marktypes never
+--organizetypes never
+--redundanttype inferred
+
+# Excluded paths
+--exclude Scorly.xcodeproj,DerivedData,.build,**/.build,**/.swiftpm
+
+# Disabled rules
+--disable wrapMultilineStatementBraces
