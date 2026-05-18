@@ -17,6 +17,8 @@ packages:
     path: Packages/ScorlyFeatureAuth
   ScorlyFeatureRound:
     path: Packages/ScorlyFeatureRound
+  ScorlyFeatureHistory:
+    path: Packages/ScorlyFeatureHistory
 
 settings:
   base:
@@ -41,6 +43,8 @@ targets:
       - package: ScorlyDesignSystem
       - package: ScorlyFeatureAuth
       - package: ScorlyFeatureRound
+      - package: ScorlyFeatureHistory
+        product: ScorlyFeatureHistory
     configFiles:
       Debug: Local.xcconfig
       Release: Local.xcconfig
