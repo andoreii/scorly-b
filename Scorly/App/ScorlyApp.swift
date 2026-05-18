@@ -10,6 +10,7 @@ struct ScorlyApp: App {
     private let modelContainer: ModelContainer
     private let authService: AuthService
     private let roundsRepository: any RoundsRepository
+    private let coursesRepository: any CoursesRepository
 
     init() {
         // Bundled brutalist fonts. Must happen before the first scene
@@ -37,13 +38,22 @@ struct ScorlyApp: App {
         // RoundsRepositoryLive. Home + History both render the
         // no-rounds-yet empty state while this is in place.
         roundsRepository = InMemoryRoundsRepository()
+
+        // Local-only seed courses so Round Setup has options. Phase 6
+        // swaps for the real CoursesRepositoryLive; supabase migrations
+        // remain schema-only.
+        coursesRepository = InMemoryCoursesRepository()
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView(authService: authService, roundsRepository: roundsRepository)
-                .modelContainer(modelContainer)
-                .preferredColorScheme(.light)
+            RootView(
+                authService: authService,
+                roundsRepository: roundsRepository,
+                coursesRepository: coursesRepository
+            )
+            .modelContainer(modelContainer)
+            .preferredColorScheme(.light)
         }
     }
 }

@@ -2,6 +2,7 @@ import ScorlyData
 import ScorlyDesignSystem
 import ScorlyDomain
 import ScorlyFeatureAuth
+import ScorlyFeatureRound
 import SwiftUI
 
 /// Root scene. Auth gate, then a flow-driven switch between brutalist
@@ -9,14 +10,26 @@ import SwiftUI
 struct RootView: View {
     let authService: AuthService
     let roundsRepository: any RoundsRepository
+    let coursesRepository: any CoursesRepository
 
     @State private var flow = AppFlow()
+    @State private var setupForm = RoundSetupForm()
+    @State private var courses: [Course] = []
+    @State private var didLoadCourses = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         AuthGateView(authService: authService) {
             content
                 .id(authService.userId ?? UUID())
+                .task {
+                    guard !didLoadCourses else { return }
+                    didLoadCourses = true
+                    if let fetched = try? await coursesRepository.fetchAll() {
+                        courses = fetched
+                        seedDefaultCourseSelection()
+                    }
+                }
         }
     }
 
@@ -33,8 +46,13 @@ struct RootView: View {
                 )
                 .transition(transition)
             case .setup:
-                FlowPlaceholder(title: "Round setup", onBack: { flow.back() })
-                    .transition(transition)
+                SetupView(
+                    form: $setupForm,
+                    courses: courses,
+                    onCancel: { flow.back() },
+                    onTeeOff: { flow.go(.play) }
+                )
+                .transition(transition)
             case .play:
                 FlowPlaceholder(title: "Round play", onBack: { flow.back() })
                     .transition(transition)
@@ -58,6 +76,12 @@ struct RootView: View {
             insertion: .move(edge: .trailing).combined(with: .opacity),
             removal: .move(edge: .leading).combined(with: .opacity)
         )
+    }
+
+    private func seedDefaultCourseSelection() {
+        guard setupForm.courseId == nil, let first = courses.first else { return }
+        setupForm.courseId = first.id
+        setupForm.teeId = first.tees.first?.id
     }
 
     private func signOut() {
