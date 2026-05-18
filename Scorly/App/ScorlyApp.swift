@@ -9,6 +9,7 @@ import SwiftUI
 struct ScorlyApp: App {
     private let modelContainer: ModelContainer
     private let authService: AuthService
+    private let roundsRepository: any RoundsRepository
 
     init() {
         // Bundled brutalist fonts. Must happen before the first scene
@@ -31,11 +32,16 @@ struct ScorlyApp: App {
         // features need a populated profile row.
         let supabase = SupabaseClientFactory.make()
         authService = AuthService(client: LiveSupabaseAuthClient(supabase: supabase))
+
+        // Empty rounds repository until phase 6 wires the SyncEngine +
+        // RoundsRepositoryLive. Home + History both render the
+        // no-rounds-yet empty state while this is in place.
+        roundsRepository = InMemoryRoundsRepository()
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView(authService: authService)
+            RootView(authService: authService, roundsRepository: roundsRepository)
                 .modelContainer(modelContainer)
                 .preferredColorScheme(.light)
         }
