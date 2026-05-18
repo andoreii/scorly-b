@@ -6,14 +6,6 @@ options:
   createIntermediateGroups: true
   generateEmptyDirectories: true
 
-# NOTE: scorly-b grows this file phase by phase.
-#  - Phase 1: Domain + Data packages declared.
-#  - Phase 2 (this commit): ScorlyDesignSystem added (brutalist tokens
-#    + primitives + bundled fonts).
-#  - Phase 3: feature packages, app target, Info.plist mapping.
-#  `xcodegen generate` will not produce a buildable project until the
-#  Scorly/ app target lands in Phase 3.
-
 packages:
   ScorlyDomain:
     path: Packages/ScorlyDomain
@@ -21,6 +13,8 @@ packages:
     path: Packages/ScorlyData
   ScorlyDesignSystem:
     path: Packages/ScorlyDesignSystem
+  ScorlyFeatureAuth:
+    path: Packages/ScorlyFeatureAuth
 
 settings:
   base:
@@ -31,6 +25,55 @@ settings:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
 
-targets: {}
+targets:
+  ScorlyB:
+    type: application
+    platform: iOS
+    sources:
+      - path: Scorly
+      - path: PrivacyInfo.xcprivacy
+        buildPhase: resources
+    dependencies:
+      - package: ScorlyDomain
+      - package: ScorlyData
+      - package: ScorlyDesignSystem
+      - package: ScorlyFeatureAuth
+    configFiles:
+      Debug: Local.xcconfig
+      Release: Local.xcconfig
+    info:
+      path: Scorly/Info.plist
+      properties:
+        CFBundleDisplayName: Scorly/B
+        CFBundleLocalizations:
+          - en
+        CFBundleDevelopmentRegion: en
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # Supabase config — values come from Local.xcconfig (gitignored).
+        SCORLY_SUPABASE_URL: $(SCORLY_SUPABASE_URL)
+        SCORLY_SUPABASE_ANON_KEY: $(SCORLY_SUPABASE_ANON_KEY)
+        # Observability — kept off until pre-TestFlight, see Local.xcconfig.example.
+        SCORLY_OBSERVABILITY_ENABLED: $(SCORLY_OBSERVABILITY_ENABLED)
+        SCORLY_SENTRY_DSN: $(SCORLY_SENTRY_DSN)
+        SCORLY_TELEMETRY_DECK_APP_ID: $(SCORLY_TELEMETRY_DECK_APP_ID)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.andrei.ScorlyB
+        PRODUCT_NAME: ScorlyB
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
 
-schemes: {}
+schemes:
+  ScorlyB:
+    build:
+      targets:
+        ScorlyB: all
+    run:
+      config: Debug
+    archive:
+      config: Release
