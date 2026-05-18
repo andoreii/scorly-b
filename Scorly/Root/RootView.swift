@@ -2,6 +2,7 @@ import ScorlyData
 import ScorlyDesignSystem
 import ScorlyDomain
 import ScorlyFeatureAuth
+import ScorlyFeatureHistory
 import ScorlyFeatureRound
 import SwiftUI
 
@@ -101,8 +102,11 @@ struct RootView: View {
                         .transition(transition)
                 }
             case .history:
-                FlowPlaceholder(title: "Round archive", onBack: { flow.back() })
-                    .transition(transition)
+                HistoryView(
+                    roundsRepository: roundsRepository,
+                    onBack: { flow.resetTo(.home) }
+                )
+                .transition(transition)
             }
         }
         .animation(
