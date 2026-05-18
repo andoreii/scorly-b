@@ -1,0 +1,34 @@
+name: ScorlyB
+options:
+  bundleIdPrefix: com.andrei
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+# NOTE: scorly-b grows this file phase by phase.
+#  - Phase 1 (this commit): Domain + Data packages declared. Feature
+#    packages + the app target land later. `xcodegen generate` will
+#    not produce a buildable project until the Scorly/ app target is
+#    added in Phase 3.
+#  - Phase 2: ScorlyDesignSystem package + dependency added.
+#  - Phase 3: feature packages, app target, Info.plist mapping.
+
+packages:
+  ScorlyDomain:
+    path: Packages/ScorlyDomain
+  ScorlyData:
+    path: Packages/ScorlyData
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets: {}
+
+schemes: {}
