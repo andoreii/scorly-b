@@ -1,0 +1,37 @@
+// Scorly/B — local-only build settings.
+//
+// Copy to `Local.xcconfig` (gitignored) and fill in the real values.
+// `make gen` does this automatically when Local.xcconfig is missing.
+//
+//   cp Local.xcconfig.example Local.xcconfig
+//
+// These keys flow into Info.plist at build time via project.yml and are
+// read at runtime by the Supabase client + Observability bootstrap.
+
+// ───────────────────────────────────────────────────────────
+// Supabase
+// ───────────────────────────────────────────────────────────
+
+// Project URL. Supabase dashboard → Project settings → API → Project URL.
+// Format: https://<project-ref>.supabase.co
+SCORLY_SUPABASE_URL =
+
+// Publishable anon key. Supabase dashboard → Project settings → API → anon key.
+// Safe to embed in a client (RLS is the actual authorization boundary).
+SCORLY_SUPABASE_ANON_KEY =
+
+// ───────────────────────────────────────────────────────────
+// Observability (deferred — leave OFF until pre-TestFlight)
+// ───────────────────────────────────────────────────────────
+
+// Master switch. Set to YES once the real DSNs are populated below.
+// Leave NO during day-to-day development so DEBUG builds never reach for
+// the network.
+SCORLY_OBSERVABILITY_ENABLED = NO
+
+// Sentry DSN. Find it in Sentry → Settings → Projects → ScorlyB → SDK Setup.
+SCORLY_SENTRY_DSN =
+
+// TelemetryDeck app identifier (UUID). Find it in TelemetryDeck → App
+// settings → Unique App Identifier.
+SCORLY_TELEMETRY_DECK_APP_ID =
