@@ -17,6 +17,7 @@ struct RootView: View {
     @State private var courses: [Course] = []
     @State private var didLoadCourses = false
     @State private var devBypassAuth = false
+    @State private var playState: RoundPlayState?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -66,12 +67,21 @@ struct RootView: View {
                     form: $setupForm,
                     courses: courses,
                     onCancel: { flow.back() },
-                    onTeeOff: { flow.go(.play) }
+                    onTeeOff: startRound
                 )
                 .transition(transition)
             case .play:
-                FlowPlaceholder(title: "Round play", onBack: { flow.back() })
+                if let playState {
+                    PlayView(
+                        state: playState,
+                        onBack: { flow.back() },
+                        onFinish: { flow.go(.confirm) }
+                    )
                     .transition(transition)
+                } else {
+                    FlowPlaceholder(title: "Round play", onBack: { flow.back() })
+                        .transition(transition)
+                }
             case .confirm:
                 FlowPlaceholder(title: "Sign & file", onBack: { flow.back() })
                     .transition(transition)
@@ -100,12 +110,26 @@ struct RootView: View {
         setupForm.teeId = first.tees.first?.id
     }
 
+    private func startRound() {
+        guard
+            let courseId = setupForm.courseId,
+            let course = courses.first(where: { $0.id == courseId })
+        else { return }
+        playState = RoundPlayState(
+            course: course,
+            teeId: setupForm.teeId,
+            holesPlayed: setupForm.holesPlayed
+        )
+        flow.go(.play)
+    }
+
     private func signOut() {
         Task { @MainActor in
             try? await authService.signOut()
             #if DEBUG
             devBypassAuth = false
             #endif
+            playState = nil
             flow.resetTo(.home)
         }
     }

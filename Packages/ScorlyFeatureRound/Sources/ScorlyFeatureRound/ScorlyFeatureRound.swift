@@ -1,4 +1,4 @@
 /// Round flow feature — setup, play (live tracker), confirm & file.
-/// Currently exports `RoundSetupForm` + `SetupView`; the play /
-/// confirm screens land in the next phases.
+/// Exports `RoundSetupForm` + `SetupView` for setup and
+/// `RoundPlayState` + `PlayView` for live play; confirm lands next.
 public enum ScorlyFeatureRound {}
