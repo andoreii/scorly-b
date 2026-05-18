@@ -83,8 +83,23 @@ struct RootView: View {
                         .transition(transition)
                 }
             case .confirm:
-                FlowPlaceholder(title: "Sign & file", onBack: { flow.back() })
+                if let playState {
+                    ConfirmView(
+                        state: playState,
+                        setupForm: setupForm,
+                        authService: authService,
+                        roundsRepository: roundsRepository,
+                        onBack: { flow.back() },
+                        onFinish: {
+                            flow.go(.history)
+                            self.playState = nil
+                        }
+                    )
                     .transition(transition)
+                } else {
+                    FlowPlaceholder(title: "Sign & file", onBack: { flow.back() })
+                        .transition(transition)
+                }
             case .history:
                 FlowPlaceholder(title: "Round archive", onBack: { flow.back() })
                     .transition(transition)
