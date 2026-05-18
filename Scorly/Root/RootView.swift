@@ -16,10 +16,15 @@ struct RootView: View {
     @State private var setupForm = RoundSetupForm()
     @State private var courses: [Course] = []
     @State private var didLoadCourses = false
+    @State private var devBypassAuth = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        AuthGateView(authService: authService) {
+        AuthGateView(
+            authService: authService,
+            forceAuthenticated: devBypassAuth,
+            onDevBypass: devBypassClosure
+        ) {
             content
                 .id(authService.userId ?? UUID())
                 .task {
@@ -31,6 +36,17 @@ struct RootView: View {
                     }
                 }
         }
+    }
+
+    /// DEBUG-only escape hatch so we can walk through the brutalist
+    /// screens before a signup flow exists. In RELEASE the closure is
+    /// nil and the bypass button never renders.
+    private var devBypassClosure: (() -> Void)? {
+        #if DEBUG
+        return { devBypassAuth = true }
+        #else
+        return nil
+        #endif
     }
 
     @ViewBuilder
@@ -87,6 +103,9 @@ struct RootView: View {
     private func signOut() {
         Task { @MainActor in
             try? await authService.signOut()
+            #if DEBUG
+            devBypassAuth = false
+            #endif
             flow.resetTo(.home)
         }
     }

@@ -6,6 +6,7 @@ import SwiftUI
 /// CTA. No sign-up, no forgot-password — those slots ship later.
 public struct BrutalistAuthView: View {
     let authService: AuthService
+    let onDevBypass: (() -> Void)?
 
     @State private var email = ""
     @State private var password = ""
@@ -17,8 +18,9 @@ public struct BrutalistAuthView: View {
 
     private enum Field: Hashable { case email, password }
 
-    public init(authService: AuthService) {
+    public init(authService: AuthService, onDevBypass: (() -> Void)? = nil) {
         self.authService = authService
+        self.onDevBypass = onDevBypass
     }
 
     private var canSubmit: Bool {
@@ -78,7 +80,51 @@ public struct BrutalistAuthView: View {
                     .kerning(0.8)
                     .foregroundStyle(BrutalistColor.dim)
                     .padding(.top, BrutalistSpacing.l)
+
+                if let onDevBypass {
+                    devBypassRow(action: onDevBypass)
+                        .padding(.top, BrutalistSpacing.l)
+                }
             }
+        }
+    }
+
+    private func devBypassRow(action: @escaping () -> Void) -> some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Rectangle()
+                    .fill(BrutalistColor.hair)
+                    .frame(height: 1)
+                    .frame(maxWidth: .infinity)
+                Text("DEV")
+                    .font(BrutalistType.monoMicro)
+                    .kerning(1.0)
+                    .foregroundStyle(BrutalistColor.dim)
+                Rectangle()
+                    .fill(BrutalistColor.hair)
+                    .frame(height: 1)
+                    .frame(maxWidth: .infinity)
+            }
+            Button {
+                Haptics.light()
+                action()
+            } label: {
+                HStack {
+                    Text("↳ BYPASS · ENTER WITHOUT AUTH")
+                        .font(BrutalistType.monoCaption)
+                        .kerning(1.0)
+                    Spacer()
+                    Text("→ SKIP")
+                        .font(BrutalistType.monoLabel)
+                        .kerning(1.0)
+                        .foregroundStyle(BrutalistColor.muted)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .foregroundStyle(BrutalistColor.fg)
+                .overlay(Rectangle().stroke(BrutalistColor.rule, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
+            }
+            .buttonStyle(.plain)
         }
     }
 
