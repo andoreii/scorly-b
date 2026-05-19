@@ -23,7 +23,6 @@ struct RootView: View {
     @State private var setupForm = RoundSetupForm()
     @State private var courses: [Course] = []
     @State private var devBypassAuth = false
-    @State private var playState: RoundPlayState?
     @State private var coursesRepository: any CoursesRepository = InMemoryCoursesRepository()
     @State private var roundsRepository: any RoundsRepository = InMemoryRoundsRepository()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -104,36 +103,23 @@ struct RootView: View {
                     onTeeOff: startRound
                 )
                 .transition(transition)
-            case .play:
-                if let playState {
-                    PlayView(
-                        state: playState,
-                        onBack: { flow.back() },
-                        onFinish: { flow.go(.confirm) }
-                    )
-                    .transition(transition)
-                } else {
-                    FlowPlaceholder(title: "Round play", onBack: { flow.back() })
-                        .transition(transition)
-                }
-            case .confirm:
-                if let playState {
-                    ConfirmView(
-                        state: playState,
-                        setupForm: setupForm,
-                        authService: authService,
-                        roundsRepository: roundsRepository,
-                        onBack: { flow.back() },
-                        onFinish: {
-                            flow.go(.history)
-                            self.playState = nil
-                        }
-                    )
-                    .transition(transition)
-                } else {
-                    FlowPlaceholder(title: "Sign & file", onBack: { flow.back() })
-                        .transition(transition)
-                }
+            case let .play(state):
+                PlayView(
+                    state: state,
+                    onBack: { flow.back() },
+                    onFinish: { flow.go(.confirm(state)) }
+                )
+                .transition(transition)
+            case let .confirm(state):
+                ConfirmView(
+                    state: state,
+                    setupForm: setupForm,
+                    authService: authService,
+                    roundsRepository: roundsRepository,
+                    onBack: { flow.back() },
+                    onFinish: { flow.resetTo(.history) }
+                )
+                .transition(transition)
             case .history:
                 HistoryView(
                     roundsRepository: roundsRepository,
@@ -167,12 +153,12 @@ struct RootView: View {
             let courseId = setupForm.courseId,
             let course = courses.first(where: { $0.id == courseId })
         else { return }
-        playState = RoundPlayState(
+        let state = RoundPlayState(
             course: course,
             teeId: setupForm.teeId,
             holesPlayed: setupForm.holesPlayed
         )
-        flow.go(.play)
+        flow.go(.play(state))
     }
 
     private func refreshCourses() async {
@@ -188,7 +174,6 @@ struct RootView: View {
             #if DEBUG
             devBypassAuth = false
             #endif
-            playState = nil
             flow.resetTo(.home)
         }
     }
