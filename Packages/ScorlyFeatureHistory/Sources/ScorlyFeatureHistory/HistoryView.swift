@@ -31,6 +31,8 @@ public struct HistoryView: View {
     public var body: some View {
         ScreenShell {
             TopBar(left: "ROUND ARCHIVE", right: "SCORLY/B  ®")
+            HairlineProgress(isLoading: isRefreshing)
+                .padding(.top, BrutalistSpacing.s)
             backRow
                 .padding(.top, BrutalistSpacing.m)
             hero
@@ -58,13 +60,11 @@ public struct HistoryView: View {
 
     private var backRow: some View {
         HStack {
-            Button(action: onBack) {
-                Text("← HOME")
-                    .font(BrutalistType.monoLabel)
-                    .kerning(1.0)
-                    .foregroundStyle(BrutalistColor.fg)
-            }
-            .buttonStyle(.plain)
+            Text("← HOME")
+                .font(BrutalistType.monoLabel)
+                .kerning(1.0)
+                .foregroundStyle(BrutalistColor.fg)
+                .brutalistTap(action: onBack)
             Spacer()
             Text("\(filtered.count) RECORDS")
                 .font(BrutalistType.monoMicro)
@@ -99,22 +99,20 @@ public struct HistoryView: View {
         HStack(spacing: 6) {
             ForEach(Filter.allCases) { f in
                 let active = filter == f
-                Button {
-                    Haptics.light()
-                    withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
-                        filter = f
+                Text(f.rawValue)
+                    .font(BrutalistType.monoCaption)
+                    .kerning(0.8)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(active ? BrutalistColor.fg : .clear)
+                    .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
+                    .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+                    .brutalistTap {
+                        Haptics.light()
+                        withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
+                            filter = f
+                        }
                     }
-                } label: {
-                    Text(f.rawValue)
-                        .font(BrutalistType.monoCaption)
-                        .kerning(0.8)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(active ? BrutalistColor.fg : .clear)
-                        .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
-                        .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
             }
         }
     }

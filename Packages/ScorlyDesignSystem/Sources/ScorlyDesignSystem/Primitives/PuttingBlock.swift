@@ -29,25 +29,23 @@ public struct PuttingBlock: View {
                 HStack(spacing: 6) {
                     ForEach(0...5, id: \.self) { count in
                         let active = putts == count
-                        Button {
-                            Haptics.medium()
-                            withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
-                                putts = count
-                                if distances.count > count {
-                                    distances = Array(distances.prefix(count))
+                        Text("\(count)")
+                            .font(BrutalistType.mono(.semibold, size: 14))
+                            .monospacedDigit()
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 38)
+                            .background(active ? BrutalistColor.fg : .clear)
+                            .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
+                            .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+                            .brutalistTap {
+                                Haptics.medium()
+                                withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
+                                    putts = count
+                                    if distances.count > count {
+                                        distances = Array(distances.prefix(count))
+                                    }
                                 }
                             }
-                        } label: {
-                            Text("\(count)")
-                                .font(BrutalistType.mono(.semibold, size: 14))
-                                .monospacedDigit()
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 38)
-                                .background(active ? BrutalistColor.fg : .clear)
-                                .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
-                                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
                     }
                 }
                 if putts > 0 {

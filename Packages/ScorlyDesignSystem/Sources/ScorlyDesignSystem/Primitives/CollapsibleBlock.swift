@@ -28,38 +28,36 @@ public struct CollapsibleBlock<Content: View>: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button {
+            HStack {
+                HStack(spacing: 10) {
+                    Text(badge.uppercased())
+                        .font(BrutalistType.monoMicro)
+                        .kerning(1.0)
+                        .opacity(0.7)
+                    Text(title.uppercased())
+                        .font(BrutalistType.blockTitle)
+                        .kerning(0.6)
+                }
+                Spacer()
+                HStack(spacing: 10) {
+                    Text(summary.uppercased())
+                        .font(BrutalistType.monoLabel)
+                        .kerning(0.6)
+                        .opacity(0.85)
+                    Text(isOpen ? "▲" : "▼")
+                        .font(BrutalistType.monoCaption)
+                }
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal, 14)
+            .background(isOpen ? BrutalistColor.fg : .clear)
+            .foregroundStyle(isOpen ? BrutalistColor.bg : BrutalistColor.fg)
+            .brutalistTap {
                 Haptics.soft()
                 withAnimation(Motion.adaptive(Motion.easeOutQuart, reduceMotion: reduceMotion)) {
                     isOpen.toggle()
                 }
-            } label: {
-                HStack {
-                    HStack(spacing: 10) {
-                        Text(badge.uppercased())
-                            .font(BrutalistType.monoMicro)
-                            .kerning(1.0)
-                            .opacity(0.7)
-                        Text(title.uppercased())
-                            .font(BrutalistType.blockTitle)
-                            .kerning(0.6)
-                    }
-                    Spacer()
-                    HStack(spacing: 10) {
-                        Text(summary.uppercased())
-                            .font(BrutalistType.monoLabel)
-                            .kerning(0.6)
-                            .opacity(0.85)
-                        Text(isOpen ? "▲" : "▼")
-                            .font(BrutalistType.monoCaption)
-                    }
-                }
-                .padding(.vertical, 12)
-                .padding(.horizontal, 14)
-                .background(isOpen ? BrutalistColor.fg : .clear)
-                .foregroundStyle(isOpen ? BrutalistColor.bg : BrutalistColor.fg)
             }
-            .buttonStyle(.plain)
             if isOpen {
                 VStack(alignment: .leading, spacing: 0) {
                     Rectangle().fill(BrutalistColor.rule).frame(height: 1)

@@ -33,27 +33,25 @@ public struct LieKeypad: View {
                 }
             }
             if let modifier {
-                Button {
+                HStack(spacing: 8) {
+                    Text("↳")
+                        .font(BrutalistType.monoCaption)
+                        .opacity(0.7)
+                    Text(modifier.label)
+                        .font(BrutalistType.blockTitle)
+                        .kerning(1.2)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(value == modifier.value ? BrutalistColor.fg : .clear)
+                .foregroundStyle(value == modifier.value ? BrutalistColor.bg : BrutalistColor.fg)
+                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+                .brutalistTap {
                     Haptics.soft()
                     withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
                         value = value == modifier.value ? nil : modifier.value
                     }
-                } label: {
-                    HStack(spacing: 8) {
-                        Text("↳")
-                            .font(BrutalistType.monoCaption)
-                            .opacity(0.7)
-                        Text(modifier.label)
-                            .font(BrutalistType.blockTitle)
-                            .kerning(1.2)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(value == modifier.value ? BrutalistColor.fg : .clear)
-                    .foregroundStyle(value == modifier.value ? BrutalistColor.bg : BrutalistColor.fg)
-                    .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
                 }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -64,22 +62,20 @@ public struct LieKeypad: View {
             let active = value == cell
             let isCenter = cell == target
             let isOut = cell.hasPrefix("OB ")
-            Button {
-                Haptics.soft()
-                withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
-                    value = active ? nil : cell
+            Text(Self.short[cell] ?? cell)
+                .font(BrutalistType.mono(isCenter ? .semibold : .medium, size: isCenter ? 12 : 9))
+                .kerning(0.4)
+                .frame(maxWidth: .infinity)
+                .frame(height: 40)
+                .background(cellBackground(active: active, isCenter: isCenter, isOut: isOut))
+                .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
+                .overlay(Rectangle().stroke(isCenter ? BrutalistColor.rule : BrutalistColor.hair, lineWidth: 1))
+                .brutalistTap {
+                    Haptics.soft()
+                    withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
+                        value = active ? nil : cell
+                    }
                 }
-            } label: {
-                Text(Self.short[cell] ?? cell)
-                    .font(BrutalistType.mono(isCenter ? .semibold : .medium, size: isCenter ? 12 : 9))
-                    .kerning(0.4)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 40)
-                    .background(cellBackground(active: active, isCenter: isCenter, isOut: isOut))
-                    .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
-                    .overlay(Rectangle().stroke(isCenter ? BrutalistColor.rule : BrutalistColor.hair, lineWidth: 1))
-            }
-            .buttonStyle(.plain)
         } else {
             Color.clear.frame(height: 40)
         }

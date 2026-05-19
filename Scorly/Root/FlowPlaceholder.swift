@@ -14,13 +14,11 @@ struct FlowPlaceholder: View {
             TopBar(left: title.uppercased(), right: "SCORLY/B  ®")
 
             HStack {
-                Button(action: onBack) {
-                    Text("← BACK")
-                        .font(BrutalistType.monoCaption)
-                        .kerning(1.0)
-                        .foregroundStyle(BrutalistColor.fg)
-                }
-                .buttonStyle(.plain)
+                Text("← BACK")
+                    .font(BrutalistType.monoCaption)
+                    .kerning(1.0)
+                    .foregroundStyle(BrutalistColor.fg)
+                    .brutalistTap(action: onBack)
                 Spacer()
                 Text("PLACEHOLDER")
                     .font(BrutalistType.monoLabel)

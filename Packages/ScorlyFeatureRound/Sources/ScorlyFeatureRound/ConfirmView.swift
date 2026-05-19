@@ -122,13 +122,11 @@ public struct ConfirmView: View {
 
     private var backRefRow: some View {
         HStack {
-            Button(action: onBack) {
-                Text("← BACK")
-                    .font(BrutalistType.monoLabel)
-                    .kerning(1.0)
-                    .foregroundStyle(BrutalistColor.fg)
-            }
-            .buttonStyle(.plain)
+            Text("← BACK")
+                .font(BrutalistType.monoLabel)
+                .kerning(1.0)
+                .foregroundStyle(BrutalistColor.fg)
+                .brutalistTap(action: onBack)
             Spacer()
             Text("SCORECARD · REF \(ref)")
                 .font(BrutalistType.monoMicro)
@@ -373,16 +371,16 @@ public struct ConfirmView: View {
                     .kerning(1.0)
                     .foregroundStyle(BrutalistColor.muted)
                 Spacer()
-                Button("CLEAR") {
-                    Haptics.light()
-                    signatureStrokes = []
-                    currentStroke = []
-                    signed = false
-                }
-                .font(BrutalistType.monoLabel)
-                .kerning(0.8)
-                .foregroundStyle(BrutalistColor.muted)
-                .buttonStyle(.plain)
+                Text("CLEAR")
+                    .font(BrutalistType.monoLabel)
+                    .kerning(0.8)
+                    .foregroundStyle(BrutalistColor.muted)
+                    .brutalistTap {
+                        Haptics.light()
+                        signatureStrokes = []
+                        currentStroke = []
+                        signed = false
+                    }
             }
 
             signatureCanvas
@@ -417,8 +415,8 @@ public struct ConfirmView: View {
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
-                    if currentStroke.isEmpty {
-                        withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
+                    if !signed {
+                        withAnimation(Motion.adaptive(Motion.easeOutQuart(0.28), reduceMotion: reduceMotion)) {
                             signed = true
                         }
                     }
