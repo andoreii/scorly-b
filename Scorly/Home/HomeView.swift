@@ -8,22 +8,26 @@ import SwiftUI
 struct HomeView: View {
     let flow: AppFlow
     let onSignOut: () -> Void
+    let onSyncCourses: (() async -> Void)?
     private let repository: any RoundsRepository
 
     @State private var rounds: [CompletedRound] = []
     @State private var handicap: Decimal?
     @State private var didLoad = false
     @State private var isLoading = false
+    @State private var isSyncing = false
     @State private var now = Date()
 
     init(
         flow: AppFlow,
         repository: any RoundsRepository,
-        onSignOut: @escaping () -> Void
+        onSignOut: @escaping () -> Void,
+        onSyncCourses: (() async -> Void)? = nil
     ) {
         self.flow = flow
         self.repository = repository
         self.onSignOut = onSignOut
+        self.onSyncCourses = onSyncCourses
     }
 
     private var lastRound: CompletedRound? { rounds.first }
@@ -90,6 +94,31 @@ struct HomeView: View {
                 }
             }
             .padding(.top, BrutalistSpacing.s)
+
+            if let onSyncCourses {
+                BrutalistButton(
+                    kind: .ghost,
+                    action: {
+                        guard !isSyncing else { return }
+                        Task {
+                            isSyncing = true
+                            await onSyncCourses()
+                            isSyncing = false
+                        }
+                    },
+                    isDisabled: isSyncing,
+                    padding: EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)
+                ) {
+                    Text(isSyncing ? "↓  SYNCING..." : "↓  SYNC COURSES")
+                        .font(BrutalistType.monoCaption)
+                        .kerning(1.0)
+                } caption: {
+                    Text("FROM REMOTE")
+                        .font(BrutalistType.monoLabel)
+                        .foregroundStyle(BrutalistColor.muted)
+                }
+                .padding(.top, BrutalistSpacing.s)
+            }
 
             footer
                 .padding(.top, BrutalistSpacing.xxl)
