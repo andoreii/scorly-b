@@ -1,15 +1,40 @@
 import Foundation
 import Observation
 import ScorlyDesignSystem
+import ScorlyFeatureRound
 import SwiftUI
 
 /// Linear screen state machine matching the brutalist design source.
 /// Five primary screens; transitions are horizontal slides.
+///
+/// `play` and `confirm` carry their `RoundPlayState` as an associated
+/// value so navigation and round-state propagation are inherently
+/// atomic — there's no possibility of rendering the .play branch
+/// before the play state is observable.
 @MainActor
 @Observable
 final class AppFlow {
-    enum Screen: Hashable {
-        case home, setup, play, confirm, history
+    enum Screen: Equatable {
+        case home, setup, history
+        case play(RoundPlayState)
+        case confirm(RoundPlayState)
+
+        // Equality compares only the case identity, not the associated
+        // state. Two `.play` entries are "the same screen" for the
+        // purposes of `flow.go` deduping.
+        var caseTag: Int {
+            switch self {
+            case .home: 0
+            case .setup: 1
+            case .history: 2
+            case .play: 3
+            case .confirm: 4
+            }
+        }
+
+        static func == (lhs: Screen, rhs: Screen) -> Bool {
+            lhs.caseTag == rhs.caseTag
+        }
     }
 
     /// Stack of visited screens. Last is the visible screen. We keep a
