@@ -26,27 +26,25 @@ public struct ChipGrid: View {
         LazyVGrid(columns: cols, spacing: 6) {
             ForEach(options, id: \.self) { option in
                 let active = selection == option
-                Button {
-                    Haptics.light()
-                    withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
-                        if active, allowsDeselect {
-                            selection = nil
-                        } else {
-                            selection = option
+                Text(option.uppercased())
+                    .font(BrutalistType.monoCaption)
+                    .kerning(0.6)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 4)
+                    .background(active ? BrutalistColor.fg : .clear)
+                    .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
+                    .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+                    .brutalistTap {
+                        Haptics.light()
+                        withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
+                            if active, allowsDeselect {
+                                selection = nil
+                            } else {
+                                selection = option
+                            }
                         }
                     }
-                } label: {
-                    Text(option.uppercased())
-                        .font(BrutalistType.monoCaption)
-                        .kerning(0.6)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 4)
-                        .background(active ? BrutalistColor.fg : .clear)
-                        .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
-                        .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -71,30 +69,28 @@ public struct ChipGridMulti: View {
         LazyVGrid(columns: cols, spacing: 6) {
             ForEach(options, id: \.self) { option in
                 let active = selection.contains(option)
-                Button {
+                ZStack(alignment: .topTrailing) {
+                    Text(option.uppercased())
+                        .font(BrutalistType.monoCaption)
+                        .kerning(0.6)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 4)
+                    if active {
+                        Text("×")
+                            .font(BrutalistType.mono(.medium, size: 8))
+                            .padding(4)
+                    }
+                }
+                .background(active ? BrutalistColor.fg : .clear)
+                .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
+                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+                .brutalistTap {
                     Haptics.light()
                     withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
                         if active { selection.remove(option) } else { selection.insert(option) }
                     }
-                } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Text(option.uppercased())
-                            .font(BrutalistType.monoCaption)
-                            .kerning(0.6)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .padding(.horizontal, 4)
-                        if active {
-                            Text("×")
-                                .font(BrutalistType.mono(.medium, size: 8))
-                                .padding(4)
-                        }
-                    }
-                    .background(active ? BrutalistColor.fg : .clear)
-                    .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
-                    .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
                 }
-                .buttonStyle(.plain)
             }
         }
     }

@@ -29,19 +29,16 @@ public struct BrutalistStepper: View {
 
     @ViewBuilder
     private func stepButton(_ glyph: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        Button {
-            Haptics.medium()
-            withAnimation(Motion.snap) { action() }
-        } label: {
-            Text(glyph)
-                .font(BrutalistType.mono(.medium, size: 20))
-                .frame(width: 38, height: 38)
-                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
-                .foregroundStyle(BrutalistColor.fg)
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.35)
+        Text(glyph)
+            .font(BrutalistType.mono(.medium, size: 20))
+            .frame(width: 38, height: 38)
+            .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+            .foregroundStyle(BrutalistColor.fg)
+            .opacity(enabled ? 1 : 0.35)
+            .brutalistTap(disabled: !enabled) {
+                Haptics.medium()
+                withAnimation(Motion.snap) { action() }
+            }
     }
 }
 
@@ -56,17 +53,15 @@ public struct SmallStep: View {
     }
 
     public var body: some View {
-        Button {
-            Haptics.medium()
-            action()
-        } label: {
-            Text(glyph)
-                .font(BrutalistType.mono(.medium, size: 18))
-                .frame(width: 36, height: 36)
-                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
-                .foregroundStyle(BrutalistColor.fg)
-        }
-        .buttonStyle(.plain)
+        Text(glyph)
+            .font(BrutalistType.mono(.medium, size: 18))
+            .frame(width: 36, height: 36)
+            .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+            .foregroundStyle(BrutalistColor.fg)
+            .brutalistTap {
+                Haptics.medium()
+                action()
+            }
     }
 }
 
@@ -81,16 +76,14 @@ public struct TinyStep: View {
     }
 
     public var body: some View {
-        Button {
-            Haptics.light()
-            action()
-        } label: {
-            Text(glyph)
-                .font(BrutalistType.mono(.medium, size: 14))
-                .frame(width: 26, height: 26)
-                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
-                .foregroundStyle(BrutalistColor.fg)
-        }
-        .buttonStyle(.plain)
+        Text(glyph)
+            .font(BrutalistType.mono(.medium, size: 14))
+            .frame(width: 26, height: 26)
+            .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+            .foregroundStyle(BrutalistColor.fg)
+            .brutalistTap {
+                Haptics.light()
+                action()
+            }
     }
 }

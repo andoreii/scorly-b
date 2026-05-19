@@ -54,16 +54,14 @@ struct ScorecardSheetView: View {
                     .kerning(-0.6)
             }
             Spacer()
-            Button {
-                Haptics.light()
-                dismiss()
-            } label: {
-                Text("CLOSE ✕")
-                    .font(BrutalistType.monoCaption)
-                    .kerning(1.0)
-                    .foregroundStyle(BrutalistColor.fg)
-            }
-            .buttonStyle(.plain)
+            Text("CLOSE ✕")
+                .font(BrutalistType.monoCaption)
+                .kerning(1.0)
+                .foregroundStyle(BrutalistColor.fg)
+                .brutalistTap {
+                    Haptics.light()
+                    dismiss()
+                }
         }
     }
 
@@ -174,29 +172,27 @@ struct ScorecardSheetView: View {
         let hole = state.holes[index]
         let entry = state.entries[index]
         let here = index == state.holeIdx
-        return Button {
+        return Pip(
+            strokes: entry.strokes,
+            par: hole.par,
+            size: 22,
+            weight: 1.2,
+            color: here ? BrutalistColor.bg : BrutalistColor.fg,
+            mutedColor: here ? BrutalistColor.invMuted : BrutalistColor.dim
+        )
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(here ? BrutalistColor.fg : Color.clear)
+        .overlay(alignment: .trailing) {
+            if !lastColumn {
+                Rectangle().fill(BrutalistColor.hair).frame(width: 1)
+            }
+        }
+        .brutalistTap {
             Haptics.light()
             state.jump(to: index)
             dismiss()
-        } label: {
-            Pip(
-                strokes: entry.strokes,
-                par: hole.par,
-                size: 22,
-                weight: 1.2,
-                color: here ? BrutalistColor.bg : BrutalistColor.fg,
-                mutedColor: here ? BrutalistColor.invMuted : BrutalistColor.dim
-            )
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity)
-            .background(here ? BrutalistColor.fg : Color.clear)
-            .overlay(alignment: .trailing) {
-                if !lastColumn {
-                    Rectangle().fill(BrutalistColor.hair).frame(width: 1)
-                }
-            }
         }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Legend

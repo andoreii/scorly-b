@@ -14,12 +14,14 @@ public enum BrutalistSpacing {
     public static let xxl: CGFloat = 28
     public static let xxxl: CGFloat = 36
 
-    /// iOS top safe-area inset used by `ScreenShell`. Matches the
-    /// design's `SAFE_TOP = 58` constant.
-    public static let safeTop: CGFloat = 58
-    /// iOS bottom safe-area inset used by `ScreenShell`. Matches
-    /// `SAFE_BOTTOM = 36`.
-    public static let safeBottom: CGFloat = 36
+    /// Extra top inset applied by `ScreenShell` on top of the iOS
+    /// system safe area. The system already clears the status bar /
+    /// Dynamic Island, so this is 0 — kept as a token for future
+    /// surfaces (e.g. modal sheets) that may want a small buffer.
+    public static let safeTop: CGFloat = 0
+    /// Extra bottom inset applied by `ScreenShell`. The system clears
+    /// the home indicator automatically, so this is 0.
+    public static let safeBottom: CGFloat = 0
     /// Standard page horizontal padding.
     public static let pageHorizontal: CGFloat = 18
 }

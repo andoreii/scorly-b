@@ -13,6 +13,7 @@ struct HomeView: View {
     @State private var rounds: [CompletedRound] = []
     @State private var handicap: Decimal?
     @State private var didLoad = false
+    @State private var isLoading = false
     @State private var now = Date()
 
     init(
@@ -37,6 +38,8 @@ struct HomeView: View {
     var body: some View {
         ScreenShell {
             TopBar(left: dayTimeLabel(), right: "SCORLY/B  ®")
+            HairlineProgress(isLoading: isLoading)
+                .padding(.top, BrutalistSpacing.s)
 
             wordmark
                 .padding(.top, BrutalistSpacing.xl)
@@ -226,14 +229,10 @@ struct HomeView: View {
                 .font(BrutalistType.monoMicro)
                 .kerning(0.8)
             Spacer()
-            Button {
-                onSignOut()
-            } label: {
-                Text("↳ SIGN OUT")
-                    .font(BrutalistType.monoMicro)
-                    .kerning(0.8)
-            }
-            .buttonStyle(.plain)
+            Text("↳ SIGN OUT")
+                .font(BrutalistType.monoMicro)
+                .kerning(0.8)
+                .brutalistTap(action: onSignOut)
         }
         .foregroundStyle(BrutalistColor.dim)
     }
@@ -241,6 +240,8 @@ struct HomeView: View {
     // MARK: - Helpers
 
     private func load() async {
+        await MainActor.run { isLoading = true }
+        defer { Task { @MainActor in isLoading = false } }
         do {
             let fetched = try await repository.fetchAllCompleted()
             await MainActor.run {

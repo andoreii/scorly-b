@@ -43,21 +43,19 @@ public struct OverrideTile: View {
     private func pill(_ label: String, on: Bool) -> some View {
         let effective = value ?? auto
         let active = effective == on
-        Button {
-            Haptics.light()
-            withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
-                value = value == on ? nil : on
+        Text(label)
+            .font(BrutalistType.monoCaption)
+            .kerning(0.8)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(active ? BrutalistColor.fg : .clear)
+            .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
+            .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+            .brutalistTap {
+                Haptics.light()
+                withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
+                    value = value == on ? nil : on
+                }
             }
-        } label: {
-            Text(label)
-                .font(BrutalistType.monoCaption)
-                .kerning(0.8)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .background(active ? BrutalistColor.fg : .clear)
-                .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
-                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
     }
 }

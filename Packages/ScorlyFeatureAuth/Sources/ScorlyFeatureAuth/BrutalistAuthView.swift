@@ -105,26 +105,24 @@ public struct BrutalistAuthView: View {
                     .frame(height: 1)
                     .frame(maxWidth: .infinity)
             }
-            Button {
+            HStack {
+                Text("↳ BYPASS · ENTER WITHOUT AUTH")
+                    .font(BrutalistType.monoCaption)
+                    .kerning(1.0)
+                Spacer()
+                Text("→ SKIP")
+                    .font(BrutalistType.monoLabel)
+                    .kerning(1.0)
+                    .foregroundStyle(BrutalistColor.muted)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .foregroundStyle(BrutalistColor.fg)
+            .overlay(Rectangle().stroke(BrutalistColor.rule, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
+            .brutalistTap {
                 Haptics.light()
                 action()
-            } label: {
-                HStack {
-                    Text("↳ BYPASS · ENTER WITHOUT AUTH")
-                        .font(BrutalistType.monoCaption)
-                        .kerning(1.0)
-                    Spacer()
-                    Text("→ SKIP")
-                        .font(BrutalistType.monoLabel)
-                        .kerning(1.0)
-                        .foregroundStyle(BrutalistColor.muted)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .foregroundStyle(BrutalistColor.fg)
-                .overlay(Rectangle().stroke(BrutalistColor.rule, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
             }
-            .buttonStyle(.plain)
         }
     }
 

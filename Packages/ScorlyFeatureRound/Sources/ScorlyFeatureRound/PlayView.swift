@@ -11,6 +11,7 @@ public struct PlayView: View {
     private let onBack: () -> Void
     private let onFinish: () -> Void
 
+    @State private var lastHoleIdx: Int = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
@@ -48,6 +49,9 @@ public struct PlayView: View {
 
             navRow
         }
+        .onChange(of: state.holeIdx, initial: true) { _, newValue in
+            lastHoleIdx = newValue
+        }
         .sheet(isPresented: $state.scorecardOpen) {
             ScorecardSheetView(state: state)
         }
@@ -57,13 +61,11 @@ public struct PlayView: View {
 
     private var backRow: some View {
         HStack {
-            Button(action: onBack) {
-                Text("← BACK TO SETUP")
-                    .font(BrutalistType.monoCaption)
-                    .kerning(1.0)
-                    .foregroundStyle(BrutalistColor.fg)
-            }
-            .buttonStyle(.plain)
+            Text("← BACK TO SETUP")
+                .font(BrutalistType.monoCaption)
+                .kerning(1.0)
+                .foregroundStyle(BrutalistColor.fg)
+                .brutalistTap(action: onBack)
             Spacer()
             Text("LIVE ROUND")
                 .font(BrutalistType.monoLabel)
@@ -80,18 +82,16 @@ public struct PlayView: View {
             ForEach(state.holes.indices, id: \.self) { index in
                 let here = index == state.holeIdx
                 let done = state.entries[index].strokes != nil
-                Button {
-                    Haptics.light()
-                    withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
-                        state.jump(to: index)
+                Rectangle()
+                    .fill(here ? BrutalistColor.fg : done ? BrutalistColor.muted : BrutalistColor.hair)
+                    .frame(height: 5)
+                    .frame(maxWidth: .infinity)
+                    .brutalistTap {
+                        Haptics.light()
+                        withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
+                            state.jump(to: index)
+                        }
                     }
-                } label: {
-                    Rectangle()
-                        .fill(here ? BrutalistColor.fg : done ? BrutalistColor.muted : BrutalistColor.hair)
-                        .frame(height: 5)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.plain)
             }
         }
         .padding(.top, BrutalistSpacing.m)
@@ -126,7 +126,7 @@ public struct PlayView: View {
                     .font(BrutalistType.heroHole)
                     .kerning(-7)
                     .monospacedDigit()
-                    .contentTransition(.numericText())
+                    .contentTransition(.numericText(countsDown: state.holeIdx < lastHoleIdx))
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 10) {

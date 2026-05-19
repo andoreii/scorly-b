@@ -2,6 +2,12 @@ import SwiftUI
 
 /// Full-width brutalist button. Title on the left, optional mono
 /// caption on the right. Inverts on press for tactile feedback.
+///
+/// Uses a raw `DragGesture(minimumDistance: 0)` rather than SwiftUI's
+/// `Button` so the hit shape is exactly the framed rectangle. SwiftUI's
+/// `Button` applies an implicit minimum-touch-target expansion that
+/// `.contentShape` does not override, so a `Button`-based version
+/// leaked taps in the margin around the visible rect.
 public struct BrutalistButton<Title: View, Caption: View>: View {
     public enum Kind {
         case fg
@@ -37,29 +43,49 @@ public struct BrutalistButton<Title: View, Caption: View>: View {
     }
 
     public var body: some View {
-        Button {
-            Haptics.rigid()
-            action()
-        } label: {
-            HStack {
-                title()
-                Spacer(minLength: 8)
-                caption()
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(padding)
-            .background(background)
-            .overlay(Rectangle().stroke(border, lineWidth: 1))
-            .foregroundStyle(foreground)
-            .scaleEffect(pressed ? 0.997 : 1)
+        HStack {
+            title()
+            Spacer(minLength: 8)
+            caption()
         }
-        .buttonStyle(BrutalistPressStyle(onPress: { isPressed in
-            withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
-                pressed = isPressed
-            }
-        }))
-        .disabled(isDisabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(padding)
+        .background(background)
+        .overlay(Rectangle().stroke(border, lineWidth: 1))
+        .foregroundStyle(foreground)
+        .scaleEffect(pressed ? 0.997 : 1)
         .opacity(isDisabled ? 0.4 : 1)
+        .contentShape(Rectangle())
+        .accessibilityAddTraits(.isButton)
+        .accessibilityRespondsToUserInteraction(!isDisabled)
+        .gesture(pressGesture)
+    }
+
+    /// `DragGesture(minimumDistance: 0)` fires `onChanged` immediately
+    /// on touch-down (acts as a press-start) and `onEnded` on lift.
+    /// The drag-magnitude check distinguishes a tap from a true drag,
+    /// so swiping off the button cancels its action like a system
+    /// `Button` would.
+    private var pressGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                guard !isDisabled, !pressed else { return }
+                withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
+                    pressed = true
+                }
+            }
+            .onEnded { value in
+                guard !isDisabled else { return }
+                withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
+                    pressed = false
+                }
+                let dx = value.translation.width
+                let dy = value.translation.height
+                let magnitude = (dx * dx + dy * dy).squareRoot()
+                guard magnitude < 16 else { return }
+                Haptics.rigid()
+                action()
+            }
     }
 
     private var background: Color {
@@ -94,17 +120,6 @@ public struct BrutalistButton<Title: View, Caption: View>: View {
     }
 
     private var border: Color { BrutalistColor.fg }
-}
-
-private struct BrutalistPressStyle: ButtonStyle {
-    let onPress: (Bool) -> Void
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .contentShape(Rectangle())
-            .onChange(of: configuration.isPressed) { _, isPressed in
-                onPress(isPressed)
-            }
-    }
 }
 
 // MARK: - Convenience initializers

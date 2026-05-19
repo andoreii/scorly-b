@@ -29,13 +29,11 @@ public struct SetupView: View {
             TopBar(left: "ROUND SETUP", right: "SCORLY/B  ®")
 
             HStack {
-                Button(action: onCancel) {
-                    Text("← CANCEL")
-                        .font(BrutalistType.monoCaption)
-                        .kerning(1.0)
-                        .foregroundStyle(BrutalistColor.fg)
-                }
-                .buttonStyle(.plain)
+                Text("← CANCEL")
+                    .font(BrutalistType.monoCaption)
+                    .kerning(1.0)
+                    .foregroundStyle(BrutalistColor.fg)
+                    .brutalistTap(action: onCancel)
                 Spacer()
                 Text("NEW ROUND")
                     .font(BrutalistType.monoLabel)
@@ -172,19 +170,17 @@ public struct SetupView: View {
     private enum ArrowDirection { case left, right }
 
     private func pickerArrow(direction: ArrowDirection, action: @escaping () -> Void) -> some View {
-        Button {
-            Haptics.light()
-            action()
-        } label: {
-            Text(direction == .left ? "←" : "→")
-                .font(BrutalistType.mono(.semibold, size: 18))
-                .foregroundStyle(BrutalistColor.fg)
-                .frame(width: 44, height: 76)
-                .overlay(alignment: direction == .left ? .trailing : .leading) {
-                    Rectangle().fill(BrutalistColor.rule).frame(width: 1)
-                }
-        }
-        .buttonStyle(.plain)
+        Text(direction == .left ? "←" : "→")
+            .font(BrutalistType.mono(.semibold, size: 18))
+            .foregroundStyle(BrutalistColor.fg)
+            .frame(width: 44, height: 76)
+            .overlay(alignment: direction == .left ? .trailing : .leading) {
+                Rectangle().fill(BrutalistColor.rule).frame(width: 1)
+            }
+            .brutalistTap {
+                Haptics.light()
+                action()
+            }
     }
 
     private func dotPagination(active: Int, count: Int) -> some View {
@@ -245,32 +241,30 @@ public struct SetupView: View {
     }
 
     private func teeButton(tee: Tee, isActive: Bool) -> some View {
-        Button {
+        VStack(spacing: 6) {
+            Circle()
+                .fill(Self.teeColor(for: tee.name))
+                .frame(width: 14, height: 14)
+                .overlay(Circle().stroke(isActive ? BrutalistColor.bg : BrutalistColor.rule, lineWidth: 1))
+            Text(tee.name.uppercased())
+                .font(BrutalistType.mono(.semibold, size: 10))
+                .kerning(0.8)
+            if let yardage = tee.totalYardage {
+                Text("\(yardage)y")
+                    .font(BrutalistType.mono(.regular, size: 8))
+                    .opacity(0.7)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 6)
+        .background(isActive ? BrutalistColor.fg : .clear)
+        .foregroundStyle(isActive ? BrutalistColor.bg : BrutalistColor.fg)
+        .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+        .brutalistTap {
             Haptics.light()
             form.teeId = tee.id
-        } label: {
-            VStack(spacing: 6) {
-                Circle()
-                    .fill(Self.teeColor(for: tee.name))
-                    .frame(width: 14, height: 14)
-                    .overlay(Circle().stroke(isActive ? BrutalistColor.bg : BrutalistColor.rule, lineWidth: 1))
-                Text(tee.name.uppercased())
-                    .font(BrutalistType.mono(.semibold, size: 10))
-                    .kerning(0.8)
-                if let yardage = tee.totalYardage {
-                    Text("\(yardage)y")
-                        .font(BrutalistType.mono(.regular, size: 8))
-                        .opacity(0.7)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 6)
-            .background(isActive ? BrutalistColor.fg : .clear)
-            .foregroundStyle(isActive ? BrutalistColor.bg : BrutalistColor.fg)
-            .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
         }
-        .buttonStyle(.plain)
     }
 
     /// Tee color heuristic — derived from the tee name. The brutalist
@@ -299,27 +293,25 @@ public struct SetupView: View {
             HStack(spacing: 6) {
                 ForEach(options, id: \.0) { value, label, sub in
                     let active = form.holesPlayed == value
-                    Button {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(label)
+                            .font(BrutalistType.sans(.bold, size: 22))
+                            .kerning(-0.6)
+                        Text(sub)
+                            .font(BrutalistType.monoMicro)
+                            .kerning(0.6)
+                            .opacity(0.7)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 14)
+                    .padding(.horizontal, 10)
+                    .background(active ? BrutalistColor.fg : .clear)
+                    .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
+                    .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+                    .brutalistTap {
                         Haptics.light()
                         form.holesPlayed = value
-                    } label: {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(label)
-                                .font(BrutalistType.sans(.bold, size: 22))
-                                .kerning(-0.6)
-                            Text(sub)
-                                .font(BrutalistType.monoMicro)
-                                .kerning(0.6)
-                                .opacity(0.7)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 14)
-                        .padding(.horizontal, 10)
-                        .background(active ? BrutalistColor.fg : .clear)
-                        .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
-                        .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -427,21 +419,19 @@ public struct SetupView: View {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
                     ForEach(WalkingVsRiding.allCases, id: \.rawValue) { option in
                         let active = form.walkingVsRiding == option
-                        Button {
-                            Haptics.light()
-                            form.walkingVsRiding = option
-                        } label: {
-                            Text(option.rawValue.uppercased())
-                                .font(BrutalistType.mono(.semibold, size: 10))
-                                .kerning(0.6)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .padding(.horizontal, 4)
-                                .background(active ? BrutalistColor.fg : .clear)
-                                .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
-                                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
+                        Text(option.rawValue.uppercased())
+                            .font(BrutalistType.mono(.semibold, size: 10))
+                            .kerning(0.6)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 4)
+                            .background(active ? BrutalistColor.fg : .clear)
+                            .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
+                            .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+                            .brutalistTap {
+                                Haptics.light()
+                                form.walkingVsRiding = option
+                            }
                     }
                 }
             }
@@ -486,26 +476,24 @@ public struct SetupView: View {
                     .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
                 }
                 if form.players.count < 4 {
-                    Button {
+                    HStack {
+                        Text("+  ADD PLAYER")
+                        Spacer()
+                        Text("\(form.players.count)/4")
+                            .foregroundStyle(BrutalistColor.muted)
+                    }
+                    .font(BrutalistType.monoCaption)
+                    .kerning(0.8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .foregroundStyle(BrutalistColor.fg)
+                    .overlay(Rectangle().stroke(BrutalistColor.rule, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
+                    .brutalistTap {
                         Haptics.light()
                         let next = form.players.count
                         form.players.append(.init(name: "Guest \(next)", handicap: 18))
-                    } label: {
-                        HStack {
-                            Text("+  ADD PLAYER")
-                            Spacer()
-                            Text("\(form.players.count)/4")
-                                .foregroundStyle(BrutalistColor.muted)
-                        }
-                        .font(BrutalistType.monoCaption)
-                        .kerning(0.8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .foregroundStyle(BrutalistColor.fg)
-                        .overlay(Rectangle().stroke(BrutalistColor.rule, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
