@@ -2,6 +2,7 @@ import ScorlyData
 import ScorlyDesignSystem
 import ScorlyDomain
 import ScorlyFeatureAuth
+import Supabase
 import SwiftData
 import SwiftUI
 
@@ -9,48 +10,33 @@ import SwiftUI
 struct ScorlyApp: App {
     private let modelContainer: ModelContainer
     private let authService: AuthService
-    private let roundsRepository: any RoundsRepository
-    private let coursesRepository: any CoursesRepository
+    private let supabase: SupabaseClient
 
     init() {
         // Bundled brutalist fonts. Must happen before the first scene
         // materialises so `Font.custom("Geist-…")` resolves correctly.
         ScorlyDesignSystem.registerFonts()
 
-        // Disk-backed SwiftData container — every feature (and the
-        // sync engine, when wired in a later phase) shares this one
-        // container, attached below via `.modelContainer(_:)`.
+        // Disk-backed SwiftData container shared by all features and the
+        // SyncEngine. One container, one store.
         do {
             modelContainer = try LocalSchema.makeContainer()
         } catch {
-            // Failing to open the local store is unrecoverable: the
-            // offline-first model assumes SwiftData is available.
             fatalError("Failed to construct ModelContainer: \(error)")
         }
 
-        // AuthService with a no-op ensureProfile for now. The bridge to
-        // `UsersRepository.upsertProfile` lands once the round-flow
-        // features need a populated profile row.
-        let supabase = SupabaseClientFactory.make()
+        // Single shared Supabase client — auth session, sync API, and
+        // direct Supabase calls all share the same keychain-backed session.
+        supabase = SupabaseClientFactory.make()
         authService = AuthService(client: LiveSupabaseAuthClient(supabase: supabase))
-
-        // Empty rounds repository until phase 6 wires the SyncEngine +
-        // RoundsRepositoryLive. Home + History both render the
-        // no-rounds-yet empty state while this is in place.
-        roundsRepository = InMemoryRoundsRepository()
-
-        // Local-only seed courses so Round Setup has options. Phase 6
-        // swaps for the real CoursesRepositoryLive; supabase migrations
-        // remain schema-only.
-        coursesRepository = InMemoryCoursesRepository()
     }
 
     var body: some Scene {
         WindowGroup {
             RootView(
                 authService: authService,
-                roundsRepository: roundsRepository,
-                coursesRepository: coursesRepository
+                supabase: supabase,
+                modelContainer: modelContainer
             )
             .modelContainer(modelContainer)
             .preferredColorScheme(.light)

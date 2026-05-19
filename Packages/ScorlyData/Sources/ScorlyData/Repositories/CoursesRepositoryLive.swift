@@ -32,7 +32,9 @@ public actor CoursesRepositoryLive: CoursesRepository {
     }
 
     public func fetchAll() async throws -> [Course] {
-        _ = try await syncEngine.pullAndReconcile(
+        // Network pull is best-effort: ignore errors so the app reads
+        // from the local SwiftData cache when offline.
+        _ = try? await syncEngine.pullAndReconcile(
             forceNetworkAttempt: true,
             localCourseUserId: userId
         )
@@ -48,7 +50,7 @@ public actor CoursesRepositoryLive: CoursesRepository {
     }
 
     public func fetch(id: UUID) async throws -> Course? {
-        _ = try await syncEngine.pullAndReconcile(
+        _ = try? await syncEngine.pullAndReconcile(
             forceNetworkAttempt: true,
             localCourseUserId: userId
         )

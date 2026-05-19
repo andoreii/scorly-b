@@ -4,21 +4,28 @@ import ScorlyDomain
 import ScorlyFeatureAuth
 import ScorlyFeatureHistory
 import ScorlyFeatureRound
+import Supabase
+import SwiftData
 import SwiftUI
 
 /// Root scene. Auth gate, then a flow-driven switch between brutalist
 /// screens with horizontal slide transitions.
+///
+/// Repositories are created (or recreated) whenever the authenticated
+/// userId changes — this ensures the SwiftData predicates always filter
+/// by the current user's UUID and the SyncEngine is scoped correctly.
 struct RootView: View {
     let authService: AuthService
-    let roundsRepository: any RoundsRepository
-    let coursesRepository: any CoursesRepository
+    let supabase: SupabaseClient
+    let modelContainer: ModelContainer
 
     @State private var flow = AppFlow()
     @State private var setupForm = RoundSetupForm()
     @State private var courses: [Course] = []
-    @State private var didLoadCourses = false
     @State private var devBypassAuth = false
     @State private var playState: RoundPlayState?
+    @State private var coursesRepository: any CoursesRepository = InMemoryCoursesRepository()
+    @State private var roundsRepository: any RoundsRepository = InMemoryRoundsRepository()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -28,15 +35,40 @@ struct RootView: View {
             onDevBypass: devBypassClosure
         ) {
             content
-                .id(authService.userId ?? UUID())
-                .task {
-                    guard !didLoadCourses else { return }
-                    didLoadCourses = true
-                    if let fetched = try? await coursesRepository.fetchAll() {
-                        courses = fetched
-                        seedDefaultCourseSelection()
-                    }
+                .task(id: authService.userId) {
+                    await buildReposAndLoadCourses()
                 }
+        }
+    }
+
+    // Build live repos scoped to the current userId, then fetch courses.
+    // Called whenever userId changes (sign-in, sign-out, account switch).
+    private func buildReposAndLoadCourses() async {
+        guard let userId = authService.userId else {
+            courses = []
+            coursesRepository = InMemoryCoursesRepository()
+            roundsRepository = InMemoryRoundsRepository()
+            return
+        }
+        let syncEngine = SyncEngine.make(
+            modelContainer: modelContainer,
+            remote: LiveSupabaseRemoteSyncAPI(supabase: supabase),
+            network: LiveNetworkMonitor()
+        )
+        coursesRepository = CoursesRepositoryLive.make(
+            modelContainer: modelContainer,
+            userId: userId,
+            syncEngine: syncEngine
+        )
+        roundsRepository = RoundsRepositoryLive.make(
+            modelContainer: modelContainer,
+            userId: userId,
+            syncEngine: syncEngine,
+            supabase: supabase
+        )
+        if let fetched = try? await coursesRepository.fetchAll() {
+            courses = fetched
+            seedDefaultCourseSelection()
         }
     }
 
@@ -60,7 +92,8 @@ struct RootView: View {
                 HomeView(
                     flow: flow,
                     repository: roundsRepository,
-                    onSignOut: signOut
+                    onSignOut: signOut,
+                    onSyncCourses: refreshCourses
                 )
                 .transition(transition)
             case .setup:
@@ -140,6 +173,13 @@ struct RootView: View {
             holesPlayed: setupForm.holesPlayed
         )
         flow.go(.play)
+    }
+
+    private func refreshCourses() async {
+        if let fetched = try? await coursesRepository.fetchAll() {
+            courses = fetched
+            seedDefaultCourseSelection()
+        }
     }
 
     private func signOut() {
