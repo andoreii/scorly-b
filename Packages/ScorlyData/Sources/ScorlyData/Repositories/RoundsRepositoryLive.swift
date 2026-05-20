@@ -117,7 +117,7 @@ public actor RoundsRepositoryLive: RoundsRepository {
         let userId = userId
         let rows: [RoundRow] = try await supabase
             .from("rounds")
-            .select()
+            .select("*, hole_stats(*)")
             .eq("user_id", value: userId)
             .order("date_played", ascending: false)
             .limit(limit)

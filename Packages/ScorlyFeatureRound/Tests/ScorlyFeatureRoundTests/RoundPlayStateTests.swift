@@ -33,13 +33,14 @@ struct RoundPlayStateTests {
         #expect(state.vsPar == 1)
     }
 
-    @Test("derivedStat returns nil before strokes are logged")
+    @Test("derivedStat defaults strokes to par before the stepper is touched")
     func derivedStatGate() {
         let course = Self.makeCourse()
         let state = RoundPlayState(course: course, teeId: nil, holesPlayed: .eighteen)
-        #expect(state.derivedStat(for: 0) == nil)
-        state.entries[0].strokes = 4
-        #expect(state.derivedStat(for: 0) != nil)
+        // Par-4 hole 1 in the fixture — with no input, strokes default to par.
+        #expect(state.derivedStat(for: 0).strokes == 4)
+        state.entries[0].strokes = 5
+        #expect(state.derivedStat(for: 0).strokes == 5)
     }
 
     @Test("OB lie pushes the count, not the Lie field")
@@ -49,8 +50,8 @@ struct RoundPlayStateTests {
         state.entries[0].strokes = 6
         state.entries[0].teeShot = "OB Right"
         let stat = state.derivedStat(for: 0)
-        #expect(stat?.teeShotLie == nil)
-        #expect(stat?.outOfBoundsCount == 1)
+        #expect(stat.teeShotLie == nil)
+        #expect(stat.outOfBoundsCount == 1)
     }
 
     @Test("Water Hazard pushes the hazard count")
@@ -60,7 +61,7 @@ struct RoundPlayStateTests {
         state.entries[0].strokes = 6
         state.entries[0].approach = "Water Hazard"
         let stat = state.derivedStat(for: 0)
-        #expect(stat?.hazardCount == 1)
+        #expect(stat.hazardCount == 1)
     }
 
     @Test("Fairway tee + green approach scores a GIR with two putts on a par-4")
@@ -72,8 +73,8 @@ struct RoundPlayStateTests {
         state.entries[0].teeShot = "Fairway"
         state.entries[0].approach = "Green"
         let stat = state.derivedStat(for: 0)
-        #expect(stat?.greenInRegulation == true)
-        #expect(stat?.fairwayInRegulation == true)
+        #expect(stat.greenInRegulation == true)
+        #expect(stat.fairwayInRegulation == true)
     }
 
     @Test("Tee yardage resolves through the selected tee")

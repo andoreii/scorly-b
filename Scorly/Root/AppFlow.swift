@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import ScorlyDesignSystem
+import ScorlyFeatureCourses
 import ScorlyFeatureRound
 import SwiftUI
 
@@ -15,9 +16,10 @@ import SwiftUI
 @Observable
 final class AppFlow {
     enum Screen: Equatable {
-        case home, setup, history
+        case home, setup, history, stats, settings, courses
         case play(RoundPlayState)
         case confirm(RoundPlayState)
+        case courseEditor(CourseDraft?)
 
         // Equality compares only the case identity, not the associated
         // state. Two `.play` entries are "the same screen" for the
@@ -29,6 +31,10 @@ final class AppFlow {
             case .history: 2
             case .play: 3
             case .confirm: 4
+            case .stats: 5
+            case .settings: 6
+            case .courses: 7
+            case .courseEditor: 8
             }
         }
 

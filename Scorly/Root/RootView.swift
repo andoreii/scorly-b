@@ -2,8 +2,11 @@ import ScorlyData
 import ScorlyDesignSystem
 import ScorlyDomain
 import ScorlyFeatureAuth
+import ScorlyFeatureCourses
 import ScorlyFeatureHistory
 import ScorlyFeatureRound
+import ScorlyFeatureSettings
+import ScorlyFeatureStats
 import Supabase
 import SwiftData
 import SwiftUI
@@ -25,6 +28,13 @@ struct RootView: View {
     @State private var devBypassAuth = false
     @State private var coursesRepository: any CoursesRepository = InMemoryCoursesRepository()
     @State private var roundsRepository: any RoundsRepository = InMemoryRoundsRepository()
+    // Home's rounds + handicap live on the parent so they survive
+    // every navigation. Without this, HomeView's local @State resets on
+    // each remount and the "Last Round" stamp pops in mid-slide once
+    // the async fetch resolves — instead of sliding in with the rest
+    // of the screen.
+    @State private var homeRounds: [CompletedRound] = []
+    @State private var homeHandicap: Decimal?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -36,6 +46,16 @@ struct RootView: View {
             content
                 .task(id: authService.userId) {
                     await buildReposAndLoadCourses()
+                    await reloadHomeRounds()
+                }
+                .task(id: flow.current) {
+                    // Refetch when arriving on Home so the stamp
+                    // reflects a freshly filed round (Confirm flow
+                    // routes to History first, but the user often
+                    // bounces back to Home).
+                    if flow.current == .home {
+                        await reloadHomeRounds()
+                    }
                 }
         }
     }
@@ -90,9 +110,9 @@ struct RootView: View {
             case .home:
                 HomeView(
                     flow: flow,
-                    repository: roundsRepository,
-                    onSignOut: signOut,
-                    onSyncCourses: refreshCourses
+                    rounds: homeRounds,
+                    handicap: homeHandicap,
+                    onSignOut: signOut
                 )
                 .transition(transition)
             case .setup:
@@ -126,6 +146,46 @@ struct RootView: View {
                     onBack: { flow.resetTo(.home) }
                 )
                 .transition(transition)
+            case .stats:
+                TrendsView(
+                    roundsRepository: roundsRepository,
+                    onBack: { flow.resetTo(.home) }
+                )
+                .transition(transition)
+            case .settings:
+                SettingsView(
+                    onBack: { flow.resetTo(.home) },
+                    onSyncCourses: refreshCourses
+                )
+                .transition(transition)
+            case .courses:
+                CoursesView(
+                    coursesRepository: coursesRepository,
+                    onBack: { flow.resetTo(.home) },
+                    onEdit: { draft in flow.go(.courseEditor(draft)) },
+                    onNew: { flow.go(.courseEditor(nil)) }
+                )
+                .transition(transition)
+            case let .courseEditor(draft):
+                if let userId = authService.userId {
+                    CourseEditorView(
+                        coursesRepository: coursesRepository,
+                        userId: userId,
+                        initial: draft ?? CourseDraft.new(),
+                        onCancel: { flow.back() },
+                        onSaved: {
+                            Task {
+                                await refreshCourses()
+                                flow.back()
+                            }
+                        }
+                    )
+                    .transition(transition)
+                } else {
+                    // Should never happen behind the auth gate. Drop
+                    // the user back to courses if it does.
+                    Color.clear.onAppear { flow.back() }
+                }
             }
         }
         .animation(
@@ -166,6 +226,20 @@ struct RootView: View {
             courses = fetched
             seedDefaultCourseSelection()
         }
+        // Syncing courses re-pulls rounds (via SyncEngine), so the
+        // home-screen stats may be stale until we refetch them.
+        await reloadHomeRounds()
+    }
+
+    @MainActor
+    private func reloadHomeRounds() async {
+        guard
+            let fetched = try? await roundsRepository.fetchAllCompleted()
+        else { return }
+        let sorted = fetched.sorted { $0.datePlayed > $1.datePlayed }
+        let differentials = fetched.compactMap(\.differential).prefix(20).map { $0 }
+        homeRounds = sorted
+        homeHandicap = WHSCalculator.handicapIndex(from: differentials)
     }
 
     private func signOut() {
