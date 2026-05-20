@@ -8,16 +8,19 @@ import SwiftUI
 public struct SettingsView: View {
     let onBack: () -> Void
     let onSyncCourses: (() async -> Void)?
+    let onSignOut: (() -> Void)?
 
     @State private var isSyncing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         onBack: @escaping () -> Void,
-        onSyncCourses: (() async -> Void)? = nil
+        onSyncCourses: (() async -> Void)? = nil,
+        onSignOut: (() -> Void)? = nil
     ) {
         self.onBack = onBack
         self.onSyncCourses = onSyncCourses
+        self.onSignOut = onSignOut
     }
 
     public var body: some View {
@@ -32,6 +35,9 @@ public struct SettingsView: View {
             tagline
 
             dataSection
+                .padding(.top, BrutalistSpacing.xl)
+
+            identitySection
                 .padding(.top, BrutalistSpacing.xl)
 
             footerLine
@@ -113,6 +119,34 @@ public struct SettingsView: View {
                 caption: "OFFLINE"
             )
             .padding(.top, BrutalistSpacing.s)
+        }
+    }
+
+    @ViewBuilder
+    private var identitySection: some View {
+        sectionHeader(label: "Identity", sub: "ACCOUNT")
+        if let onSignOut {
+            BrutalistButton(
+                kind: .ghost,
+                action: {
+                    Haptics.medium()
+                    onSignOut()
+                },
+                padding: EdgeInsets(top: 18, leading: 18, bottom: 18, trailing: 18)
+            ) {
+                Text("↳  SIGN OUT")
+                    .font(BrutalistType.sans(.bold, size: 16))
+                    .kerning(-0.2)
+            } caption: {
+                Text("END SESSION")
+                    .font(BrutalistType.monoLabel)
+                    .kerning(1.0)
+                    .foregroundStyle(BrutalistColor.muted)
+            }
+            .padding(.top, BrutalistSpacing.s)
+        } else {
+            disabledRow(title: "↳  SIGN OUT", caption: "UNAVAILABLE")
+                .padding(.top, BrutalistSpacing.s)
         }
     }
 

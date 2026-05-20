@@ -494,6 +494,14 @@ public struct ConfirmView: View {
         isFiling = true
         let holeStats = state.holes.indices.compactMap { state.derivedStat(for: $0) }
         let players = setupForm.players.map { RoundPlayer(name: $0.name, handicap: $0.handicap) }
+        // Derive holes_played from the slice actually played so the DB
+        // row matches reality even if the form's value drifted between
+        // setup and file (the live state.holes is the ground truth).
+        let derivedHoles: HolesPlayed = {
+            if state.holes.count == 18 { return .eighteen }
+            if (state.holes.first?.number ?? 1) >= 10 { return .back9 }
+            return .front9
+        }()
         let draft = RoundDraft(
             id: UUID(),
             externalId: UUID(),
@@ -501,7 +509,7 @@ public struct ConfirmView: View {
             courseId: state.course.externalId,
             teeId: state.tee?.externalId,
             datePlayed: setupForm.datePlayed,
-            holesPlayed: setupForm.holesPlayed,
+            holesPlayed: derivedHoles,
             roundType: setupForm.roundType,
             roundFormat: setupForm.roundFormat,
             conditions: setupForm.conditions,

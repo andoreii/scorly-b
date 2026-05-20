@@ -7,6 +7,7 @@ public struct DistanceWheel: View {
     @Binding private var value: Int?
     private let range: ClosedRange<Int>
     private let step: Int
+    private let majorEvery: Int
     private let unit: String
     private let itemWidth: CGFloat = 30
 
@@ -16,11 +17,13 @@ public struct DistanceWheel: View {
         value: Binding<Int?>,
         range: ClosedRange<Int> = 0...400,
         step: Int = 5,
+        majorEvery: Int? = nil,
         unit: String = "YDS"
     ) {
         _value = value
         self.range = range
         self.step = step
+        self.majorEvery = majorEvery ?? (step * 4)
         self.unit = unit
     }
 
@@ -88,7 +91,6 @@ public struct DistanceWheel: View {
     }
 
     private func tick(_ v: Int) -> some View {
-        let majorEvery = step * 4
         let isMajor = v % majorEvery == 0
         return ZStack(alignment: .top) {
             Rectangle()

@@ -39,6 +39,7 @@ public struct PuttDistancesEditor: View {
                             value: putt(at: index),
                             range: 0...80,
                             step: 1,
+                            majorEvery: 3,
                             unit: "FT"
                         )
                     }

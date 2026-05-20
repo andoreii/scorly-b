@@ -14,7 +14,6 @@ struct HomeView: View {
     let flow: AppFlow
     let rounds: [CompletedRound]
     let handicap: Decimal?
-    let onSignOut: () -> Void
 
     @State private var now = Date()
 
@@ -225,13 +224,6 @@ struct HomeView: View {
                 .font(BrutalistType.monoMicro)
                 .kerning(0.8)
                 .brutalistTap { flow.go(.settings) }
-            Text("·")
-                .font(BrutalistType.monoMicro)
-                .kerning(0.8)
-            Text("↳ SIGN OUT")
-                .font(BrutalistType.monoMicro)
-                .kerning(0.8)
-                .brutalistTap(action: onSignOut)
         }
         .foregroundStyle(BrutalistColor.dim)
     }

@@ -252,7 +252,10 @@ public struct PlayView: View {
     }
 
     private var penaltyButton: some View {
-        let count = state.currentEntry.penaltyStrokes
+        // Surface the same number the FIR/GIR chip row uses, so OB and
+        // hazard picks from the shot sheets light up the card without
+        // double-counting a manual penalty stepper edit.
+        let count = state.derivedStat(for: state.holeIdx).effectivePenaltyStrokes
         let active = count > 0
         return Text(active ? "+\(count)" : "PEN")
             .font(active
@@ -405,6 +408,7 @@ public struct PlayView: View {
                 isDisabled: false,
                 action: {
                     if isLast {
+                        state.commitParIfNil(at: state.holeIdx)
                         onFinish()
                     } else {
                         withAnimation(Motion.adaptive(Motion.easeOutQuart(0.32), reduceMotion: reduceMotion)) {

@@ -361,16 +361,31 @@ public struct SetupView: View {
     }
 
     private var formatSection: some View {
-        Section(label: "05 — Format") {
+        // UI-only relabel: `.stroke` / `.match` render as "Strokeplay"
+        // / "Matchplay" but the underlying enum rawValue (and the DB
+        // write through `rounds.round_format`) is unchanged.
+        let labels = RoundFormat.allCases.map(Self.formatChipLabel)
+        let labelToFormat = Dictionary(
+            uniqueKeysWithValues: RoundFormat.allCases.map { (Self.formatChipLabel($0), $0) }
+        )
+        return Section(label: "05 — Format") {
             ChipGrid(
-                options: RoundFormat.allCases.map(\.rawValue),
+                options: labels,
                 selection: Binding(
-                    get: { form.roundFormat?.rawValue },
-                    set: { form.roundFormat = $0.flatMap(RoundFormat.init(rawValue:)) }
+                    get: { form.roundFormat.map(Self.formatChipLabel) },
+                    set: { form.roundFormat = $0.flatMap { labelToFormat[$0] } }
                 ),
                 columns: 3,
                 allowsDeselect: false
             )
+        }
+    }
+
+    private static func formatChipLabel(_ format: RoundFormat) -> String {
+        switch format {
+        case .stroke: "Strokeplay"
+        case .match:  "Matchplay"
+        default:      format.rawValue
         }
     }
 

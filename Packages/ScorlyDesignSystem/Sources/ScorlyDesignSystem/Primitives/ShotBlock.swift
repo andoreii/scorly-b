@@ -91,6 +91,7 @@ public struct ShotBlock: View {
 public struct ShotEditor: View {
     private let target: String
     private let clubs: [String]
+    private let clubDistanceDefaults: [String: Int]
     private let distanceRange: ClosedRange<Int>
     private let distanceLabel: String
     private let fieldOrder: ShotBlock.FieldOrder
@@ -102,6 +103,7 @@ public struct ShotEditor: View {
     public init(
         target: String,
         clubs: [String],
+        clubDistanceDefaults: [String: Int] = [:],
         distanceRange: ClosedRange<Int> = 0...400,
         distanceLabel: String = "Distance",
         fieldOrder: ShotBlock.FieldOrder = .resultFirst,
@@ -112,6 +114,7 @@ public struct ShotEditor: View {
     ) {
         self.target = target
         self.clubs = clubs
+        self.clubDistanceDefaults = clubDistanceDefaults
         self.distanceRange = distanceRange
         self.distanceLabel = distanceLabel
         self.fieldOrder = fieldOrder
@@ -149,6 +152,10 @@ public struct ShotEditor: View {
         VStack(alignment: .leading, spacing: 6) {
             SubLabel("Club")
             ClubGrid(options: clubs, selection: $club)
+                .onChange(of: club, initial: false) { _, newValue in
+                    guard let newValue, let mapped = clubDistanceDefaults[newValue] else { return }
+                    distance = mapped
+                }
         }
     }
 
@@ -156,7 +163,7 @@ public struct ShotEditor: View {
     private var distanceSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             SubLabel(distanceLabel)
-            DistanceWheel(value: $distance, range: distanceRange, step: 5, unit: "YDS")
+            DistanceWheel(value: $distance, range: distanceRange, step: 1, unit: "YDS")
         }
     }
 }

@@ -142,8 +142,22 @@ public final class RoundPlayState {
     }
 
     public func move(delta: Int) {
+        if delta > 0 {
+            commitParIfNil(at: holeIdx)
+        }
         holeIdx = max(0, min(holes.count - 1, holeIdx + delta))
         openShot = .none
+    }
+
+    /// If the hole at `index` was never logged, treat it as a par. Used
+    /// when the player advances past a hole or taps FINISH so the
+    /// totals, the `+vs PAR` counter, and the Supabase payload all
+    /// reflect "untouched == par" instead of zero.
+    public func commitParIfNil(at index: Int) {
+        guard index >= 0, index < entries.count else { return }
+        if entries[index].strokes == nil {
+            entries[index].strokes = holes[index].par
+        }
     }
 
     public func jump(to index: Int) {
@@ -244,8 +258,30 @@ public final class RoundPlayState {
 }
 
 /// Standard golf-bag club order, matching the React design source.
+/// Wedges are labelled by loft (50°/54°/58°) rather than GW/SW/LW.
 public let BrutalistClubs: [String] = [
     "Driver", "3-Wood", "5-Wood", "Hybrid",
     "3i", "4i", "5i", "6i", "7i", "8i", "9i",
-    "PW", "GW", "SW", "LW", "Putter",
+    "PW", "50", "54", "58", "Putter",
+]
+
+/// Default yardages used to auto-set the distance wheel when the user
+/// picks a club in the tee-shot or approach editor. Putter is omitted
+/// so picking it never overwrites a manually-dialed distance.
+public let BrutalistClubDistances: [String: Int] = [
+    "Driver": 250,
+    "3-Wood": 225,
+    "5-Wood": 210,
+    "Hybrid": 200,
+    "3i": 195,
+    "4i": 185,
+    "5i": 175,
+    "6i": 165,
+    "7i": 150,
+    "8i": 140,
+    "9i": 130,
+    "PW": 115,
+    "50": 100,
+    "54": 85,
+    "58": 70,
 ]

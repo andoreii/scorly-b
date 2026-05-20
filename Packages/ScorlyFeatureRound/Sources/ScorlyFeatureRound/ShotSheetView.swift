@@ -78,6 +78,7 @@ struct ShotSheetView: View {
             ShotEditor(
                 target: "Fairway",
                 clubs: BrutalistClubs,
+                clubDistanceDefaults: BrutalistClubDistances,
                 lie: lieBinding(\.teeShot),
                 lieModifier: lieBinding(\.teeShotModifier),
                 club: clubBinding(\.teeClub),
@@ -87,6 +88,7 @@ struct ShotSheetView: View {
             ShotEditor(
                 target: "Green",
                 clubs: BrutalistClubs,
+                clubDistanceDefaults: BrutalistClubDistances,
                 distanceLabel: "Distance to Pin",
                 fieldOrder: .distanceFirst,
                 lie: lieBinding(\.approach),

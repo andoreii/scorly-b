@@ -119,8 +119,7 @@ struct RootView: View {
                 HomeView(
                     flow: flow,
                     rounds: homeRounds,
-                    handicap: homeHandicap,
-                    onSignOut: signOut
+                    handicap: homeHandicap
                 )
                 .transition(transition)
             case .setup:
@@ -163,7 +162,8 @@ struct RootView: View {
             case .settings:
                 SettingsView(
                     onBack: { flow.resetTo(.home) },
-                    onSyncCourses: refreshCourses
+                    onSyncCourses: refreshCourses,
+                    onSignOut: signOut
                 )
                 .transition(transition)
             case .courses:
