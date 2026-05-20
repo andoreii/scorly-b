@@ -1,57 +1,57 @@
 import SwiftUI
 
 /// Lie selection keypad. 5x5 cross — target in the center, miss arms,
-/// then OB outer arms. A modifier button (Bunker / Water) appears
-/// below once a Miss or OB is selected.
+/// then OB outer arms. The bottom-left cell is the Water modifier
+/// (paired with an OB direction) and the bottom-right cell is the
+/// Bunker modifier (paired with a Miss direction). Modifiers compose
+/// with the directional pick instead of replacing it.
 public struct LieKeypad: View {
     @Binding private var value: String?
+    @Binding private var modifier: String?
     private let target: String
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(value: Binding<String?>, target: String) {
+    public init(
+        value: Binding<String?>,
+        modifier: Binding<String?>,
+        target: String
+    ) {
         _value = value
+        _modifier = modifier
         self.target = target
     }
 
     public var body: some View {
-        VStack(spacing: 10) {
-            let layout: [[String?]] = [
-                [nil, nil, "OB Long", nil, nil],
-                [nil, nil, "Miss Long", nil, nil],
-                ["OB Left", "Miss Left", target, "Miss Right", "OB Right"],
-                [nil, nil, "Miss Short", nil, nil],
-                [nil, nil, "OB Short", nil, nil],
-            ]
-            VStack(spacing: 4) {
-                ForEach(0..<5) { row in
-                    HStack(spacing: 4) {
-                        ForEach(0..<5) { col in
-                            cell(layout[row][col])
-                        }
+        let layout: [[String?]] = [
+            [nil,        nil,         "OB Long",   nil,         nil],
+            [nil,        nil,         "Miss Long", nil,         nil],
+            ["OB Left",  "Miss Left", target,      "Miss Right", "OB Right"],
+            [nil,        nil,         "Miss Short", nil,        nil],
+            ["Water",    nil,         "OB Short",  nil,         "Bunker"],
+        ]
+        VStack(spacing: 4) {
+            ForEach(0..<5) { row in
+                HStack(spacing: 4) {
+                    ForEach(0..<5) { col in
+                        cell(layout[row][col])
                     }
                 }
             }
-            if let modifier {
-                HStack(spacing: 8) {
-                    Text("↳")
-                        .font(BrutalistType.monoCaption)
-                        .opacity(0.7)
-                    Text(modifier.label)
-                        .font(BrutalistType.blockTitle)
-                        .kerning(1.2)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(value == modifier.value ? BrutalistColor.fg : .clear)
-                .foregroundStyle(value == modifier.value ? BrutalistColor.bg : BrutalistColor.fg)
-                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
-                .brutalistTap {
-                    Haptics.soft()
-                    withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
-                        value = value == modifier.value ? nil : modifier.value
-                    }
-                }
+        }
+        .onChange(of: value) { _, newValue in
+            // If the directional pick clears or moves off its modifier's
+            // domain, clear the modifier so we never store an orphan
+            // "Bunker" without a direction.
+            if newValue == nil {
+                modifier = nil
+                return
+            }
+            if modifier == "Bunker", !(newValue ?? "").hasPrefix("Miss ") {
+                modifier = nil
+            }
+            if modifier == "Water", !(newValue ?? "").hasPrefix("OB ") {
+                modifier = nil
             }
         }
     }
@@ -59,25 +59,62 @@ public struct LieKeypad: View {
     @ViewBuilder
     private func cell(_ cell: String?) -> some View {
         if let cell {
-            let active = value == cell
-            let isCenter = cell == target
-            let isOut = cell.hasPrefix("OB ")
-            Text(Self.short[cell] ?? cell)
-                .font(BrutalistType.mono(isCenter ? .semibold : .medium, size: isCenter ? 12 : 9))
-                .kerning(0.4)
-                .frame(maxWidth: .infinity)
-                .frame(height: 40)
-                .background(cellBackground(active: active, isCenter: isCenter, isOut: isOut))
-                .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
-                .overlay(Rectangle().stroke(isCenter ? BrutalistColor.rule : BrutalistColor.hair, lineWidth: 1))
-                .brutalistTap {
-                    Haptics.soft()
-                    withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
-                        value = active ? nil : cell
-                    }
-                }
+            if cell == "Bunker" || cell == "Water" {
+                modifierCell(cell)
+            } else {
+                directionCell(cell)
+            }
         } else {
             Color.clear.frame(height: 40)
+        }
+    }
+
+    private func directionCell(_ cell: String) -> some View {
+        let active = value == cell
+        let isCenter = cell == target
+        let isOut = cell.hasPrefix("OB ")
+        return Text(Self.short[cell] ?? cell)
+            .font(BrutalistType.mono(isCenter ? .semibold : .medium, size: isCenter ? 12 : 9))
+            .kerning(0.4)
+            .frame(maxWidth: .infinity)
+            .frame(height: 40)
+            .background(cellBackground(active: active, isCenter: isCenter, isOut: isOut))
+            .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
+            .overlay(Rectangle().stroke(isCenter ? BrutalistColor.rule : BrutalistColor.hair, lineWidth: 1))
+            .brutalistTap {
+                Haptics.soft()
+                withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
+                    value = active ? nil : cell
+                }
+            }
+    }
+
+    private func modifierCell(_ cell: String) -> some View {
+        let active = modifier == cell
+        let enabled = modifierEnabled(cell)
+        return Text(Self.short[cell] ?? cell)
+            .font(BrutalistType.mono(.semibold, size: 9))
+            .kerning(0.6)
+            .frame(maxWidth: .infinity)
+            .frame(height: 40)
+            .background(active ? BrutalistColor.fg : BrutalistColor.panel2)
+            .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
+            .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+            .opacity(enabled ? 1 : 0.35)
+            .brutalistTap(disabled: !enabled) {
+                Haptics.soft()
+                withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
+                    modifier = active ? nil : cell
+                }
+            }
+    }
+
+    private func modifierEnabled(_ cell: String) -> Bool {
+        guard let value else { return false }
+        switch cell {
+        case "Bunker": return value.hasPrefix("Miss ")
+        case "Water":  return value.hasPrefix("OB ")
+        default: return false
         }
     }
 
@@ -86,17 +123,6 @@ public struct LieKeypad: View {
         if isCenter { return BrutalistColor.panel }
         if isOut { return BrutalistColor.panel2 }
         return .clear
-    }
-
-    private var modifier: (label: String, value: String)? {
-        guard let value else { return nil }
-        if value.hasPrefix("Miss ") || value == "Bunker" {
-            return (label: "BUNKER", value: "Bunker")
-        }
-        if value.hasPrefix("OB ") || value == "Water Hazard" {
-            return (label: "WATER", value: "Water Hazard")
-        }
-        return nil
     }
 
     public static let short: [String: String] = [
@@ -110,7 +136,8 @@ public struct LieKeypad: View {
         "OB Right": "OB R",
         "OB Long": "OB Lg",
         "OB Short": "OB S",
-        "Bunker": "BUNKER",
+        "Bunker": "BUNK",
+        "Water": "WATER",
         "Water Hazard": "WATER",
     ]
 }

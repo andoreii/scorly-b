@@ -209,7 +209,7 @@ public struct LiveSupabaseRemoteSyncAPI: RemoteSyncAPI {
     private func fetchRounds() async throws -> [RoundRow] {
         try await supabase
             .from("rounds")
-            .select("*")
+            .select("*, hole_stats(*)")
             .order("date_played", ascending: false)
             .execute()
             .value

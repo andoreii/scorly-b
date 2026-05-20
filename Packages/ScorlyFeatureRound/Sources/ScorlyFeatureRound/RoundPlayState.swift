@@ -9,16 +9,19 @@ import ScorlyDomain
 /// 1. `strokes` is nullable — `nil` means "not logged yet" so the
 ///    Play screen can render the par as a placeholder.
 /// 2. `teeShot` / `approach` are raw `LieKeypad` strings ("Fairway",
-///    "Miss Left", "OB Long", "Bunker", "Water Hazard"). They are
-///    decoded into a typed `HoleStat` only when derivation runs.
+///    "Miss Left", "OB Long"). The `teeShotModifier` / `approachModifier`
+///    fields hold an optional "Bunker" or "Water" companion. Both
+///    are decoded into a typed `HoleStat` only when derivation runs.
 public struct HoleEntry: Equatable, Sendable {
     public var strokes: Int?
     public var putts: Int
     public var puttDistances: [Int?]
     public var teeShot: String?
+    public var teeShotModifier: String?
     public var teeClub: String?
     public var teeShotDistance: Int?
     public var approach: String?
+    public var approachModifier: String?
     public var approachClub: String?
     public var approachDistance: Int?
     public var pinPosition: String?
@@ -31,9 +34,11 @@ public struct HoleEntry: Equatable, Sendable {
         putts: Int = 0,
         puttDistances: [Int?] = [],
         teeShot: String? = nil,
+        teeShotModifier: String? = nil,
         teeClub: String? = nil,
         teeShotDistance: Int? = nil,
         approach: String? = nil,
+        approachModifier: String? = nil,
         approachClub: String? = nil,
         approachDistance: Int? = nil,
         pinPosition: String? = nil,
@@ -45,9 +50,11 @@ public struct HoleEntry: Equatable, Sendable {
         self.putts = putts
         self.puttDistances = puttDistances
         self.teeShot = teeShot
+        self.teeShotModifier = teeShotModifier
         self.teeClub = teeClub
         self.teeShotDistance = teeShotDistance
         self.approach = approach
+        self.approachModifier = approachModifier
         self.approachClub = approachClub
         self.approachDistance = approachDistance
         self.pinPosition = pinPosition
@@ -73,6 +80,7 @@ public final class RoundPlayState {
     public var holeIdx: Int
     public var openShot: OpenShot
     public var scorecardOpen: Bool
+    public var penaltySheetOpen: Bool
 
     public enum OpenShot: Equatable {
         case none
@@ -100,6 +108,7 @@ public final class RoundPlayState {
         self.holeIdx = 0
         self.openShot = .none
         self.scorecardOpen = false
+        self.penaltySheetOpen = false
     }
 
     /// Strokes summed across logged holes only.
@@ -143,14 +152,15 @@ public final class RoundPlayState {
     }
 
     /// Build a `HoleStat` snapshot of the current entry, used to
-    /// drive the auto-derived strip (GIR / FIR / 3-putt / etc.).
-    /// Returns `nil` if strokes haven't been logged.
-    public func derivedStat(for index: Int) -> HoleStat? {
+    /// drive the FIR / GIR / 3-putt / etc. chips. Falls back to
+    /// `hole.par` when the stepper hasn't been touched so the metrics
+    /// can react to lie / putt changes even on a default-par hole.
+    public func derivedStat(for index: Int) -> HoleStat {
         let entry = entries[index]
         let hole = holes[index]
-        guard let strokes = entry.strokes else { return nil }
-        let teeDecoded = Self.decodeLie(entry.teeShot, target: .fairway)
-        let approachDecoded = Self.decodeLie(entry.approach, target: .green)
+        let strokes = entry.strokes ?? hole.par
+        let teeDecoded = Self.decodeLie(entry.teeShot, modifier: entry.teeShotModifier, target: .fairway)
+        let approachDecoded = Self.decodeLie(entry.approach, modifier: entry.approachModifier, target: .green)
         return HoleStat(
             par: hole.par,
             strokes: strokes,
@@ -173,21 +183,48 @@ public final class RoundPlayState {
         let hazard: Int
     }
 
-    /// Maps a `LieKeypad` raw string into the closest `Lie` enum +
-    /// out-of-bounds / hazard counters. The keypad emits 13 distinct
-    /// strings; this collapses them into the `Lie` rawValues the
-    /// domain expects, with OB / Water routed to counters instead of
-    /// a `Lie` (those outcomes don't have a playable resting place).
-    private static func decodeLie(_ raw: String?, target: Lie) -> DecodedLie {
+    /// Maps a `LieKeypad` raw direction + optional modifier into the
+    /// closest `Lie` enum + out-of-bounds / hazard counters. The keypad
+    /// emits direction strings ("Fairway", "Green", "Miss …", "OB …")
+    /// alongside an optional "Bunker" / "Water" modifier; this collapses
+    /// them into the `Lie` rawValues the domain expects, routing OB /
+    /// hazard outcomes to counters where they have no playable lie.
+    private static func decodeLie(
+        _ raw: String?,
+        modifier: String?,
+        target: Lie
+    ) -> DecodedLie {
         guard let raw else { return DecodedLie(lie: nil, ob: 0, hazard: 0) }
         if raw == "Fairway" { return DecodedLie(lie: .fairway, ob: 0, hazard: 0) }
         if raw == "Green" { return DecodedLie(lie: .green, ob: 0, hazard: 0) }
+        // Legacy single-string entries (back-compat for any data that
+        // pre-dated the modifier split).
         if raw == "Bunker" { return DecodedLie(lie: .bunkerLeft, ob: 0, hazard: 0) }
         if raw == "Water Hazard" { return DecodedLie(lie: nil, ob: 0, hazard: 1) }
-        if raw.hasPrefix("OB ") { return DecodedLie(lie: nil, ob: 1, hazard: 0) }
+
+        if raw.hasPrefix("OB ") {
+            // Water modifier on an OB direction reclassifies the outcome
+            // as a hazard (the ball is findable in water, not lost OB).
+            if modifier == "Water" {
+                return DecodedLie(lie: nil, ob: 0, hazard: 1)
+            }
+            return DecodedLie(lie: nil, ob: 1, hazard: 0)
+        }
+
         if raw.hasPrefix("Miss ") {
             let direction = String(raw.dropFirst(5))
             let isApproach = target == .green
+            if modifier == "Bunker" {
+                let bunker: Lie
+                switch direction {
+                case "Left":  bunker = .bunkerLeft
+                case "Right": bunker = .bunkerRight
+                case "Long":  bunker = .bunkerLong
+                case "Short": bunker = .bunkerShort
+                default:      bunker = .bunkerLeft
+                }
+                return DecodedLie(lie: bunker, ob: 0, hazard: 0)
+            }
             let lie: Lie
             switch (direction, isApproach) {
             case ("Left", false): lie = .roughLeft

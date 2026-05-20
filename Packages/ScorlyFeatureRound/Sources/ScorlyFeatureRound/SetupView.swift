@@ -83,7 +83,7 @@ public struct SetupView: View {
                 isDisabled: !form.isReady,
                 padding: EdgeInsets(top: 20, leading: 18, bottom: 20, trailing: 18)
             ) {
-                Text("Tee off →")
+                Text("TEE OFF →")
                     .font(BrutalistType.sans(.bold, size: 17))
             } caption: {
                 Text(teeOffCaption)
@@ -130,7 +130,11 @@ public struct SetupView: View {
 
     private func courseCard(index: Int) -> some View {
         let course = courses[index]
-        let totalYardage = course.tees.first?.totalYardage
+        let tee = activeTee(for: course)
+        let yardage = yardageInRange(tee)
+        let par = parInRange(course)
+        let slope = tee?.slopeRating.map { Self.intString($0) } ?? "—"
+        let rating = tee?.courseRating.map { Self.oneDecimal($0) } ?? "—"
         return HStack(alignment: .center, spacing: 0) {
             pickerArrow(direction: .left, action: { cycleCourse(by: -1) })
             ZStack {
@@ -145,13 +149,13 @@ public struct SetupView: View {
                         .foregroundStyle(BrutalistColor.muted)
                         .padding(.top, BrutalistSpacing.xxs)
                     HStack(spacing: 4) {
-                        Mini(label: "Par", value: "\(totalPar(of: course))")
+                        Mini(label: "Par", value: "\(par)")
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Mini(label: "Slope", value: course.tees.first?.slopeRating.map { Self.intString($0) } ?? "—")
+                        Mini(label: "Slope", value: slope)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Mini(label: "Rating", value: course.tees.first?.courseRating.map { Self.oneDecimal($0) } ?? "—")
+                        Mini(label: "Rating", value: rating)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Mini(label: "Yards", value: totalYardage.map { "\($0)" } ?? "—")
+                        Mini(label: "Yards", value: yardage.map { "\($0)" } ?? "—")
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(.top, BrutalistSpacing.sm)
@@ -165,6 +169,33 @@ public struct SetupView: View {
             pickerArrow(direction: .right, action: { cycleCourse(by: 1) })
         }
         .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+    }
+
+    private func activeTee(for course: Course) -> Tee? {
+        course.tees.first(where: { $0.id == form.teeId }) ?? course.tees.first
+    }
+
+    private func holeRange() -> ClosedRange<Int> {
+        switch form.holesPlayed {
+        case .front9: return 1...9
+        case .back9: return 10...18
+        case .eighteen: return 1...18
+        }
+    }
+
+    private func parInRange(_ course: Course) -> Int {
+        let r = holeRange()
+        return course.holes.filter { r.contains($0.number) }.reduce(0) { $0 + $1.par }
+    }
+
+    private func yardageInRange(_ tee: Tee?) -> Int? {
+        guard let tee else { return nil }
+        let r = holeRange()
+        let subset = tee.teeHoles.filter { r.contains($0.holeNumber) }
+        guard !subset.isEmpty else {
+            return form.holesPlayed == .eighteen ? tee.totalYardage : nil
+        }
+        return subset.reduce(0) { $0 + $1.yardage }
     }
 
     private enum ArrowDirection { case left, right }
@@ -210,10 +241,6 @@ public struct SetupView: View {
     private var currentCourseIndex: Int {
         guard let courseId = form.courseId else { return 0 }
         return courses.firstIndex(where: { $0.id == courseId }) ?? 0
-    }
-
-    private func totalPar(of course: Course) -> Int {
-        course.holes.reduce(0) { $0 + $1.par }
     }
 
     // MARK: - 02 Tees
@@ -440,14 +467,7 @@ public struct SetupView: View {
 
     private var dateField: some View {
         FieldBox(label: "Date") {
-            DatePicker(
-                "",
-                selection: $form.datePlayed,
-                displayedComponents: [.date]
-            )
-            .datePickerStyle(.compact)
-            .labelsHidden()
-            .tint(BrutalistColor.fg)
+            BrutalistDateField(value: $form.datePlayed)
         }
     }
 
@@ -456,24 +476,13 @@ public struct SetupView: View {
     private var playersSection: some View {
         Section(label: "08 — Players") {
             VStack(spacing: 6) {
-                ForEach(form.players.indices, id: \.self) { index in
-                    HStack {
-                        HStack(spacing: 10) {
-                            Text("\(index + 1)")
-                                .font(BrutalistType.mono(.medium, size: 10))
-                                .frame(width: 22, height: 22)
-                                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
-                            Text(form.players[index].name)
-                                .font(BrutalistType.body)
-                        }
-                        Spacer()
-                        Text("HCP \(Self.oneDecimal(form.players[index].handicap))")
-                            .font(BrutalistType.monoLabel)
-                            .kerning(0.6)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+                ForEach(Array(form.players.enumerated()), id: \.element.id) { item in
+                    PlayerRowView(
+                        displayNumber: item.offset + 1,
+                        player: $form.players[item.offset],
+                        canDelete: item.offset > 0,
+                        onDelete: { form.players.remove(at: item.offset) }
+                    )
                 }
                 if form.players.count < 4 {
                     HStack {
@@ -499,6 +508,8 @@ public struct SetupView: View {
         }
     }
 
+    // playerRow and playerNameField replaced by PlayerRowView + HCPField below
+
     // MARK: - 09 Mental State
 
     private var mentalStateSection: some View {
@@ -516,15 +527,10 @@ public struct SetupView: View {
                         .monospacedDigit()
                         .contentTransition(.numericText())
                 }
-                Slider(
-                    value: Binding(
-                        get: { Double(form.mentalState) },
-                        set: { form.mentalState = Int($0.rounded()) }
-                    ),
-                    in: 1...10,
-                    step: 1
+                BrutalistSlider(
+                    value: $form.mentalState,
+                    in: 1...10
                 )
-                .tint(BrutalistColor.fg)
                 .padding(.top, BrutalistSpacing.sm)
                 HStack {
                     Text("DISTRACTED")
@@ -573,5 +579,154 @@ public struct SetupView: View {
         formatter.minimumFractionDigits = 0
         formatter.maximumFractionDigits = 0
         return formatter.string(from: value as NSDecimalNumber) ?? "—"
+    }
+}
+
+// MARK: - Player row
+
+private struct PlayerRowView: View {
+    let displayNumber: Int
+    @Binding var player: RoundSetupForm.Player
+    let canDelete: Bool
+    let onDelete: () -> Void
+
+    @State private var swipeOffset: CGFloat = 0
+    private let deleteWidth: CGFloat = 52
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            if canDelete {
+                Button {
+                    withAnimation(Motion.snap) { swipeOffset = 0 }
+                    Haptics.soft()
+                    onDelete()
+                } label: {
+                    Text("×")
+                        .font(BrutalistType.mono(.semibold, size: 22))
+                        .foregroundStyle(BrutalistColor.bg)
+                        .frame(width: deleteWidth)
+                        .frame(maxHeight: .infinity)
+                        .background(BrutalistColor.fg)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if canDelete {
+                rowContent
+                    .offset(x: swipeOffset)
+                    .gesture(
+                        DragGesture(minimumDistance: 8)
+                            .onChanged { value in
+                                guard value.translation.width < 0 else { return }
+                                swipeOffset = max(-deleteWidth, value.translation.width)
+                            }
+                            .onEnded { value in
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    swipeOffset = -value.translation.width > deleteWidth / 2
+                                        ? -deleteWidth : 0
+                                }
+                            }
+                    )
+            } else {
+                rowContent
+            }
+        }
+        .clipped()
+        .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+    }
+
+    private var rowContent: some View {
+        HStack(spacing: 10) {
+            Text("\(displayNumber)")
+                .font(BrutalistType.mono(.medium, size: 10))
+                .frame(width: 22, height: 22)
+                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+
+            nameField
+
+            Spacer(minLength: 6)
+
+            HStack(spacing: 6) {
+                Text("HCP")
+                    .font(BrutalistType.mono(.medium, size: 9))
+                    .kerning(0.6)
+                    .foregroundStyle(BrutalistColor.muted)
+                HCPField(handicap: $player.handicap)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(BrutalistColor.bg)
+    }
+
+    @ViewBuilder
+    private var nameField: some View {
+        let binding = Binding(
+            get: { player.name },
+            set: { player.name = $0 }
+        )
+        #if os(iOS)
+        TextField("Name", text: binding)
+            .font(BrutalistType.body)
+            .textInputAutocapitalization(.words)
+            .submitLabel(.done)
+        #else
+        TextField("Name", text: binding)
+            .font(BrutalistType.body)
+        #endif
+    }
+}
+
+// MARK: - HCP text field
+
+private struct HCPField: View {
+    @Binding var handicap: Decimal
+    @State private var text = ""
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        textField
+            .font(BrutalistType.mono(.semibold, size: 12))
+            .monospacedDigit()
+            .multilineTextAlignment(.trailing)
+            .frame(minWidth: 44, alignment: .trailing)
+            .focused($isFocused)
+            .onAppear { text = format(handicap) }
+            .onChange(of: isFocused) { _, focused in
+                if !focused { commit() }
+            }
+            .onChange(of: handicap) { _, value in
+                if !isFocused { text = format(value) }
+            }
+    }
+
+    @ViewBuilder
+    private var textField: some View {
+        #if os(iOS)
+        TextField("0.0", text: $text)
+            .keyboardType(.numbersAndPunctuation)
+            .submitLabel(.done)
+            .onSubmit { commit() }
+        #else
+        TextField("0.0", text: $text)
+            .onSubmit { commit() }
+        #endif
+    }
+
+    private func commit() {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if let d = Decimal(string: trimmed),
+           d >= Decimal(-10), d <= Decimal(54) {
+            handicap = d
+        }
+        text = format(handicap)
+    }
+
+    private func format(_ value: Decimal) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.minimumFractionDigits = 1
+        f.maximumFractionDigits = 1
+        return f.string(from: value as NSDecimalNumber) ?? "0.0"
     }
 }

@@ -25,36 +25,73 @@ public struct PlayView: View {
     }
 
     public var body: some View {
-        ScreenShell {
-            TopBar(left: "LIVE · \(state.course.name.uppercased())", right: "SCORLY/B  ®")
+        ZStack(alignment: .top) {
+            // Top-anchored content. Lives in the top half of the ZStack
+            // regardless of intrinsic height. Removing one shot block on
+            // par 3 only shrinks this column from the bottom — TopBar
+            // through strokesPanel never move.
+            VStack(alignment: .leading, spacing: 0) {
+                TopBar(left: "LIVE · \(state.course.name.uppercased())", right: "SCORLY/B  ®")
 
-            backRow
-            progressDots
-            progressLabels
-            holeHero
+                backRow
+                progressDots
+                progressLabels
+                holeHero
 
-            HBar(vMargin: BrutalistSpacing.m)
+                metricsRow
+                HBar(vMargin: BrutalistSpacing.m)
 
-            SubLabel("Strokes")
-            strokesPanel
+                SubLabel("Strokes")
+                strokesPanel
 
-            shotBlocks
-            puttingBlock
-            pinSection
-            penaltyStepper
-            manualOverrides
-            derivedStrip
+                shotBlocks
+                puttingBlock
+                pinSection
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(.horizontal, BrutalistSpacing.pageHorizontal)
 
-            HBar(vMargin: BrutalistSpacing.l)
-
-            navRow
+            // Bottom-anchored nav. Independent of the top layer; pinned
+            // to the bottom safe-area edge in every state.
+            VStack(spacing: 0) {
+                HBar(vMargin: BrutalistSpacing.xs)
+                navRow
+                    .padding(.top, BrutalistSpacing.xs)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .padding(.horizontal, BrutalistSpacing.pageHorizontal)
+            .padding(.bottom, BrutalistSpacing.xs)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(BrutalistColor.bg.ignoresSafeArea())
+        .foregroundStyle(BrutalistColor.fg)
         .onChange(of: state.holeIdx, initial: true) { _, newValue in
             lastHoleIdx = newValue
+        }
+        .sheet(isPresented: shotSheetBinding(.tee)) {
+            ShotSheetView(state: state, kind: .tee)
+        }
+        .sheet(isPresented: shotSheetBinding(.approach)) {
+            ShotSheetView(state: state, kind: .approach)
+        }
+        .sheet(isPresented: shotSheetBinding(.putts)) {
+            PuttingSheetView(state: state)
         }
         .sheet(isPresented: $state.scorecardOpen) {
             ScorecardSheetView(state: state)
         }
+        .sheet(isPresented: $state.penaltySheetOpen) {
+            PenaltySheetView(state: state)
+        }
+    }
+
+    private func shotSheetBinding(_ shot: RoundPlayState.OpenShot) -> Binding<Bool> {
+        Binding(
+            get: { state.openShot == shot },
+            set: { newValue in
+                if !newValue, state.openShot == shot { state.openShot = .none }
+            }
+        )
     }
 
     // MARK: - Back row
@@ -124,8 +161,11 @@ public struct PlayView: View {
                     .foregroundStyle(BrutalistColor.muted)
                 Text(String(format: "%02d", hole.number))
                     .font(BrutalistType.heroHole)
-                    .kerning(-7)
+                    .kerning(-5)
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(height: 160, alignment: .top)
                     .contentTransition(.numericText(countsDown: state.holeIdx < lastHoleIdx))
             }
             Spacer()
@@ -135,6 +175,7 @@ public struct PlayView: View {
                 heroStat(label: "HCP", value: hole.handicapIndex.map { String(format: "%02d", $0) } ?? "—", big: false)
             }
         }
+        .frame(height: 200, alignment: .topLeading)
         .padding(.top, BrutalistSpacing.l)
     }
 
@@ -164,13 +205,21 @@ public struct PlayView: View {
         let hole = state.currentHole
         let strokes = state.currentEntry.strokes ?? hole.par
         return HStack(alignment: .center) {
-            BrutalistStepper(
-                value: Binding(
-                    get: { strokes },
-                    set: { newValue in state.entries[state.holeIdx].strokes = newValue }
-                ),
-                range: 1...15
-            )
+            HStack(spacing: 14) {
+                strokeStepButton("−", enabled: strokes > 1) {
+                    state.entries[state.holeIdx].strokes = max(1, strokes - 1)
+                }
+                Text("\(strokes)")
+                    .font(BrutalistType.stepperValue)
+                    .kerning(-2.4)
+                    .monospacedDigit()
+                    .frame(minWidth: 70)
+                    .contentTransition(.numericText())
+                strokeStepButton("+", enabled: strokes < 15) {
+                    state.entries[state.holeIdx].strokes = min(15, strokes + 1)
+                }
+                penaltyButton
+            }
             Spacer()
             VStack(alignment: .trailing, spacing: 6) {
                 Text(ScoreLabel.text(strokes: strokes, par: hole.par))
@@ -188,6 +237,38 @@ public struct PlayView: View {
         .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
     }
 
+    @ViewBuilder
+    private func strokeStepButton(_ glyph: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Text(glyph)
+            .font(BrutalistType.mono(.medium, size: 20))
+            .frame(width: 38, height: 38)
+            .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+            .foregroundStyle(BrutalistColor.fg)
+            .opacity(enabled ? 1 : 0.35)
+            .brutalistTap(disabled: !enabled) {
+                Haptics.medium()
+                withAnimation(Motion.snap) { action() }
+            }
+    }
+
+    private var penaltyButton: some View {
+        let count = state.currentEntry.penaltyStrokes
+        let active = count > 0
+        return Text(active ? "+\(count)" : "PEN")
+            .font(active
+                ? BrutalistType.mono(.semibold, size: 12)
+                : BrutalistType.mono(.medium, size: 9))
+            .kerning(0.4)
+            .frame(width: 38, height: 38)
+            .background(active ? BrutalistColor.fg : .clear)
+            .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.muted)
+            .overlay(Rectangle().stroke(active ? BrutalistColor.fg : BrutalistColor.hair, lineWidth: 1))
+            .brutalistTap {
+                Haptics.light()
+                state.penaltySheetOpen = true
+            }
+    }
+
     // MARK: - Shot blocks
 
     @ViewBuilder
@@ -198,23 +279,21 @@ public struct PlayView: View {
                 ShotBlock(
                     badge: "01",
                     title: "Tee Shot",
-                    target: "Fairway",
-                    clubs: BrutalistClubs,
                     lie: lieBinding(\.teeShot),
+                    lieModifier: lieBinding(\.teeShotModifier),
                     club: clubBinding(\.teeClub),
                     distance: distanceBinding(\.teeShotDistance),
-                    isOpen: shotOpenBinding(.tee)
+                    onTap: { state.openShot = .tee }
                 )
             }
             ShotBlock(
                 badge: isPar3 ? "01" : "02",
                 title: isPar3 ? "Tee / Approach" : "Approach",
-                target: "Green",
-                clubs: BrutalistClubs,
                 lie: lieBinding(\.approach),
+                lieModifier: lieBinding(\.approachModifier),
                 club: clubBinding(\.approachClub),
                 distance: distanceBinding(\.approachDistance),
-                isOpen: shotOpenBinding(.approach)
+                onTap: { state.openShot = .approach }
             )
         }
         .padding(.top, BrutalistSpacing.m)
@@ -224,22 +303,9 @@ public struct PlayView: View {
         let isPar3 = state.currentHole.par == 3
         return PuttingBlock(
             badge: isPar3 ? "02" : "03",
-            putts: Binding(
-                get: { state.currentEntry.putts },
-                set: { newValue in
-                    var entry = state.entries[state.holeIdx]
-                    entry.putts = newValue
-                    if entry.puttDistances.count > newValue {
-                        entry.puttDistances = Array(entry.puttDistances.prefix(newValue))
-                    }
-                    state.entries[state.holeIdx] = entry
-                }
-            ),
-            distances: Binding(
-                get: { state.currentEntry.puttDistances },
-                set: { state.entries[state.holeIdx].puttDistances = $0 }
-            ),
-            isOpen: shotOpenBinding(.putts)
+            putts: state.currentEntry.putts,
+            distances: state.currentEntry.puttDistances,
+            onTap: { state.openShot = .putts }
         )
         .padding(.top, BrutalistSpacing.s)
     }
@@ -257,130 +323,51 @@ public struct PlayView: View {
         .padding(.top, BrutalistSpacing.m)
     }
 
-    // MARK: - Penalty
+    // MARK: - Metrics row (above STROKES divider)
 
-    private var penaltyStepper: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SubLabel("Penalty Strokes  /  Manual")
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("UNPLAYABLES · LATERAL DROPS · ETC.")
-                        .font(BrutalistType.mono(.medium, size: 9))
-                        .kerning(0.6)
-                        .foregroundStyle(BrutalistColor.muted)
-                    Text("\(state.currentEntry.penaltyStrokes)")
-                        .font(BrutalistType.mediumValue)
-                        .kerning(-0.8)
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                }
-                Spacer()
-                HStack(spacing: 6) {
-                    SmallStep("−") {
-                        withAnimation(Motion.snap) {
-                            state.entries[state.holeIdx].penaltyStrokes = max(0, state.currentEntry.penaltyStrokes - 1)
-                        }
-                    }
-                    SmallStep("+") {
-                        withAnimation(Motion.snap) {
-                            state.entries[state.holeIdx].penaltyStrokes = min(9, state.currentEntry.penaltyStrokes + 1)
-                        }
-                    }
-                }
+    private var metricsRow: some View {
+        let isPar3 = state.currentHole.par == 3
+        let stat = state.derivedStat(for: state.holeIdx)
+        return HStack(spacing: 6) {
+            if !isPar3 {
+                metricChip("FIR", active: stat.fairwayInRegulation)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+            metricChip("GIR", active: stat.greenInRegulation)
+            if stat.threePutt {
+                metricChip("3PUTT", active: true)
+            }
+            if stat.upAndDown {
+                metricChip("UP&DN", active: true)
+            }
+            if stat.bunkerCount > 0 {
+                metricChip("BUNK \(stat.bunkerCount)", active: true)
+            }
+            if stat.outOfBoundsCount > 0 {
+                metricChip("OB \(stat.outOfBoundsCount)", active: true)
+            }
+            if stat.hazardCount > 0 {
+                metricChip("HAZ \(stat.hazardCount)", active: true)
+            }
+            if stat.effectivePenaltyStrokes > 0 {
+                metricChip("+PEN \(stat.effectivePenaltyStrokes)", active: true)
+            }
+            Spacer(minLength: 0)
         }
+        .frame(height: 22, alignment: .leading)
         .padding(.top, BrutalistSpacing.m)
     }
 
-    // MARK: - Manual overrides
-
-    @ViewBuilder
-    private var manualOverrides: some View {
-        if let stat = state.derivedStat(for: state.holeIdx) {
-            let showUpDown = !stat.greenInRegulation
-            let showSandSave = stat.bunkerCount > 0 && !stat.greenInRegulation
-            if showUpDown || showSandSave {
-                VStack(alignment: .leading, spacing: 6) {
-                    SubLabel("Manual Overrides")
-                    let columns = (showUpDown && showSandSave) ? 2 : 1
-                    LazyVGrid(
-                        columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: columns),
-                        spacing: 10
-                    ) {
-                        if showUpDown {
-                            OverrideTile(
-                                label: "Up & Down",
-                                auto: stat.upAndDown,
-                                value: Binding(
-                                    get: { state.currentEntry.upAndDownOverride },
-                                    set: { state.entries[state.holeIdx].upAndDownOverride = $0 }
-                                )
-                            )
-                        }
-                        if showSandSave {
-                            OverrideTile(
-                                label: "Sand Save",
-                                auto: stat.sandSave,
-                                value: Binding(
-                                    get: { state.currentEntry.sandSaveOverride },
-                                    set: { state.entries[state.holeIdx].sandSaveOverride = $0 }
-                                )
-                            )
-                        }
-                    }
-                }
-                .padding(.top, BrutalistSpacing.m)
-            }
-        }
-    }
-
-    // MARK: - Auto-derived strip
-
-    @ViewBuilder
-    private var derivedStrip: some View {
-        if let stat = state.derivedStat(for: state.holeIdx) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("AUTO-DERIVED")
-                    .font(BrutalistType.mono(.medium, size: 9))
-                    .kerning(0.8)
-                    .foregroundStyle(BrutalistColor.muted)
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
-                    spacing: 8
-                ) {
-                    DerivedBadge(label: "GIR", hit: stat.greenInRegulation)
-                    DerivedBadge(label: "FIR", hit: stat.fairwayInRegulation, isDisabled: state.currentHole.par == 3)
-                    DerivedBadge(label: "3PUTT", hit: stat.threePutt, flip: true)
-                    DerivedBadge(label: "UP&DN", hit: stat.upAndDown)
-                }
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4),
-                    spacing: 6
-                ) {
-                    derivedCount(label: "BUNK", value: stat.bunkerCount)
-                    derivedCount(label: "OB", value: stat.outOfBoundsCount)
-                    derivedCount(label: "HAZ", value: stat.hazardCount)
-                    derivedCount(label: "+PEN", value: stat.effectivePenaltyStrokes)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(BrutalistColor.panel)
-            .overlay(Rectangle().stroke(BrutalistColor.hair, lineWidth: 1))
-            .padding(.top, BrutalistSpacing.m)
-        }
-    }
-
-    private func derivedCount(label: String, value: Int) -> some View {
-        Text("\(label) \(value)")
-            .font(BrutalistType.mono(.medium, size: 9))
-            .kerning(0.6)
-            .foregroundStyle(BrutalistColor.muted)
-            .frame(maxWidth: .infinity, alignment: .leading)
+    private func metricChip(_ label: String, active: Bool) -> some View {
+        Text(label.uppercased())
+            .font(active
+                ? BrutalistType.mono(.regular, size: 9)
+                : BrutalistType.mono(.medium, size: 9))
+            .kerning(0.8)
             .monospacedDigit()
+            .padding(.horizontal, 5)
+            .padding(.vertical, 3)
+            .background(active ? BrutalistColor.fg : .clear)
+            .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.muted)
     }
 
     // MARK: - Nav row
@@ -409,17 +396,7 @@ public struct PlayView: View {
             )
             .frame(maxWidth: .infinity)
 
-            navButton(
-                title: "CARD",
-                caption: "",
-                kind: .ghost,
-                isDisabled: false,
-                action: {
-                    Haptics.light()
-                    state.scorecardOpen = true
-                }
-            )
-            .frame(maxWidth: .infinity)
+            cardButton
 
             navButton(
                 title: isLast ? "FINISH  →" : "NEXT  →",
@@ -465,6 +442,24 @@ public struct PlayView: View {
         }
     }
 
+    /// Compact, centered CARD button. The shared `navButton` helper
+    /// uses an HStack with `title — Spacer — caption` so a `.fixedSize`
+    /// version still left-aligns its text. This standalone button keeps
+    /// the label centered in its frame.
+    private var cardButton: some View {
+        Text("CARD")
+            .font(BrutalistType.mono(.semibold, size: 11))
+            .kerning(1.0)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .overlay(Rectangle().stroke(BrutalistColor.fg, lineWidth: 1))
+            .contentShape(Rectangle())
+            .brutalistTap {
+                Haptics.light()
+                state.scorecardOpen = true
+            }
+    }
+
     // MARK: - Bindings
 
     private func lieBinding(_ keyPath: WritableKeyPath<HoleEntry, String?>) -> Binding<String?> {
@@ -485,17 +480,6 @@ public struct PlayView: View {
         Binding(
             get: { state.entries[state.holeIdx][keyPath: keyPath] },
             set: { state.entries[state.holeIdx][keyPath: keyPath] = $0 }
-        )
-    }
-
-    private func shotOpenBinding(_ shot: RoundPlayState.OpenShot) -> Binding<Bool> {
-        Binding(
-            get: { state.openShot == shot },
-            set: { newValue in
-                withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
-                    state.openShot = newValue ? shot : .none
-                }
-            }
         )
     }
 

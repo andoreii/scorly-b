@@ -4,31 +4,19 @@ import SwiftUI
 
 /// Brutalist home screen. Wordmark, handicap + rounds twin cards,
 /// last-round inverse stamp, "Start new round" CTA, ghost buttons for
-/// History and Stats.
+/// History, Trends, and Settings.
+///
+/// Data flows in via `rounds` + `handicap` — owned by `RootView` so it
+/// survives navigation. Without parent-owned state the "Last Round"
+/// stamp would pop in mid-slide whenever an async refetch resolved
+/// after a remount, instead of sliding in as part of the screen.
 struct HomeView: View {
     let flow: AppFlow
+    let rounds: [CompletedRound]
+    let handicap: Decimal?
     let onSignOut: () -> Void
-    let onSyncCourses: (() async -> Void)?
-    private let repository: any RoundsRepository
 
-    @State private var rounds: [CompletedRound] = []
-    @State private var handicap: Decimal?
-    @State private var didLoad = false
-    @State private var isLoading = false
-    @State private var isSyncing = false
     @State private var now = Date()
-
-    init(
-        flow: AppFlow,
-        repository: any RoundsRepository,
-        onSignOut: @escaping () -> Void,
-        onSyncCourses: (() async -> Void)? = nil
-    ) {
-        self.flow = flow
-        self.repository = repository
-        self.onSignOut = onSignOut
-        self.onSyncCourses = onSyncCourses
-    }
 
     private var lastRound: CompletedRound? { rounds.first }
     private var roundCount: Int { rounds.count }
@@ -40,9 +28,9 @@ struct HomeView: View {
     }
 
     var body: some View {
-        ScreenShell {
+        ScreenShell(scrollable: false) {
             TopBar(left: dayTimeLabel(), right: "SCORLY/B  ®")
-            HairlineProgress(isLoading: isLoading)
+            HairlineProgress(isLoading: false)
                 .padding(.top, BrutalistSpacing.s)
 
             wordmark
@@ -64,91 +52,46 @@ struct HomeView: View {
                 .padding(.top, BrutalistSpacing.md)
 
             HStack(spacing: 8) {
-                BrutalistButton(
-                    kind: .ghost,
-                    action: { flow.go(.history) },
-                    padding: EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)
-                ) {
-                    Text("↗  HISTORY")
-                        .font(BrutalistType.monoCaption)
-                        .kerning(1.0)
-                } caption: {
-                    Text("\(roundCount)")
-                        .font(BrutalistType.monoLabel)
-                        .foregroundStyle(BrutalistColor.muted)
-                }
-
-                BrutalistButton(
-                    kind: .ghost,
-                    action: {}, // Stats screen ships later.
-                    isDisabled: true,
-                    padding: EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)
-                ) {
-                    Text("↗  STATS")
-                        .font(BrutalistType.monoCaption)
-                        .kerning(1.0)
-                } caption: {
-                    Text(yearLabel())
-                        .font(BrutalistType.monoLabel)
-                        .foregroundStyle(BrutalistColor.muted)
-                }
+                navTile(label: "↗  HISTORY") { flow.go(.history) }
+                navTile(label: "↗  TRENDS") { flow.go(.stats) }
+                navTile(label: "↗  COURSES") { flow.go(.courses) }
             }
             .padding(.top, BrutalistSpacing.s)
 
-            if let onSyncCourses {
-                BrutalistButton(
-                    kind: .ghost,
-                    action: {
-                        guard !isSyncing else { return }
-                        Task {
-                            isSyncing = true
-                            await onSyncCourses()
-                            isSyncing = false
-                        }
-                    },
-                    isDisabled: isSyncing,
-                    padding: EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)
-                ) {
-                    Text(isSyncing ? "↓  SYNCING..." : "↓  SYNC COURSES")
-                        .font(BrutalistType.monoCaption)
-                        .kerning(1.0)
-                } caption: {
-                    Text("FROM REMOTE")
-                        .font(BrutalistType.monoLabel)
-                        .foregroundStyle(BrutalistColor.muted)
-                }
-                .padding(.top, BrutalistSpacing.s)
-            }
+            Spacer(minLength: BrutalistSpacing.l)
 
             footer
-                .padding(.top, BrutalistSpacing.xxl)
-        }
-        .task {
-            guard !didLoad else { return }
-            didLoad = true
-            await load()
         }
     }
 
     private var wordmark: some View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("MODEL /B — SCORECARD OS")
+                Text("MODEL /B · SCORECARD OS")
                     .font(BrutalistType.monoLabel)
                     .kerning(1.4)
                     .foregroundStyle(BrutalistColor.muted)
-                (
-                    Text("SCOR\nLY")
+                // Explicit two-line composition. Text concatenation with
+                // an embedded "\n" plus negative kerning miscalculates
+                // its intrinsic width and triggers single-line
+                // truncation on tighter device widths.
+                VStack(alignment: .leading, spacing: -12) {
+                    Text("SCOR")
                         .font(BrutalistType.wordmark)
                         .kerning(-3)
-                        .foregroundColor(BrutalistColor.fg)
-                    + Text("/B")
-                        .font(BrutalistType.sans(.regular, size: 76))
-                        .foregroundColor(BrutalistColor.fg)
-                )
-                .lineLimit(2)
+                        .foregroundStyle(BrutalistColor.fg)
+                    HStack(alignment: .firstTextBaseline, spacing: 0) {
+                        Text("LY")
+                            .font(BrutalistType.wordmark)
+                            .kerning(-3)
+                        Text("/B")
+                            .font(BrutalistType.sans(.regular, size: 76))
+                    }
+                    .foregroundStyle(BrutalistColor.fg)
+                }
+                .fixedSize(horizontal: true, vertical: true)
             }
-            Spacer()
+            Spacer(minLength: 12)
             VStack(alignment: .trailing, spacing: 2) {
                 Text("NO.").font(BrutalistType.monoMicro).foregroundStyle(BrutalistColor.muted)
                 Text("001")
@@ -252,12 +195,39 @@ struct HomeView: View {
         }
     }
 
+    private func navTile(
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        BrutalistButton(
+            kind: .ghost,
+            action: action,
+            padding: EdgeInsets(top: 14, leading: 10, bottom: 14, trailing: 10)
+        ) {
+            Text(label)
+                .font(BrutalistType.monoCaption)
+                .kerning(0.8)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } caption: {
+            EmptyView()
+        }
+    }
+
     private var footer: some View {
-        HStack {
+        HStack(spacing: BrutalistSpacing.m) {
             Text("BUILT FOR THE LONG GAME")
                 .font(BrutalistType.monoMicro)
                 .kerning(0.8)
             Spacer()
+            Text("↗ SETTINGS")
+                .font(BrutalistType.monoMicro)
+                .kerning(0.8)
+                .brutalistTap { flow.go(.settings) }
+            Text("·")
+                .font(BrutalistType.monoMicro)
+                .kerning(0.8)
             Text("↳ SIGN OUT")
                 .font(BrutalistType.monoMicro)
                 .kerning(0.8)
@@ -267,26 +237,6 @@ struct HomeView: View {
     }
 
     // MARK: - Helpers
-
-    private func load() async {
-        await MainActor.run { isLoading = true }
-        defer { Task { @MainActor in isLoading = false } }
-        do {
-            let fetched = try await repository.fetchAllCompleted()
-            await MainActor.run {
-                self.rounds = fetched.sorted { $0.datePlayed > $1.datePlayed }
-                self.handicap = computeHandicap(rounds: fetched)
-            }
-        } catch {
-            // Empty state on failure; brutalist app shows the absence of
-            // data rather than a spinner-with-retry.
-        }
-    }
-
-    private func computeHandicap(rounds: [CompletedRound]) -> Decimal? {
-        let differentials = rounds.compactMap(\.differential).prefix(20).map { $0 }
-        return WHSCalculator.handicapIndex(from: differentials)
-    }
 
     private func courseSubtitle(for round: CompletedRound) -> String {
         var parts: [String] = []
@@ -332,8 +282,9 @@ struct HomeView: View {
     }()
 }
 
-/// Bone-cream panel with corner registration marks. Used for both
-/// Home stat cards.
+/// Bone-cream panel with corner registration marks. Compact rectangle
+/// shape — half the height of a square card. Used for the Handicap +
+/// Rounds twin stamps on Home.
 private struct StampCard: View {
     let label: String
     let value: String
@@ -342,24 +293,30 @@ private struct StampCard: View {
     var body: some View {
         ZStack {
             CornerMarks(size: 6, inset: 4, color: BrutalistColor.rule)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(label.uppercased())
-                    .font(BrutalistType.monoMicro)
-                    .kerning(1.0)
-                    .foregroundStyle(BrutalistColor.muted)
+            HStack(alignment: .center, spacing: BrutalistSpacing.s) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(label.uppercased())
+                        .font(BrutalistType.monoMicro)
+                        .kerning(1.0)
+                        .foregroundStyle(BrutalistColor.muted)
+                        .lineLimit(1)
+                    Text(sub.uppercased())
+                        .font(BrutalistType.monoMicro)
+                        .kerning(0.6)
+                        .foregroundStyle(BrutalistColor.muted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
                 Text(value)
-                    .font(BrutalistType.statCardValue)
-                    .kerning(-1.4)
+                    .font(BrutalistType.bigStat)
+                    .kerning(-0.8)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                Text(sub.uppercased())
-                    .font(BrutalistType.monoMicro)
-                    .kerning(0.6)
-                    .foregroundStyle(BrutalistColor.muted)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
         }
         .background(BrutalistColor.panel)
         .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))

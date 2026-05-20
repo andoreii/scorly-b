@@ -229,6 +229,85 @@ extension SyncEngine {
                 )
             )
         }
+        if let holeStatRows = row.holeStats, !holeStatRows.isEmpty {
+            mergeHoleStats(
+                holeStatRows,
+                roundExternalId: externalId,
+                courseExternalId: courseExternalId
+            )
+        }
+    }
+
+    private func mergeHoleStats(
+        _ rows: [HoleStatRow],
+        roundExternalId: UUID,
+        courseExternalId: UUID
+    ) {
+        let pars = holePars(for: courseExternalId)
+        for row in rows {
+            let statExternalId: UUID = row.holeStatExternalId
+                .flatMap(UUID.init(uuidString:))
+                ?? LegacyExternalID.holeStat(row.holeStatId)
+            let par = pars[row.holeNumber] ?? 0
+            let descriptor = FetchDescriptor<LocalHoleStat>(
+                predicate: #Predicate { $0.externalId == statExternalId }
+            )
+            if let existing = try? modelContext.fetch(descriptor).first {
+                existing.par = par
+                existing.strokes = row.strokes
+                existing.putts = row.putts
+                existing.teeShot = row.teeShot
+                existing.approach = row.approach
+                existing.teeClub = row.teeClub
+                existing.approachClub = row.approachClub
+                existing.outOfBoundsCount = row.outOfBoundsCount ?? 0
+                existing.penaltyStrokes = row.penaltyStrokes ?? 0
+                existing.hazardCount = row.hazardCount ?? 0
+                existing.greenInReg = row.greenInReg
+                existing.threePutt = row.threePutt
+                existing.upAndDownSuccess = row.upAndDownSuccess
+                existing.sandSaveSuccess = row.sandSaveSuccess
+                existing.puttDistances = row.puttDistances
+                existing.teeShotDistance = row.teeShotDistance
+                existing.approachDistance = row.approachDistance
+                existing.pinPosition = row.pinPosition
+            } else {
+                modelContext.insert(
+                    LocalHoleStat(
+                        serverId: row.holeStatId,
+                        externalId: statExternalId,
+                        roundExternalId: roundExternalId,
+                        holeNumber: row.holeNumber,
+                        par: par,
+                        strokes: row.strokes,
+                        putts: row.putts,
+                        teeShot: row.teeShot,
+                        approach: row.approach,
+                        teeClub: row.teeClub,
+                        approachClub: row.approachClub,
+                        outOfBoundsCount: row.outOfBoundsCount ?? 0,
+                        penaltyStrokes: row.penaltyStrokes ?? 0,
+                        hazardCount: row.hazardCount ?? 0,
+                        greenInReg: row.greenInReg,
+                        threePutt: row.threePutt,
+                        upAndDownSuccess: row.upAndDownSuccess,
+                        sandSaveSuccess: row.sandSaveSuccess,
+                        puttDistances: row.puttDistances,
+                        teeShotDistance: row.teeShotDistance,
+                        approachDistance: row.approachDistance,
+                        pinPosition: row.pinPosition
+                    )
+                )
+            }
+        }
+    }
+
+    private func holePars(for courseExternalId: UUID) -> [Int: Int] {
+        let descriptor = FetchDescriptor<LocalHole>(
+            predicate: #Predicate { $0.courseExternalId == courseExternalId }
+        )
+        let holes = (try? modelContext.fetch(descriptor)) ?? []
+        return Dictionary(uniqueKeysWithValues: holes.map { ($0.number, $0.par) })
     }
 
     private func update(
@@ -324,6 +403,10 @@ private enum LegacyExternalID {
 
     static func round(_ id: Int) -> UUID {
         make(kind: "8005", id: id)
+    }
+
+    static func holeStat(_ id: Int) -> UUID {
+        make(kind: "8006", id: id)
     }
 
     private static func make(kind: String, id: Int) -> UUID {
