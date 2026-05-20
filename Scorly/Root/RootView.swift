@@ -71,7 +71,10 @@ struct RootView: View {
         }
         let syncEngine = SyncEngine.make(
             modelContainer: modelContainer,
-            remote: LiveSupabaseRemoteSyncAPI(supabase: supabase),
+            remote: LiveSupabaseRemoteSyncAPI(
+                supabase: supabase,
+                modelContainer: modelContainer
+            ),
             network: LiveNetworkMonitor()
         )
         coursesRepository = CoursesRepositoryLive.make(
@@ -85,6 +88,11 @@ struct RootView: View {
             syncEngine: syncEngine,
             supabase: supabase
         )
+        // Catch up the outbox on every userId-scoped rebuild (sign-in,
+        // account switch, app launch). Then keep watching the network so
+        // any future offline→online flip re-drains automatically.
+        await syncEngine.startWatchingNetwork()
+        Task { _ = await syncEngine.drain() }
         if let fetched = try? await coursesRepository.fetchAll() {
             courses = fetched
             seedDefaultCourseSelection()

@@ -161,6 +161,7 @@ public actor RoundsRepositoryLive: RoundsRepository {
     }
 
     public func save(_ round: RoundDraft) async throws {
+        let playersData = round.players.isEmpty ? nil : try? Self.encoder.encode(round.players)
         let local = LocalRound(
             externalId: round.id,
             userId: round.userId,
@@ -180,12 +181,20 @@ public actor RoundsRepositoryLive: RoundsRepository {
             totalScore: round.totalScore,
             whsDifferential: round.whsDifferential,
             createdAt: round.createdAt,
-            isDraft: false
+            isDraft: false,
+            players: playersData
         )
         modelContext.insert(local)
+        // Capture each hole stat's external id once so the local row and the
+        // outbox payload reference the same UUID — that's the idempotency
+        // key the server-side `hole_stat_external_id` UNIQUE constraint uses
+        // to dedupe push retries.
+        var pendingHoleStats: [RoundOutboxBody.PendingHoleStat] = []
+        pendingHoleStats.reserveCapacity(round.holeStats.count)
         for (index, stat) in round.holeStats.enumerated() {
+            let externalId = UUID()
             let statLocal = LocalHoleStat(
-                externalId: UUID(),
+                externalId: externalId,
                 roundExternalId: round.id,
                 holeNumber: index + 1,
                 par: stat.par,
@@ -200,16 +209,37 @@ public actor RoundsRepositoryLive: RoundsRepository {
                 sandSaveSuccess: stat.sandSaveSuccess
             )
             modelContext.insert(statLocal)
+            pendingHoleStats.append(
+                RoundOutboxBody.PendingHoleStat(
+                    holeStatExternalId: externalId.uuidString,
+                    holeNumber: index + 1,
+                    strokes: stat.strokes,
+                    putts: stat.putts,
+                    teeShot: Mappings.v1ShotLocation(for: stat.teeShotLie),
+                    approach: Mappings.v1ShotLocation(for: stat.approachLie),
+                    outOfBoundsCount: stat.outOfBoundsCount,
+                    penaltyStrokes: stat.penaltyStrokes,
+                    hazardCount: stat.hazardCount,
+                    upAndDownSuccess: stat.upAndDownSuccess,
+                    sandSaveSuccess: stat.sandSaveSuccess
+                )
+            )
         }
         try modelContext.save()
+        let body = makeRoundOutboxBody(from: round, holeStats: pendingHoleStats)
         try await syncEngine.enqueue(
             PendingOutbox(
                 aggregate: .round,
                 op: .insert,
                 externalId: round.id,
-                body: Self.encoder.encode(makeRoundInsert(from: round))
+                body: Self.encoder.encode(body)
             )
         )
+        // Fire-and-forget drain so the round reaches Supabase as soon as the
+        // network allows, rather than waiting for the next offline→online
+        // flip or the next app launch. Errors are absorbed inside drain
+        // (transient → backoff, permanent → dead-letter), so we don't await.
+        Task { [syncEngine] in _ = await syncEngine.drain() }
     }
 
     public func update(_ round: RoundDraft) async throws {
@@ -363,10 +393,37 @@ private extension RoundsRepositoryLive {
         )
     }
 
+    private func makeRoundOutboxBody(
+        from draft: RoundDraft,
+        holeStats: [RoundOutboxBody.PendingHoleStat]
+    ) -> RoundOutboxBody {
+        RoundOutboxBody(
+            courseExternalId: draft.courseId,
+            teeExternalId: draft.teeId,
+            userId: draft.userId,
+            datePlayed: SupabaseConfig.dateOnlyFormatter.string(from: draft.datePlayed),
+            holesPlayed: draft.holesPlayed.rawValue,
+            roundType: draft.roundType?.rawValue,
+            roundFormat: draft.roundFormat?.rawValue,
+            conditions: Mappings.csv(for: draft.conditions),
+            temperature: draft.temperature,
+            walkingVsRiding: draft.walkingVsRiding?.rawValue,
+            startedAt: draft.startedAt,
+            finishedAt: draft.finishedAt,
+            mentalState: draft.mentalState,
+            roundExternalId: draft.id.uuidString,
+            notes: draft.notes,
+            whsDifferential: draft.whsDifferential,
+            totalScore: draft.totalScore,
+            players: draft.players,
+            holeStats: holeStats
+        )
+    }
+
     private func makeRoundInsert(from draft: RoundDraft) -> RoundInsert {
         RoundInsert(
             userId: draft.userId,
-            courseId: 0, // Server-side: looked up via course_external_id once Phase D wires the SDK.
+            courseId: 0, // Update path: server-side lookup pending until Phase D round-edit lands.
             teeId: nil,
             datePlayed: SupabaseConfig.dateOnlyFormatter.string(from: draft.datePlayed),
             holesPlayed: draft.holesPlayed.rawValue,
