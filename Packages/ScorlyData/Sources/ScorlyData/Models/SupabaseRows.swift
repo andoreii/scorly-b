@@ -6,6 +6,7 @@
 // swiftlint:disable discouraged_optional_boolean
 
 import Foundation
+import ScorlyDomain
 
 // Codable Row / Insert / Update types mirroring the Supabase schema.
 //
@@ -222,6 +223,7 @@ public struct RoundRow: Sendable, Codable, Equatable {
     public let totalScore: Int?
     public let createdAt: Date
     public let holeStats: [HoleStatRow]?
+    public let players: [RoundPlayer]?
 }
 
 public struct RoundInsert: Sendable, Codable, Equatable {
@@ -242,6 +244,7 @@ public struct RoundInsert: Sendable, Codable, Equatable {
     public let notes: String?
     public let whsDifferential: Decimal?
     public let totalScore: Int?
+    public let players: [RoundPlayer]
 
     public init(
         userId: UUID,
@@ -260,7 +263,8 @@ public struct RoundInsert: Sendable, Codable, Equatable {
         roundExternalId: String,
         notes: String? = nil,
         whsDifferential: Decimal? = nil,
-        totalScore: Int? = nil
+        totalScore: Int? = nil,
+        players: [RoundPlayer] = []
     ) {
         self.userId = userId
         self.courseId = courseId
@@ -279,6 +283,120 @@ public struct RoundInsert: Sendable, Codable, Equatable {
         self.notes = notes
         self.whsDifferential = whsDifferential
         self.totalScore = totalScore
+        self.players = players
+    }
+}
+
+/// Outbox payload for `rounds.insert`. Carries external IDs for course/tee
+/// (resolved to server serial IDs at push time, after the local cache has
+/// picked up the latest pull) plus the round's hole stats so a single
+/// outbox entry fans out to two Supabase inserts.
+///
+/// We don't enqueue per-hole `holeStat` entries — the parent round's
+/// server ID isn't known until the round insert returns, so the push
+/// handler does the chained insert atomically.
+public struct RoundOutboxBody: Sendable, Codable, Equatable {
+    public let courseExternalId: UUID
+    public let teeExternalId: UUID?
+    public let userId: UUID
+    public let datePlayed: String
+    public let holesPlayed: String
+    public let roundType: String?
+    public let roundFormat: String?
+    public let conditions: String?
+    public let temperature: Int?
+    public let walkingVsRiding: String?
+    public let startedAt: Date?
+    public let finishedAt: Date?
+    public let mentalState: Int?
+    public let roundExternalId: String
+    public let notes: String?
+    public let whsDifferential: Decimal?
+    public let totalScore: Int?
+    public let players: [RoundPlayer]
+    public let holeStats: [PendingHoleStat]
+
+    public struct PendingHoleStat: Sendable, Codable, Equatable {
+        public let holeStatExternalId: String
+        public let holeNumber: Int
+        public let strokes: Int
+        public let putts: Int
+        public let teeShot: String?
+        public let approach: String?
+        public let outOfBoundsCount: Int
+        public let penaltyStrokes: Int
+        public let hazardCount: Int
+        public let upAndDownSuccess: Bool?
+        public let sandSaveSuccess: Bool?
+
+        public init(
+            holeStatExternalId: String,
+            holeNumber: Int,
+            strokes: Int,
+            putts: Int,
+            teeShot: String? = nil,
+            approach: String? = nil,
+            outOfBoundsCount: Int = 0,
+            penaltyStrokes: Int = 0,
+            hazardCount: Int = 0,
+            upAndDownSuccess: Bool? = nil,
+            sandSaveSuccess: Bool? = nil
+        ) {
+            self.holeStatExternalId = holeStatExternalId
+            self.holeNumber = holeNumber
+            self.strokes = strokes
+            self.putts = putts
+            self.teeShot = teeShot
+            self.approach = approach
+            self.outOfBoundsCount = outOfBoundsCount
+            self.penaltyStrokes = penaltyStrokes
+            self.hazardCount = hazardCount
+            self.upAndDownSuccess = upAndDownSuccess
+            self.sandSaveSuccess = sandSaveSuccess
+        }
+    }
+
+    // swiftlint:disable:next function_default_parameter_at_end
+    public init(
+        courseExternalId: UUID,
+        teeExternalId: UUID? = nil,
+        userId: UUID,
+        datePlayed: String,
+        holesPlayed: String,
+        roundType: String? = nil,
+        roundFormat: String? = nil,
+        conditions: String? = nil,
+        temperature: Int? = nil,
+        walkingVsRiding: String? = nil,
+        startedAt: Date? = nil,
+        finishedAt: Date? = nil,
+        mentalState: Int? = nil,
+        roundExternalId: String,
+        notes: String? = nil,
+        whsDifferential: Decimal? = nil,
+        totalScore: Int? = nil,
+        players: [RoundPlayer] = [],
+        holeStats: [PendingHoleStat] = []
+    ) {
+        self.courseExternalId = courseExternalId
+        self.teeExternalId = teeExternalId
+        self.userId = userId
+        self.datePlayed = datePlayed
+        self.holesPlayed = holesPlayed
+        self.roundType = roundType
+        self.roundFormat = roundFormat
+        self.conditions = conditions
+        self.temperature = temperature
+        self.walkingVsRiding = walkingVsRiding
+        self.startedAt = startedAt
+        self.finishedAt = finishedAt
+        self.mentalState = mentalState
+        self.roundExternalId = roundExternalId
+        self.notes = notes
+        self.whsDifferential = whsDifferential
+        self.totalScore = totalScore
+        self.players = players
+        self.holeStats = holeStats
     }
 }
 

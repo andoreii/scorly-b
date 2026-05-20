@@ -493,6 +493,7 @@ public struct ConfirmView: View {
         guard let userId = authService.userId else { return }
         isFiling = true
         let holeStats = state.holes.indices.compactMap { state.derivedStat(for: $0) }
+        let players = setupForm.players.map { RoundPlayer(name: $0.name, handicap: $0.handicap) }
         let draft = RoundDraft(
             id: UUID(),
             externalId: UUID(),
@@ -513,7 +514,8 @@ public struct ConfirmView: View {
             totalScore: state.totalStrokes,
             whsDifferential: nil,
             createdAt: Date(),
-            holeStats: holeStats
+            holeStats: holeStats,
+            players: players
         )
         do {
             try await roundsRepository.save(draft)

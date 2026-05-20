@@ -236,6 +236,11 @@ public final class LocalRound {
     /// Phase Z3 (round in-progress safety net) replaces v1's UserDefaults
     /// snapshot via this flag.
     public var isDraft: Bool
+    /// JSON-encoded `[RoundPlayer]` (name + handicap snapshot at setup
+    /// time). Optional column — pre-Phase-D rows lack it. Stored as `Data`
+    /// because SwiftData has no native JSON column type; the repo layer
+    /// decodes back to `[RoundPlayer]` on read.
+    public var players: Data?
 
     // swiftlint:disable:next function_default_parameter_at_end
     public init(
@@ -258,7 +263,8 @@ public final class LocalRound {
         totalScore: Int? = nil,
         whsDifferential: Decimal? = nil,
         createdAt: Date,
-        isDraft: Bool = false
+        isDraft: Bool = false,
+        players: Data? = nil
     ) {
         self.serverId = serverId
         self.externalId = externalId
@@ -280,6 +286,7 @@ public final class LocalRound {
         self.whsDifferential = whsDifferential
         self.createdAt = createdAt
         self.isDraft = isDraft
+        self.players = players
     }
 }
 

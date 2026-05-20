@@ -117,7 +117,8 @@ extension CoursesRepositoryLiveTests {
             whsDifferential: nil,
             totalScore: totalScore,
             createdAt: Date(timeIntervalSince1970: TimeInterval(3_000 + id)),
-            holeStats: nil
+            holeStats: nil,
+            players: nil
         )
     }
 

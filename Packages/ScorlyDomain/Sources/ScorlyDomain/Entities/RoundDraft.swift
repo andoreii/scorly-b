@@ -28,6 +28,7 @@ public struct RoundDraft: Sendable, Equatable, Identifiable {
     public let whsDifferential: Decimal?
     public let createdAt: Date
     public let holeStats: [HoleStat]
+    public let players: [RoundPlayer]
 
     /// Pluck the obvious init out of the way; the data layer assembles these.
     public init(
@@ -50,7 +51,8 @@ public struct RoundDraft: Sendable, Equatable, Identifiable {
         totalScore: Int,
         whsDifferential: Decimal? = nil,
         createdAt: Date,
-        holeStats: [HoleStat] = []
+        holeStats: [HoleStat] = [],
+        players: [RoundPlayer] = []
     ) {
         self.id = id
         self.externalId = externalId
@@ -72,5 +74,6 @@ public struct RoundDraft: Sendable, Equatable, Identifiable {
         self.whsDifferential = whsDifferential
         self.createdAt = createdAt
         self.holeStats = holeStats
+        self.players = players
     }
 }

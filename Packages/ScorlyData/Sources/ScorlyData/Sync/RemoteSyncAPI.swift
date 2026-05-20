@@ -1,6 +1,7 @@
 import Foundation
 import ScorlyDomain
 import Supabase
+import SwiftData
 
 /// The SyncEngine talks to the remote (Supabase) through this protocol.
 /// Production wires the live Supabase SDK here (Phase D, when AuthService
@@ -157,20 +158,126 @@ public actor InMemoryRemoteSyncAPI: RemoteSyncAPI {
 
 // MARK: - Live placeholder
 
-/// Live Supabase remote. Course pull is wired so the app can hydrate local
-/// SwiftData from Supabase; push remains intentionally loud until course
-/// create/edit/delete UI and full nested write fan-out land.
+/// Live Supabase remote. Course pull hydrates local SwiftData from Supabase.
+/// Round push is wired: insert into `rounds`, capture the server-assigned
+/// `round_id`, then bulk-insert nested `hole_stats` rows under that id.
+/// Other aggregates (courses, users, goals, etc.) remain loud until their
+/// write UIs land.
 public struct LiveSupabaseRemoteSyncAPI: RemoteSyncAPI {
     private let supabase: SupabaseClient
+    /// Optional local cache used to resolve `course_external_id` /
+    /// `tee_external_id` UUIDs to the Supabase serial IDs the FK columns
+    /// require. Injected at runtime via `RootView` so the remote can read
+    /// `LocalCourse.serverId` / `LocalTee.serverId` at push time. If nil,
+    /// pushes fall back to an explicit error.
+    private let modelContainer: ModelContainer?
 
-    public init(supabase: SupabaseClient = SupabaseClientFactory.make()) {
+    public init(
+        supabase: SupabaseClient = SupabaseClientFactory.make(),
+        modelContainer: ModelContainer? = nil
+    ) {
         self.supabase = supabase
+        self.modelContainer = modelContainer
     }
 
-    public func push(_: PushPayload) async throws -> RemotePushResult {
-        throw RemoteSyncError.permanent(
-            "Live Supabase push is not wired for this aggregate yet"
+    public func push(_ payload: PushPayload) async throws -> RemotePushResult {
+        switch (payload.aggregate, payload.op) {
+        case (.round, .insert):
+            return try await pushRoundInsert(payload.body)
+        default:
+            throw RemoteSyncError.permanent(
+                "Live Supabase push not wired for \(payload.aggregate)/\(payload.op)"
+            )
+        }
+    }
+
+    private func pushRoundInsert(_ body: Data) async throws -> RemotePushResult {
+        guard let modelContainer else {
+            throw RemoteSyncError.permanent(
+                "LiveSupabaseRemoteSyncAPI built without a ModelContainer; cannot resolve course/tee ids"
+            )
+        }
+        let outboxBody: RoundOutboxBody
+        do {
+            outboxBody = try SupabaseConfig.decoder.decode(RoundOutboxBody.self, from: body)
+        } catch {
+            throw RemoteSyncError.permanent("malformed round outbox body: \(error)")
+        }
+        let lookup = LocalIdResolver(container: modelContainer)
+        guard let courseServerId = lookup.courseServerId(for: outboxBody.courseExternalId) else {
+            // Course hasn't been pulled (or the pulled row lacks serverId) —
+            // retry once the next pull populates the cache.
+            throw RemoteSyncError.transient(
+                "course \(outboxBody.courseExternalId) not yet synced"
+            )
+        }
+        let teeServerId: Int? = outboxBody.teeExternalId.flatMap(lookup.teeServerId(for:))
+
+        let insert = RoundInsert(
+            userId: outboxBody.userId,
+            courseId: courseServerId,
+            teeId: teeServerId,
+            datePlayed: outboxBody.datePlayed,
+            holesPlayed: outboxBody.holesPlayed,
+            roundType: outboxBody.roundType,
+            roundFormat: outboxBody.roundFormat,
+            conditions: outboxBody.conditions,
+            temperature: outboxBody.temperature,
+            walkingVsRiding: outboxBody.walkingVsRiding,
+            startedAt: outboxBody.startedAt,
+            finishedAt: outboxBody.finishedAt,
+            mentalState: outboxBody.mentalState,
+            roundExternalId: outboxBody.roundExternalId,
+            notes: outboxBody.notes,
+            whsDifferential: outboxBody.whsDifferential,
+            totalScore: outboxBody.totalScore,
+            players: outboxBody.players
         )
+
+        let inserted: [RoundRow]
+        do {
+            inserted = try await supabase
+                .from("rounds")
+                .insert(insert, returning: .representation)
+                .select()
+                .execute()
+                .value
+        } catch {
+            throw classify(error)
+        }
+
+        guard let roundId = inserted.first?.roundId else {
+            throw RemoteSyncError.permanent("rounds insert returned no rows")
+        }
+
+        if !outboxBody.holeStats.isEmpty {
+            let holeStatInserts = outboxBody.holeStats.map { stat in
+                HoleStatInsert(
+                    roundId: roundId,
+                    holeNumber: stat.holeNumber,
+                    strokes: stat.strokes,
+                    putts: stat.putts,
+                    teeShot: stat.teeShot,
+                    approach: stat.approach,
+                    outOfBoundsCount: stat.outOfBoundsCount,
+                    penaltyStrokes: stat.penaltyStrokes,
+                    hazardCount: stat.hazardCount,
+                    upAndDownSuccess: stat.upAndDownSuccess,
+                    sandSaveSuccess: stat.sandSaveSuccess,
+                    holeStatExternalId: stat.holeStatExternalId
+                )
+            }
+            do {
+                try await supabase
+                    .from("hole_stats")
+                    .insert(holeStatInserts)
+                    .execute()
+            } catch {
+                throw classify(error)
+            }
+        }
+
+        return RemotePushResult(serverId: roundId)
     }
 
     public func pull(since _: Date?) async throws -> RemotePullResult {
@@ -247,6 +354,29 @@ public struct LiveSupabaseRemoteSyncAPI: RemoteSyncAPI {
     private static let courseSelect = "*, tees(*, tee_holes(*)), holes(*)"
 
     private static let scalarCourseSelect = "*"
+
+    /// Synchronous cache lookup for course/tee server IDs. Builds a
+    /// transient `ModelContext` on the calling thread (the `SyncEngine`
+    /// actor) — fine because reads don't mutate.
+    private struct LocalIdResolver {
+        let container: ModelContainer
+
+        func courseServerId(for externalId: UUID) -> Int? {
+            let context = ModelContext(container)
+            let descriptor = FetchDescriptor<LocalCourse>(
+                predicate: #Predicate { $0.externalId == externalId }
+            )
+            return (try? context.fetch(descriptor))?.first?.serverId
+        }
+
+        func teeServerId(for externalId: UUID) -> Int? {
+            let context = ModelContext(container)
+            let descriptor = FetchDescriptor<LocalTee>(
+                predicate: #Predicate { $0.externalId == externalId }
+            )
+            return (try? context.fetch(descriptor))?.first?.serverId
+        }
+    }
 
     private static func applyingMockupColors(to rows: [CourseRow]) -> [CourseRow] {
         rows.enumerated().map { index, row in
