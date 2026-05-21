@@ -12,7 +12,7 @@ import ScorlyDomain
 ///    "Miss Left", "OB Long"). The `teeShotModifier` / `approachModifier`
 ///    fields hold an optional "Bunker" or "Water" companion. Both
 ///    are decoded into a typed `HoleStat` only when derivation runs.
-public struct HoleEntry: Equatable, Sendable {
+public struct HoleEntry: Equatable, Sendable, Codable {
     public var strokes: Int?
     public var putts: Int
     public var puttDistances: [Int?]
@@ -75,7 +75,9 @@ public struct HoleEntry: Equatable, Sendable {
 public final class RoundPlayState {
     public let course: Course
     public let tee: Tee?
-    public let holes: [Hole]
+    public private(set) var holes: [Hole]
+    public private(set) var holesPlayed: HolesPlayed
+    public let startedAt: Date
     public var entries: [HoleEntry]
     public var holeIdx: Int
     public var openShot: OpenShot
@@ -92,23 +94,84 @@ public final class RoundPlayState {
     public init(course: Course, teeId: UUID?, holesPlayed: HolesPlayed) {
         self.course = course
         self.tee = course.tees.first(where: { $0.id == teeId }) ?? course.tees.first
+        self.holesPlayed = holesPlayed
+        self.startedAt = Date()
 
-        let sortedHoles = course.holes.sorted { $0.number < $1.number }
-        let slice: [Hole]
-        switch holesPlayed {
-        case .front9:
-            slice = Array(sortedHoles.prefix(9))
-        case .back9:
-            slice = Array(sortedHoles.dropFirst(9).prefix(9))
-        case .eighteen:
-            slice = sortedHoles
-        }
+        let slice = Self.sliceHoles(course: course, holesPlayed: holesPlayed)
         self.holes = slice
         self.entries = Array(repeating: HoleEntry(), count: slice.count)
         self.holeIdx = 0
         self.openShot = .none
         self.scorecardOpen = false
         self.penaltySheetOpen = false
+    }
+
+    /// Resume a paused round. Caller must pre-validate that the entry
+    /// count matches the holes-played slice; mismatches fall back to a
+    /// fresh entry array.
+    public init(
+        course: Course,
+        teeId: UUID?,
+        holesPlayed: HolesPlayed,
+        entries: [HoleEntry],
+        holeIdx: Int,
+        startedAt: Date
+    ) {
+        self.course = course
+        self.tee = course.tees.first(where: { $0.id == teeId }) ?? course.tees.first
+        self.holesPlayed = holesPlayed
+        self.startedAt = startedAt
+
+        let slice = Self.sliceHoles(course: course, holesPlayed: holesPlayed)
+        self.holes = slice
+        self.entries = entries.count == slice.count
+            ? entries
+            : Array(repeating: HoleEntry(), count: slice.count)
+        self.holeIdx = max(0, min(slice.count - 1, holeIdx))
+        self.openShot = .none
+        self.scorecardOpen = false
+        self.penaltySheetOpen = false
+    }
+
+    /// Reslice the round to a different holes-played mode mid-play.
+    /// Existing entries are remapped by hole number so any strokes the
+    /// player already logged on holes that survive the transition are
+    /// preserved. Holes that drop out of the new slice (e.g. switching
+    /// from 18 → FRONT 9 erases holes 10–18) lose their entries. The
+    /// cursor stays on the same hole when possible; otherwise it
+    /// clamps to the first hole of the new slice.
+    public func changeHolesPlayed(to newValue: HolesPlayed) {
+        guard newValue != holesPlayed else { return }
+        let newSlice = Self.sliceHoles(course: course, holesPlayed: newValue)
+        let oldEntriesByNumber = Dictionary(
+            uniqueKeysWithValues: zip(holes.map(\.number), entries)
+        )
+        var newEntries = Array(repeating: HoleEntry(), count: newSlice.count)
+        for (idx, hole) in newSlice.enumerated() {
+            if let preserved = oldEntriesByNumber[hole.number] {
+                newEntries[idx] = preserved
+            }
+        }
+        let currentHoleNumber = holes.indices.contains(holeIdx) ? holes[holeIdx].number : nil
+        let mappedIdx = currentHoleNumber
+            .flatMap { num in newSlice.firstIndex { $0.number == num } } ?? 0
+        holes = newSlice
+        entries = newEntries
+        holesPlayed = newValue
+        holeIdx = mappedIdx
+        openShot = .none
+    }
+
+    private static func sliceHoles(course: Course, holesPlayed: HolesPlayed) -> [Hole] {
+        let sortedHoles = course.holes.sorted { $0.number < $1.number }
+        switch holesPlayed {
+        case .front9:
+            return Array(sortedHoles.prefix(9))
+        case .back9:
+            return Array(sortedHoles.dropFirst(9).prefix(9))
+        case .eighteen:
+            return sortedHoles
+        }
     }
 
     /// Strokes summed across logged holes only.
@@ -254,6 +317,20 @@ public final class RoundPlayState {
             return DecodedLie(lie: lie, ob: 0, hazard: 0)
         }
         return DecodedLie(lie: nil, ob: 0, hazard: 0)
+    }
+}
+
+/// JSON codec for `[HoleEntry]` ↔ `Data`. The draft repo trades in
+/// opaque `entriesPayload: Data` (so Domain stays UI-agnostic); the
+/// feature layer owns the schema and this helper centralises the codec
+/// so call sites don't reach for a `JSONEncoder` each time.
+public enum HoleEntriesCodec {
+    public static func encode(_ entries: [HoleEntry]) -> Data {
+        (try? JSONEncoder().encode(entries)) ?? Data()
+    }
+
+    public static func decode(_ data: Data) -> [HoleEntry]? {
+        try? JSONDecoder().decode([HoleEntry].self, from: data)
     }
 }
 

@@ -5,8 +5,9 @@ import ScorlyDomain
 /// `RoundsRepositoryLive` once Supabase migrations are applied and the
 /// sync engine is wired into `ScorlyApp.init`. Until then the Home /
 /// History screens render their "no rounds yet" empty states.
-final class InMemoryRoundsRepository: RoundsRepository {
+final class InMemoryRoundsRepository: RoundsRepository, @unchecked Sendable {
     private let rounds: [CompletedRound]
+    private var draft: InProgressRoundDraft?
 
     init(rounds: [CompletedRound] = []) {
         self.rounds = rounds
@@ -21,4 +22,7 @@ final class InMemoryRoundsRepository: RoundsRepository {
     func save(_: RoundDraft) async throws {}
     func update(_: RoundDraft) async throws {}
     func delete(id _: UUID) async throws {}
+    func fetchInProgressDraft() async throws -> InProgressRoundDraft? { draft }
+    func upsertInProgressDraft(_ draft: InProgressRoundDraft) async throws { self.draft = draft }
+    func deleteInProgressDraft() async throws { draft = nil }
 }

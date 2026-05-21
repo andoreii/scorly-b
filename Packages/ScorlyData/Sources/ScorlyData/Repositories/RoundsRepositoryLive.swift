@@ -290,6 +290,55 @@ public actor RoundsRepositoryLive: RoundsRepository {
             )
         )
     }
+
+    public func fetchInProgressDraft() async throws -> InProgressRoundDraft? {
+        guard let local = try findLocalDraft() else { return nil }
+        let holesPlayed = HolesPlayed(rawValue: local.holesPlayed) ?? .eighteen
+        return InProgressRoundDraft(
+            id: local.draftId,
+            userId: local.userId,
+            courseExternalId: local.courseExternalId,
+            teeExternalId: local.teeExternalId,
+            holesPlayed: holesPlayed,
+            startedAt: local.startedAt,
+            updatedAt: local.updatedAt,
+            holeIdx: local.holeIdx,
+            entriesPayload: local.entriesPayload
+        )
+    }
+
+    public func upsertInProgressDraft(_ draft: InProgressRoundDraft) async throws {
+        if let existing = try findLocalDraft() {
+            existing.draftId = draft.id
+            existing.courseExternalId = draft.courseExternalId
+            existing.teeExternalId = draft.teeExternalId
+            existing.holesPlayed = draft.holesPlayed.rawValue
+            existing.startedAt = draft.startedAt
+            existing.updatedAt = draft.updatedAt
+            existing.holeIdx = draft.holeIdx
+            existing.entriesPayload = draft.entriesPayload
+        } else {
+            let local = LocalRoundDraft(
+                userId: draft.userId,
+                draftId: draft.id,
+                courseExternalId: draft.courseExternalId,
+                teeExternalId: draft.teeExternalId,
+                holesPlayed: draft.holesPlayed.rawValue,
+                startedAt: draft.startedAt,
+                updatedAt: draft.updatedAt,
+                holeIdx: draft.holeIdx,
+                entriesPayload: draft.entriesPayload
+            )
+            modelContext.insert(local)
+        }
+        try modelContext.save()
+    }
+
+    public func deleteInProgressDraft() async throws {
+        guard let local = try findLocalDraft() else { return }
+        modelContext.delete(local)
+        try modelContext.save()
+    }
 }
 
 // MARK: - Internals
@@ -298,6 +347,14 @@ private extension RoundsRepositoryLive {
     private func findLocal(externalId: UUID) throws -> LocalRound? {
         let descriptor = FetchDescriptor<LocalRound>(
             predicate: #Predicate { $0.externalId == externalId }
+        )
+        return try modelContext.fetch(descriptor).first
+    }
+
+    private func findLocalDraft() throws -> LocalRoundDraft? {
+        let scopedUserId = userId
+        let descriptor = FetchDescriptor<LocalRoundDraft>(
+            predicate: #Predicate { $0.userId == scopedUserId }
         )
         return try modelContext.fetch(descriptor).first
     }

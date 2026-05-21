@@ -406,6 +406,46 @@ public final class LocalGoal {
     }
 }
 
+/// One paused round per user. Holds the raw `HoleEntry[]` payload as
+/// JSON so the live-play UI can rehydrate exactly. Never enters the
+/// outbox — filing the round through `RoundsRepository.save` is the only
+/// path to Supabase.
+@Model
+public final class LocalRoundDraft {
+    @Attribute(.unique)
+    public var userId: UUID
+    public var draftId: UUID
+    public var courseExternalId: UUID
+    public var teeExternalId: UUID?
+    public var holesPlayed: String
+    public var startedAt: Date
+    public var updatedAt: Date
+    public var holeIdx: Int
+    public var entriesPayload: Data
+
+    public init(
+        userId: UUID,
+        draftId: UUID,
+        courseExternalId: UUID,
+        teeExternalId: UUID?,
+        holesPlayed: String,
+        startedAt: Date,
+        updatedAt: Date,
+        holeIdx: Int,
+        entriesPayload: Data
+    ) {
+        self.userId = userId
+        self.draftId = draftId
+        self.courseExternalId = courseExternalId
+        self.teeExternalId = teeExternalId
+        self.holesPlayed = holesPlayed
+        self.startedAt = startedAt
+        self.updatedAt = updatedAt
+        self.holeIdx = holeIdx
+        self.entriesPayload = entriesPayload
+    }
+}
+
 // MARK: - Container factory
 
 public enum LocalSchema {
@@ -420,6 +460,7 @@ public enum LocalSchema {
         LocalRound.self,
         LocalHoleStat.self,
         LocalGoal.self,
+        LocalRoundDraft.self,
         OutboxEntry.self,
     ]
 

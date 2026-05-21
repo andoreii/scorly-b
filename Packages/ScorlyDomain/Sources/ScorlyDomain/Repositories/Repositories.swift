@@ -49,6 +49,14 @@ public protocol RoundsRepository: Sendable {
     func save(_ round: RoundDraft) async throws
     func update(_ round: RoundDraft) async throws
     func delete(id: UUID) async throws
+    /// Read the user's single in-progress round draft, or nil if none.
+    /// Local-only — never round-trips through Supabase.
+    func fetchInProgressDraft() async throws -> InProgressRoundDraft?
+    /// Insert or replace the in-progress draft for the current user.
+    /// One draft per user; existing draft is overwritten.
+    func upsertInProgressDraft(_ draft: InProgressRoundDraft) async throws
+    /// Remove the in-progress draft. No-op if nothing is stored.
+    func deleteInProgressDraft() async throws
 }
 
 public protocol GoalsRepository: Sendable {

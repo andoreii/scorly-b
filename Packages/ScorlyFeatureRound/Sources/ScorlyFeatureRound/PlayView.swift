@@ -8,65 +8,69 @@ import SwiftUI
 /// `RoundPlayState` it's handed.
 public struct PlayView: View {
     @Bindable private var state: RoundPlayState
-    private let onBack: () -> Void
+    private let onGoHome: () -> Void
+    private let onEditSetup: () -> Void
     private let onFinish: () -> Void
+    private let onAutosave: () -> Void
 
     @State private var lastHoleIdx: Int = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         state: RoundPlayState,
-        onBack: @escaping () -> Void,
-        onFinish: @escaping () -> Void
+        onGoHome: @escaping () -> Void,
+        onEditSetup: @escaping () -> Void,
+        onFinish: @escaping () -> Void,
+        onAutosave: @escaping () -> Void = {}
     ) {
         self.state = state
-        self.onBack = onBack
+        self.onGoHome = onGoHome
+        self.onEditSetup = onEditSetup
         self.onFinish = onFinish
+        self.onAutosave = onAutosave
     }
 
     public var body: some View {
-        ZStack(alignment: .top) {
-            // Top-anchored content. Lives in the top half of the ZStack
-            // regardless of intrinsic height. Removing one shot block on
-            // par 3 only shrinks this column from the bottom — TopBar
-            // through strokesPanel never move.
-            VStack(alignment: .leading, spacing: 0) {
-                TopBar(left: "LIVE · \(state.course.name.uppercased())", right: "SCORLY/B  ®")
+        VStack(alignment: .leading, spacing: 0) {
+            TopBar(left: "LIVE · \(state.course.name.uppercased())", right: "SCORLY/B  ®")
 
-                backRow
-                progressDots
-                progressLabels
-                holeHero
+            backRow
+            progressDots
+            progressLabels
+            holeHero
 
-                metricsRow
-                HBar(vMargin: BrutalistSpacing.m)
+            metricsRow
+            HBar(vMargin: BrutalistSpacing.m)
 
-                SubLabel("Strokes")
-                strokesPanel
+            SubLabel("Strokes")
+            strokesPanel
 
-                shotBlocks
-                puttingBlock
-                pinSection
-            }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .padding(.horizontal, BrutalistSpacing.pageHorizontal)
-
-            // Bottom-anchored nav. Independent of the top layer; pinned
-            // to the bottom safe-area edge in every state.
+            shotBlocks
+            puttingBlock
+            pinSection
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, BrutalistSpacing.pageHorizontal)
+        .background(BrutalistColor.bg.ignoresSafeArea())
+        .foregroundStyle(BrutalistColor.fg)
+        // Reserve the bottom inset for the nav row so the top column
+        // always lays out above it. The previous ZStack overlay worked
+        // on iPhone 17 but on shorter devices (iPhone 14 with its
+        // larger bottom safe area) the top content extended into the
+        // nav's vertical band and the HBar clipped through the buttons.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
                 HBar(vMargin: BrutalistSpacing.xs)
                 navRow
                     .padding(.top, BrutalistSpacing.xs)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .padding(.horizontal, BrutalistSpacing.pageHorizontal)
             .padding(.bottom, BrutalistSpacing.xs)
+            .background(BrutalistColor.bg)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(BrutalistColor.bg.ignoresSafeArea())
-        .foregroundStyle(BrutalistColor.fg)
         .onChange(of: state.holeIdx, initial: true) { _, newValue in
             lastHoleIdx = newValue
+            onAutosave()
         }
         .sheet(isPresented: shotSheetBinding(.tee)) {
             ShotSheetView(state: state, kind: .tee)
@@ -98,11 +102,17 @@ public struct PlayView: View {
 
     private var backRow: some View {
         HStack {
-            Text("← BACK TO SETUP")
+            Text("← HOME")
                 .font(BrutalistType.monoCaption)
                 .kerning(1.0)
                 .foregroundStyle(BrutalistColor.fg)
-                .brutalistTap(action: onBack)
+                .brutalistTap(action: onGoHome)
+            Spacer()
+            Text("↻ SETUP")
+                .font(BrutalistType.monoCaption)
+                .kerning(1.0)
+                .foregroundStyle(BrutalistColor.fg)
+                .brutalistTap(action: onEditSetup)
             Spacer()
             Text("LIVE ROUND")
                 .font(BrutalistType.monoLabel)

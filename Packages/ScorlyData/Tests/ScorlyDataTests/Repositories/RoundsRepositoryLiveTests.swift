@@ -116,6 +116,50 @@ struct RoundsRepositoryLiveTests {
         #expect(rounds.map(\.totalScore) == Array(80..<100))
     }
 
+    @Test("in-progress draft round-trips and never hits the outbox")
+    func inProgressDraftRoundTrip() async throws {
+        let fixture = try Fixture()
+        let payload = Data("entries-blob".utf8)
+        let draft = InProgressRoundDraft(
+            id: UUID(),
+            userId: fixture.userId,
+            courseExternalId: UUID(),
+            teeExternalId: UUID(),
+            holesPlayed: .eighteen,
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_500),
+            holeIdx: 4,
+            entriesPayload: payload
+        )
+        try await fixture.repository.upsertInProgressDraft(draft)
+
+        let fetched = try #require(await fixture.repository.fetchInProgressDraft())
+        #expect(fetched.id == draft.id)
+        #expect(fetched.userId == draft.userId)
+        #expect(fetched.courseExternalId == draft.courseExternalId)
+        #expect(fetched.teeExternalId == draft.teeExternalId)
+        #expect(fetched.holesPlayed == .eighteen)
+        #expect(fetched.holeIdx == 4)
+        #expect(fetched.entriesPayload == payload)
+        // Drafts must not push to Supabase — outbox stays empty.
+        #expect(await fixture.engine.pendingCount() == 0)
+
+        // Upsert overwrites in place: a second write with new holeIdx
+        // replaces (does not duplicate) the row.
+        var updated = draft
+        updated.holeIdx = 9
+        updated.entriesPayload = Data("entries-blob-v2".utf8)
+        try await fixture.repository.upsertInProgressDraft(updated)
+        let refetched = try #require(await fixture.repository.fetchInProgressDraft())
+        #expect(refetched.holeIdx == 9)
+        #expect(refetched.entriesPayload == Data("entries-blob-v2".utf8))
+
+        try await fixture.repository.deleteInProgressDraft()
+        let afterDelete = try await fixture.repository.fetchInProgressDraft()
+        #expect(afterDelete == nil)
+        #expect(await fixture.engine.pendingCount() == 0)
+    }
+
     // MARK: - Fixture
 
     struct Fixture {

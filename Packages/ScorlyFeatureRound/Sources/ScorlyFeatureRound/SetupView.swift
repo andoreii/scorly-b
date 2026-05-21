@@ -9,6 +9,8 @@ public struct SetupView: View {
     private let courses: [Course]
     private let onCancel: () -> Void
     private let onTeeOff: () -> Void
+    private let editingActiveRound: Bool
+    private let originalHolesPlayed: HolesPlayed?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -16,57 +18,130 @@ public struct SetupView: View {
         form: Binding<RoundSetupForm>,
         courses: [Course],
         onCancel: @escaping () -> Void,
-        onTeeOff: @escaping () -> Void
+        onTeeOff: @escaping () -> Void,
+        editingActiveRound: Bool = false,
+        originalHolesPlayed: HolesPlayed? = nil
     ) {
         _form = form
         self.courses = courses
         self.onCancel = onCancel
         self.onTeeOff = onTeeOff
+        self.editingActiveRound = editingActiveRound
+        self.originalHolesPlayed = originalHolesPlayed
+    }
+
+    /// When the user has staged a holes-played change that will drop
+    /// holes the round was already tracking. Used to surface a warning
+    /// + restyle the SAVE button as destructive.
+    private var discardingHoles: ClosedRange<Int>? {
+        guard
+            editingActiveRound,
+            let original = originalHolesPlayed,
+            original != form.holesPlayed
+        else { return nil }
+        switch (original, form.holesPlayed) {
+        case (.eighteen, .front9): return 10...18
+        case (.eighteen, .back9): return 1...9
+        case (.front9, .back9): return 1...9
+        case (.back9, .front9): return 10...18
+        default: return nil
+        }
     }
 
     public var body: some View {
         ScreenShell {
-            TopBar(left: "ROUND SETUP", right: "SCORLY/B  ®")
+            if editingActiveRound {
+                // Sheet header: title left, dismiss right, on a single
+                // row. No SCORLY/B wordmark or LIVE ROUND chip — those
+                // live on the underlying PlayView and would be visual
+                // duplication inside the sheet. Extra top padding because
+                // the sheet has no status bar above it to provide the
+                // breathing room ScreenShell's safeTop normally implies.
+                HStack {
+                    Text("EDIT ROUND")
+                        .font(BrutalistType.monoLabel)
+                        .kerning(1.0)
+                        .foregroundStyle(BrutalistColor.fg)
+                    Spacer()
+                    Text("✕ CLOSE")
+                        .font(BrutalistType.monoCaption)
+                        .kerning(1.0)
+                        .foregroundStyle(BrutalistColor.fg)
+                        .brutalistTap(action: onCancel)
+                }
+                .padding(.top, BrutalistSpacing.l)
+            } else {
+                TopBar(left: "ROUND SETUP", right: "SCORLY/B  ®")
 
-            HStack {
-                Text("← CANCEL")
-                    .font(BrutalistType.monoCaption)
-                    .kerning(1.0)
-                    .foregroundStyle(BrutalistColor.fg)
-                    .brutalistTap(action: onCancel)
-                Spacer()
-                Text("NEW ROUND")
-                    .font(BrutalistType.monoLabel)
-                    .kerning(1.0)
-                    .foregroundStyle(BrutalistColor.muted)
+                HStack {
+                    Text("← CANCEL")
+                        .font(BrutalistType.monoCaption)
+                        .kerning(1.0)
+                        .foregroundStyle(BrutalistColor.fg)
+                        .brutalistTap(action: onCancel)
+                    Spacer()
+                    Text("NEW ROUND")
+                        .font(BrutalistType.monoLabel)
+                        .kerning(1.0)
+                        .foregroundStyle(BrutalistColor.muted)
+                }
+                .padding(.top, BrutalistSpacing.l)
             }
-            .padding(.top, BrutalistSpacing.l)
 
             VStack(alignment: .leading, spacing: 0) {
-                (
-                    Text("Set up\n")
-                        .font(BrutalistType.pageHero)
-                        .kerning(-1.8)
-                        .foregroundColor(BrutalistColor.fg)
-                    + Text("the round.")
-                        .font(BrutalistType.pageHero)
-                        .kerning(-1.8)
-                        .foregroundColor(BrutalistColor.fg)
-                )
-                .lineLimit(3)
-                Text("COURSE · FORMAT · CONDITIONS · LOGISTICS")
-                    .font(BrutalistType.monoLabel)
-                    .kerning(1.0)
-                    .foregroundStyle(BrutalistColor.muted)
-                    .padding(.top, BrutalistSpacing.xs)
+                if editingActiveRound {
+                    (
+                        Text("Edit\n")
+                            .font(BrutalistType.pageHero)
+                            .kerning(-1.8)
+                            .foregroundColor(BrutalistColor.fg)
+                        + Text("the round.")
+                            .font(BrutalistType.pageHero)
+                            .kerning(-1.8)
+                            .foregroundColor(BrutalistColor.fg)
+                    )
+                    .lineLimit(3)
+                    Text("HOLES · FORMAT · CONDITIONS · NOTES")
+                        .font(BrutalistType.monoLabel)
+                        .kerning(1.0)
+                        .foregroundStyle(BrutalistColor.muted)
+                        .padding(.top, BrutalistSpacing.xs)
+                } else {
+                    (
+                        Text("Set up\n")
+                            .font(BrutalistType.pageHero)
+                            .kerning(-1.8)
+                            .foregroundColor(BrutalistColor.fg)
+                        + Text("the round.")
+                            .font(BrutalistType.pageHero)
+                            .kerning(-1.8)
+                            .foregroundColor(BrutalistColor.fg)
+                    )
+                    .lineLimit(3)
+                    Text("COURSE · FORMAT · CONDITIONS · LOGISTICS")
+                        .font(BrutalistType.monoLabel)
+                        .kerning(1.0)
+                        .foregroundStyle(BrutalistColor.muted)
+                        .padding(.top, BrutalistSpacing.xs)
+                }
             }
             .padding(.top, BrutalistSpacing.md)
 
             HBar(vMargin: BrutalistSpacing.xl)
 
-            coursePicker
-            teeSelector
+            // Course + tee pickers are locked mid-round because the
+            // current round's hole geometry is baked into RoundPlayState
+            // at tee-off. Holes-played is editable — RoundPlayState
+            // migrates entries by hole number so any strokes on holes
+            // that survive the transition are preserved.
+            if !editingActiveRound {
+                coursePicker
+                teeSelector
+            }
             holesSelector
+            if let discardingHoles {
+                holesDiscardWarning(range: discardingHoles)
+            }
             roundTypeSection
             formatSection
             conditionsSection
@@ -77,20 +152,57 @@ public struct SetupView: View {
 
             HBar(vMargin: BrutalistSpacing.xl)
 
+            saveButton
+        }
+    }
+
+    @ViewBuilder
+    private var saveButton: some View {
+        if editingActiveRound, let range = discardingHoles {
             BrutalistButton(
                 kind: .fg,
                 action: onTeeOff,
-                isDisabled: !form.isReady,
                 padding: EdgeInsets(top: 20, leading: 18, bottom: 20, trailing: 18)
             ) {
-                Text("TEE OFF →")
+                Text("DISCARD & RESUME →")
                     .font(BrutalistType.sans(.bold, size: 17))
             } caption: {
-                Text(teeOffCaption)
+                Text("→ ERASE H\(String(format: "%02d", range.lowerBound))–H\(String(format: "%02d", range.upperBound))")
+                    .font(BrutalistType.monoCaption)
+                    .kerning(1.2)
+            }
+        } else {
+            BrutalistButton(
+                kind: .fg,
+                action: onTeeOff,
+                isDisabled: editingActiveRound ? false : !form.isReady,
+                padding: EdgeInsets(top: 20, leading: 18, bottom: 20, trailing: 18)
+            ) {
+                Text(editingActiveRound ? "SAVE & RESUME →" : "TEE OFF →")
+                    .font(BrutalistType.sans(.bold, size: 17))
+            } caption: {
+                Text(editingActiveRound ? "→ KEEP PLAYING" : teeOffCaption)
                     .font(BrutalistType.monoCaption)
                     .kerning(1.2)
             }
         }
+    }
+
+    private func holesDiscardWarning(range: ClosedRange<Int>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("HEADS UP")
+                .font(BrutalistType.monoLabel)
+                .kerning(1.0)
+                .foregroundStyle(BrutalistColor.muted)
+            Text("Switching erases strokes on holes \(range.lowerBound)–\(range.upperBound). This can't be undone.")
+                .font(BrutalistType.body)
+                .foregroundStyle(BrutalistColor.fg)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+        .padding(.top, BrutalistSpacing.s)
     }
 
     private var teeOffCaption: String {

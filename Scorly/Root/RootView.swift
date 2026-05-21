@@ -35,6 +35,9 @@ struct RootView: View {
     // of the screen.
     @State private var homeRounds: [CompletedRound] = []
     @State private var homeHandicap: Decimal?
+    @State private var inProgressDraft: InProgressRoundDraft?
+    @State private var inProgressSummary: InProgressSummary?
+    @State private var showMidRoundSetup = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -47,6 +50,7 @@ struct RootView: View {
                 .task(id: authService.userId) {
                     await buildReposAndLoadCourses()
                     await reloadHomeRounds()
+                    await reloadInProgressDraft()
                 }
                 .task(id: flow.current) {
                     // Refetch when arriving on Home so the stamp
@@ -55,6 +59,7 @@ struct RootView: View {
                     // bounces back to Home).
                     if flow.current == .home {
                         await reloadHomeRounds()
+                        await reloadInProgressDraft()
                     }
                 }
         }
@@ -119,7 +124,11 @@ struct RootView: View {
                 HomeView(
                     flow: flow,
                     rounds: homeRounds,
-                    handicap: homeHandicap
+                    handicap: homeHandicap,
+                    inProgress: inProgressSummary,
+                    onResumeRound: resumeInProgressRound,
+                    onDiscardDraft: discardInProgressDraft,
+                    onStartNewRound: { flow.go(.setup) }
                 )
                 .transition(transition)
             case .setup:
@@ -133,10 +142,35 @@ struct RootView: View {
             case let .play(state):
                 PlayView(
                     state: state,
-                    onBack: { flow.back() },
-                    onFinish: { flow.go(.confirm(state)) }
+                    onGoHome: { exitToHome(from: state) },
+                    onEditSetup: {
+                        // Sync the form's holes-played to the round's
+                        // current value so the picker reflects the
+                        // active round (e.g. after a resume across app
+                        // launches, where setupForm has reset).
+                        setupForm.holesPlayed = state.holesPlayed
+                        showMidRoundSetup = true
+                    },
+                    onFinish: { flow.go(.confirm(state)) },
+                    onAutosave: { autosaveDraft(from: state) }
                 )
                 .transition(transition)
+                .sheet(isPresented: $showMidRoundSetup) {
+                    SetupView(
+                        form: $setupForm,
+                        courses: courses,
+                        onCancel: { showMidRoundSetup = false },
+                        onTeeOff: {
+                            if setupForm.holesPlayed != state.holesPlayed {
+                                state.changeHolesPlayed(to: setupForm.holesPlayed)
+                                autosaveDraft(from: state)
+                            }
+                            showMidRoundSetup = false
+                        },
+                        editingActiveRound: true,
+                        originalHolesPlayed: state.holesPlayed
+                    )
+                }
             case let .confirm(state):
                 ConfirmView(
                     state: state,
@@ -144,7 +178,13 @@ struct RootView: View {
                     authService: authService,
                     roundsRepository: roundsRepository,
                     onBack: { flow.back() },
-                    onFinish: { flow.resetTo(.history) }
+                    onFinish: {
+                        Task {
+                            try? await roundsRepository.deleteInProgressDraft()
+                            await reloadInProgressDraft()
+                            flow.resetTo(.history)
+                        }
+                    }
                 )
                 .transition(transition)
             case .history:
@@ -229,6 +269,66 @@ struct RootView: View {
         flow.go(.play(state))
     }
 
+    private func exitToHome(from state: RoundPlayState) {
+        Task {
+            await persistDraft(from: state)
+            await reloadInProgressDraft()
+            flow.resetTo(.home)
+        }
+    }
+
+    private func autosaveDraft(from state: RoundPlayState) {
+        Task { await persistDraft(from: state) }
+    }
+
+    @MainActor
+    private func persistDraft(from state: RoundPlayState) async {
+        guard let userId = authService.userId else { return }
+        let payload = HoleEntriesCodec.encode(state.entries)
+        let draftId = inProgressDraft?.id ?? UUID()
+        let draft = InProgressRoundDraft(
+            id: draftId,
+            userId: userId,
+            courseExternalId: state.course.externalId,
+            teeExternalId: state.tee?.externalId,
+            holesPlayed: state.holesPlayed,
+            startedAt: state.startedAt,
+            updatedAt: Date(),
+            holeIdx: state.holeIdx,
+            entriesPayload: payload
+        )
+        try? await roundsRepository.upsertInProgressDraft(draft)
+        inProgressDraft = draft
+    }
+
+    private func resumeInProgressRound() {
+        guard
+            let draft = inProgressDraft,
+            let course = courses.first(where: { $0.externalId == draft.courseExternalId })
+        else { return }
+        let entries = HoleEntriesCodec.decode(draft.entriesPayload) ?? []
+        let teeId = draft.teeExternalId.flatMap { tid in
+            course.tees.first(where: { $0.externalId == tid })?.id
+        }
+        let state = RoundPlayState(
+            course: course,
+            teeId: teeId,
+            holesPlayed: draft.holesPlayed,
+            entries: entries,
+            holeIdx: draft.holeIdx,
+            startedAt: draft.startedAt
+        )
+        flow.go(.play(state))
+    }
+
+    private func discardInProgressDraft() {
+        Task {
+            try? await roundsRepository.deleteInProgressDraft()
+            inProgressDraft = nil
+            inProgressSummary = nil
+        }
+    }
+
     private func refreshCourses() async {
         if let fetched = try? await coursesRepository.fetchAll() {
             courses = fetched
@@ -248,6 +348,51 @@ struct RootView: View {
         let differentials = fetched.compactMap(\.differential).prefix(20).map { $0 }
         homeRounds = sorted
         homeHandicap = WHSCalculator.handicapIndex(from: differentials)
+    }
+
+    @MainActor
+    private func reloadInProgressDraft() async {
+        let fetched = try? await roundsRepository.fetchInProgressDraft()
+        inProgressDraft = fetched
+        inProgressSummary = fetched.flatMap { buildSummary(from: $0) }
+    }
+
+    @MainActor
+    private func buildSummary(from draft: InProgressRoundDraft) -> InProgressSummary? {
+        guard
+            let course = courses.first(where: { $0.externalId == draft.courseExternalId }),
+            let entries = HoleEntriesCodec.decode(draft.entriesPayload)
+        else { return nil }
+        let sortedHoles = course.holes.sorted { $0.number < $1.number }
+        let holes: [Hole]
+        switch draft.holesPlayed {
+        case .front9: holes = Array(sortedHoles.prefix(9))
+        case .back9: holes = Array(sortedHoles.dropFirst(9).prefix(9))
+        case .eighteen: holes = sortedHoles
+        }
+        guard !holes.isEmpty else { return nil }
+        let totalStrokes = entries.reduce(0) { $0 + ($1.strokes ?? 0) }
+        let totalPutts = entries.reduce(0) { $0 + $1.putts }
+        let filledCount = entries.reduce(0) { $0 + ($1.strokes == nil ? 0 : 1) }
+        let playedPar = zip(holes, entries).reduce(0) { acc, pair in
+            pair.1.strokes != nil ? acc + pair.0.par : acc
+        }
+        let teeName = draft.teeExternalId
+            .flatMap { tid in course.tees.first(where: { $0.externalId == tid })?.name }
+        var subtitleParts: [String] = []
+        if let teeName { subtitleParts.append("\(teeName.uppercased()) TEES") }
+        subtitleParts.append("\(holes.count) HOLES")
+        return InProgressSummary(
+            courseName: course.name,
+            subtitle: subtitleParts.joined(separator: " — "),
+            startedAt: draft.startedAt,
+            holeIdx: draft.holeIdx,
+            totalHoles: holes.count,
+            totalStrokes: totalStrokes,
+            totalPutts: totalPutts,
+            filledCount: filledCount,
+            vsPar: totalStrokes - playedPar
+        )
     }
 
     private func signOut() {
