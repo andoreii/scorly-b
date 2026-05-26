@@ -9,14 +9,14 @@ public enum Haptics {
     /// Default press feedback for any interactive primitive.
     public static func rigid() {
         #if canImport(UIKit)
-        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         #endif
     }
 
     /// Stepper increment/decrement, distance wheel major tick.
     public static func medium() {
         #if canImport(UIKit)
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         #endif
     }
 

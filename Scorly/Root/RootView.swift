@@ -38,6 +38,7 @@ struct RootView: View {
     @State private var inProgressDraft: InProgressRoundDraft?
     @State private var inProgressSummary: InProgressSummary?
     @State private var showMidRoundSetup = false
+    @State private var midRoundSetupEdit = MidRoundSetupEditSession(editing: RoundSetupForm())
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -143,11 +144,9 @@ struct RootView: View {
                     state: state,
                     onGoHome: { exitToHome(from: state) },
                     onEditSetup: {
-                        // Sync the form's holes-played to the round's
-                        // current value so the picker reflects the
-                        // active round (e.g. after a resume across app
-                        // launches, where setupForm has reset).
-                        setupForm.holesPlayed = state.holesPlayed
+                        var editForm = state.setupForm
+                        editForm.holesPlayed = state.holesPlayed
+                        midRoundSetupEdit = MidRoundSetupEditSession(editing: editForm)
                         showMidRoundSetup = true
                     },
                     onFinish: { flow.go(.confirm(state)) },
@@ -156,14 +155,20 @@ struct RootView: View {
                 .transition(transition)
                 .sheet(isPresented: $showMidRoundSetup) {
                     SetupView(
-                        form: $setupForm,
+                        form: $midRoundSetupEdit.form,
                         courses: courses,
-                        onCancel: { showMidRoundSetup = false },
-                        onTeeOff: {
-                            if setupForm.holesPlayed != state.holesPlayed {
-                                state.changeHolesPlayed(to: setupForm.holesPlayed)
-                                autosaveDraft(from: state)
+                        onCancel: {
+                            setupForm = midRoundSetupEdit.cancel()
+                            showMidRoundSetup = false
+                        },
+                        onTeeOff: { _ in
+                            let committedForm = midRoundSetupEdit.commit()
+                            setupForm = committedForm
+                            state.updateSetup(committedForm)
+                            if committedForm.holesPlayed != state.holesPlayed {
+                                state.changeHolesPlayed(to: committedForm.holesPlayed)
                             }
+                            autosaveDraft(from: state)
                             showMidRoundSetup = false
                         },
                         editingActiveRound: true,
@@ -173,7 +178,6 @@ struct RootView: View {
             case let .confirm(state):
                 ConfirmView(
                     state: state,
-                    setupForm: setupForm,
                     authService: authService,
                     roundsRepository: roundsRepository,
                     onBack: { flow.back() },
@@ -256,17 +260,20 @@ struct RootView: View {
         setupForm.teeId = first.tees.first?.id
     }
 
-    private func startRound() {
+    private func startRound(_ submittedForm: RoundSetupForm) {
+        setupForm = submittedForm
         guard
-            let courseId = setupForm.courseId,
+            let courseId = submittedForm.courseId,
             let course = courses.first(where: { $0.id == courseId })
         else { return }
         let state = RoundPlayState(
             course: course,
-            teeId: setupForm.teeId,
-            holesPlayed: setupForm.holesPlayed
+            teeId: submittedForm.teeId,
+            holesPlayed: submittedForm.holesPlayed,
+            setupForm: submittedForm
         )
         flow.go(.play(state))
+        autosaveDraft(from: state)
     }
 
     private func exitToHome(from state: RoundPlayState) {
@@ -295,7 +302,8 @@ struct RootView: View {
             startedAt: state.startedAt,
             updatedAt: Date(),
             holeIdx: state.holeIdx,
-            entriesPayload: payload
+            entriesPayload: payload,
+            setupPayload: RoundSetupSnapshotCodec.encode(state.setupForm)
         )
         try? await roundsRepository.upsertInProgressDraft(draft)
         inProgressDraft = draft
@@ -310,13 +318,23 @@ struct RootView: View {
         let teeId = draft.teeExternalId.flatMap { tid in
             course.tees.first(where: { $0.externalId == tid })?.id
         }
+        if let payload = draft.setupPayload,
+           var restoredForm = RoundSetupSnapshotCodec.decode(payload) {
+            restoredForm.courseId = course.id
+            restoredForm.teeId = teeId
+            restoredForm.holesPlayed = draft.holesPlayed
+            setupForm = restoredForm
+        } else {
+            setupForm.holesPlayed = draft.holesPlayed
+        }
         let state = RoundPlayState(
             course: course,
             teeId: teeId,
             holesPlayed: draft.holesPlayed,
             entries: entries,
             holeIdx: draft.holeIdx,
-            startedAt: draft.startedAt
+            startedAt: draft.startedAt,
+            setupForm: setupForm
         )
         flow.go(.play(state))
     }

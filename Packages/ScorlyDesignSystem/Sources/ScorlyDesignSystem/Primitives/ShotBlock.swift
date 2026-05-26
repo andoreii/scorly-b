@@ -95,6 +95,7 @@ public struct ShotEditor: View {
     private let distanceRange: ClosedRange<Int>
     private let distanceLabel: String
     private let fieldOrder: ShotBlock.FieldOrder
+    private let extraTopRight: LieKeypad.AuxButton?
     @Binding private var lie: String?
     @Binding private var lieModifier: String?
     @Binding private var club: String?
@@ -107,6 +108,7 @@ public struct ShotEditor: View {
         distanceRange: ClosedRange<Int> = 0...400,
         distanceLabel: String = "Distance",
         fieldOrder: ShotBlock.FieldOrder = .resultFirst,
+        extraTopRight: LieKeypad.AuxButton? = nil,
         lie: Binding<String?>,
         lieModifier: Binding<String?>,
         club: Binding<String?>,
@@ -118,6 +120,7 @@ public struct ShotEditor: View {
         self.distanceRange = distanceRange
         self.distanceLabel = distanceLabel
         self.fieldOrder = fieldOrder
+        self.extraTopRight = extraTopRight
         _lie = lie
         _lieModifier = lieModifier
         _club = club
@@ -143,7 +146,7 @@ public struct ShotEditor: View {
     private var resultSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             SubLabel("Result")
-            LieKeypad(value: $lie, modifier: $lieModifier, target: target)
+            LieKeypad(value: $lie, modifier: $lieModifier, target: target, extraTopRight: extraTopRight)
         }
     }
 

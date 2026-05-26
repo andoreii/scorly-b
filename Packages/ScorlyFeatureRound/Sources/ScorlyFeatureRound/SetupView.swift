@@ -8,7 +8,7 @@ public struct SetupView: View {
     @Binding private var form: RoundSetupForm
     private let courses: [Course]
     private let onCancel: () -> Void
-    private let onTeeOff: () -> Void
+    private let onTeeOff: (RoundSetupForm) -> Void
     private let editingActiveRound: Bool
     private let originalHolesPlayed: HolesPlayed?
 
@@ -18,7 +18,7 @@ public struct SetupView: View {
         form: Binding<RoundSetupForm>,
         courses: [Course],
         onCancel: @escaping () -> Void,
-        onTeeOff: @escaping () -> Void,
+        onTeeOff: @escaping (RoundSetupForm) -> Void,
         editingActiveRound: Bool = false,
         originalHolesPlayed: HolesPlayed? = nil
     ) {
@@ -147,7 +147,7 @@ public struct SetupView: View {
         if editingActiveRound, let range = discardingHoles {
             BrutalistButton(
                 kind: .fg,
-                action: onTeeOff,
+                action: { onTeeOff(form) },
                 padding: EdgeInsets(top: 20, leading: 18, bottom: 20, trailing: 18)
             ) {
                 Text("DISCARD & RESUME →")
@@ -162,7 +162,7 @@ public struct SetupView: View {
         } else {
             BrutalistButton(
                 kind: .fg,
-                action: onTeeOff,
+                action: { onTeeOff(form) },
                 isDisabled: editingActiveRound ? false : !form.isReady,
                 padding: EdgeInsets(top: 20, leading: 18, bottom: 20, trailing: 18)
             ) {

@@ -120,6 +120,7 @@ struct RoundsRepositoryLiveTests {
     func inProgressDraftRoundTrip() async throws {
         let fixture = try Fixture()
         let payload = Data("entries-blob".utf8)
+        let setupPayload = Data("setup-blob".utf8)
         let draft = InProgressRoundDraft(
             id: UUID(),
             userId: fixture.userId,
@@ -129,7 +130,8 @@ struct RoundsRepositoryLiveTests {
             startedAt: Date(timeIntervalSince1970: 1_700_000_000),
             updatedAt: Date(timeIntervalSince1970: 1_700_000_500),
             holeIdx: 4,
-            entriesPayload: payload
+            entriesPayload: payload,
+            setupPayload: setupPayload
         )
         try await fixture.repository.upsertInProgressDraft(draft)
 
@@ -141,6 +143,7 @@ struct RoundsRepositoryLiveTests {
         #expect(fetched.holesPlayed == .eighteen)
         #expect(fetched.holeIdx == 4)
         #expect(fetched.entriesPayload == payload)
+        #expect(fetched.setupPayload == setupPayload)
         // Drafts must not push to Supabase — outbox stays empty.
         #expect(await fixture.engine.pendingCount() == 0)
 
@@ -149,10 +152,12 @@ struct RoundsRepositoryLiveTests {
         var updated = draft
         updated.holeIdx = 9
         updated.entriesPayload = Data("entries-blob-v2".utf8)
+        updated.setupPayload = nil
         try await fixture.repository.upsertInProgressDraft(updated)
         let refetched = try #require(await fixture.repository.fetchInProgressDraft())
         #expect(refetched.holeIdx == 9)
         #expect(refetched.entriesPayload == Data("entries-blob-v2".utf8))
+        #expect(refetched.setupPayload == nil)
 
         try await fixture.repository.deleteInProgressDraft()
         let afterDelete = try await fixture.repository.fetchInProgressDraft()

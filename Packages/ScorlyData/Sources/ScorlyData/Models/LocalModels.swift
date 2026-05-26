@@ -422,6 +422,7 @@ public final class LocalRoundDraft {
     public var updatedAt: Date
     public var holeIdx: Int
     public var entriesPayload: Data
+    public var setupPayload: Data?
 
     public init(
         userId: UUID,
@@ -432,7 +433,8 @@ public final class LocalRoundDraft {
         startedAt: Date,
         updatedAt: Date,
         holeIdx: Int,
-        entriesPayload: Data
+        entriesPayload: Data,
+        setupPayload: Data? = nil
     ) {
         self.userId = userId
         self.draftId = draftId
@@ -443,6 +445,7 @@ public final class LocalRoundDraft {
         self.updatedAt = updatedAt
         self.holeIdx = holeIdx
         self.entriesPayload = entriesPayload
+        self.setupPayload = setupPayload
     }
 }
 

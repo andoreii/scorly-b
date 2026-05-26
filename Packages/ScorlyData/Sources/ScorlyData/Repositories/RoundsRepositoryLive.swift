@@ -338,7 +338,8 @@ public actor RoundsRepositoryLive: RoundsRepository {
             startedAt: local.startedAt,
             updatedAt: local.updatedAt,
             holeIdx: local.holeIdx,
-            entriesPayload: local.entriesPayload
+            entriesPayload: local.entriesPayload,
+            setupPayload: local.setupPayload
         )
     }
 
@@ -352,6 +353,7 @@ public actor RoundsRepositoryLive: RoundsRepository {
             existing.updatedAt = draft.updatedAt
             existing.holeIdx = draft.holeIdx
             existing.entriesPayload = draft.entriesPayload
+            existing.setupPayload = draft.setupPayload
         } else {
             let local = LocalRoundDraft(
                 userId: draft.userId,
@@ -362,7 +364,8 @@ public actor RoundsRepositoryLive: RoundsRepository {
                 startedAt: draft.startedAt,
                 updatedAt: draft.updatedAt,
                 holeIdx: draft.holeIdx,
-                entriesPayload: draft.entriesPayload
+                entriesPayload: draft.entriesPayload,
+                setupPayload: draft.setupPayload
             )
             modelContext.insert(local)
         }

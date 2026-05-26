@@ -8,7 +8,6 @@ import SwiftUI
 /// completed round via `RoundsRepository.save`.
 public struct ConfirmView: View {
     let state: RoundPlayState
-    let setupForm: RoundSetupForm
     let authService: AuthService
     let roundsRepository: any RoundsRepository
     let onBack: () -> Void
@@ -25,21 +24,24 @@ public struct ConfirmView: View {
 
     public init(
         state: RoundPlayState,
-        setupForm: RoundSetupForm,
         authService: AuthService,
         roundsRepository: any RoundsRepository,
         onBack: @escaping () -> Void,
         onFinish: @escaping () -> Void
     ) {
         self.state = state
-        self.setupForm = setupForm
         self.authService = authService
         self.roundsRepository = roundsRepository
         self.onBack = onBack
         self.onFinish = onFinish
+        _notes = State(initialValue: state.setupForm.notes)
     }
 
     // MARK: - Aggregate stats
+
+    private var setupForm: RoundSetupForm {
+        state.setupForm
+    }
 
     private var n: Int {
         state.holes.count

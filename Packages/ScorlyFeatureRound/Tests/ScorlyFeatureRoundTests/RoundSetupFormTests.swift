@@ -78,4 +78,73 @@ struct RoundSetupFormTests {
         #expect(decoded == player)
         #expect(decoded.handicap == Decimal(string: "12.4"))
     }
+
+    @Test("Setup snapshot preserves editable filing metadata")
+    func setupSnapshotRoundTrip() throws {
+        let form = RoundSetupForm(
+            courseId: UUID(),
+            teeId: UUID(),
+            holesPlayed: .back9,
+            datePlayed: Date(timeIntervalSince1970: 1_700_000_000),
+            roundType: .competitive,
+            roundFormat: .stableford,
+            conditions: [.cloudy, .windy],
+            temperature: 9,
+            walkingVsRiding: .riding,
+            mentalState: 4,
+            notes: "Left-to-right wind",
+            players: [
+                .init(name: "You", handicap: Decimal(string: "4.2")),
+                .init(name: "Guest 1", handicap: Decimal(string: "12.7")),
+            ]
+        )
+
+        let payload = RoundSetupSnapshotCodec.encode(form)
+        let decoded = try #require(RoundSetupSnapshotCodec.decode(payload))
+
+        #expect(decoded.courseId == nil)
+        #expect(decoded.teeId == nil)
+        #expect(decoded.holesPlayed == .eighteen)
+        #expect(decoded.datePlayed == form.datePlayed)
+        #expect(decoded.roundType == .competitive)
+        #expect(decoded.roundFormat == .stableford)
+        #expect(decoded.conditions == [.cloudy, .windy])
+        #expect(decoded.temperature == 9)
+        #expect(decoded.walkingVsRiding == .riding)
+        #expect(decoded.mentalState == 4)
+        #expect(decoded.notes == "Left-to-right wind")
+        #expect(decoded.players.map(\.name) == ["You", "Guest 1"])
+        #expect(decoded.players.map(\.handicap) == [
+            Decimal(string: "4.2"),
+            Decimal(string: "12.7"),
+        ])
+    }
+
+    @Test("Mid-round setup edits commit explicitly and do not leak on cancel")
+    func midRoundEditSessionCommitAndCancel() {
+        let filingForm = RoundSetupForm(
+            roundType: .casual,
+            roundFormat: .stroke,
+            conditions: [.sunny],
+            notes: "Original"
+        )
+        var cancelled = MidRoundSetupEditSession(editing: filingForm)
+        cancelled.form.roundType = .competitive
+        cancelled.form.roundFormat = .stableford
+        cancelled.form.conditions = [.cloudy, .windy]
+
+        #expect(cancelled.cancel() == filingForm)
+
+        var saved = MidRoundSetupEditSession(editing: filingForm)
+        saved.form.roundType = .competitive
+        saved.form.roundFormat = .stableford
+        saved.form.conditions = [.cloudy, .windy]
+        saved.form.notes = "Edited mid round"
+
+        let committed = saved.commit()
+        #expect(committed.roundType == .competitive)
+        #expect(committed.roundFormat == .stableford)
+        #expect(committed.conditions == [.cloudy, .windy])
+        #expect(committed.notes == "Edited mid round")
+    }
 }

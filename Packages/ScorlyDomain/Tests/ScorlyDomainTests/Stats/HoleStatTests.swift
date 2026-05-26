@@ -52,8 +52,8 @@ struct HoleStatTests {
         #expect(!stat(par: 4, strokes: 5, putts: 2, approach: .green).greenInRegulation)
         // Approach to rough → no GIR.
         #expect(!stat(par: 4, strokes: 4, putts: 2, approach: .roughLeft).greenInRegulation)
-        // Par 4 looks at approach, not tee shot — tee=green is meaningless here.
-        #expect(!stat(par: 4, strokes: 4, putts: 2, tee: .green, approach: .fairway).greenInRegulation)
+        // A tee shot elsewhere does not replace a recorded approach result.
+        #expect(!stat(par: 4, strokes: 4, putts: 2, tee: .roughLeft, approach: .fairway).greenInRegulation)
     }
 
     @Test("Par 5 GIR requires approach on green AND strokes-putts ≤ 3")
@@ -62,6 +62,16 @@ struct HoleStatTests {
         #expect(stat(par: 5, strokes: 5, putts: 2, approach: .green).greenInRegulation)
         // 6 strokes / 2 putts → 4 > 3, fails.
         #expect(!stat(par: 5, strokes: 6, putts: 2, approach: .green).greenInRegulation)
+    }
+
+    @Test("Par 4 and par 5 driven greens count as GIR without FIR")
+    func drivenGreenGIR() {
+        let par4 = stat(par: 4, strokes: 3, putts: 2, tee: .green)
+        let par5 = stat(par: 5, strokes: 4, putts: 2, tee: .green)
+        #expect(par4.greenInRegulation)
+        #expect(par5.greenInRegulation)
+        #expect(!par4.fairwayInRegulation)
+        #expect(!par5.fairwayInRegulation)
     }
 
     @Test("GIR returns false when strokes or putts unset (hole not played)")

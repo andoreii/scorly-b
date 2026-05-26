@@ -287,6 +287,7 @@ public struct PlayView: View {
     @ViewBuilder
     private var shotBlocks: some View {
         let isPar3 = state.currentHole.par == 3
+        let drivenGreen = state.hasDrivenGreen(at: state.holeIdx)
         VStack(spacing: 8) {
             if !isPar3 {
                 ShotBlock(
@@ -299,15 +300,17 @@ public struct PlayView: View {
                     onTap: { state.openShot = .tee }
                 )
             }
-            ShotBlock(
-                badge: isPar3 ? "01" : "02",
-                title: isPar3 ? "Tee / Approach" : "Approach",
-                lie: lieBinding(\.approach),
-                lieModifier: lieBinding(\.approachModifier),
-                club: clubBinding(\.approachClub),
-                distance: distanceBinding(\.approachDistance),
-                onTap: { state.openShot = .approach }
-            )
+            if isPar3 || !drivenGreen {
+                ShotBlock(
+                    badge: isPar3 ? "01" : "02",
+                    title: isPar3 ? "Tee / Approach" : "Approach",
+                    lie: lieBinding(\.approach),
+                    lieModifier: lieBinding(\.approachModifier),
+                    club: clubBinding(\.approachClub),
+                    distance: distanceBinding(\.approachDistance),
+                    onTap: { state.openShot = .approach }
+                )
+            }
         }
         .padding(.top, BrutalistSpacing.m)
     }

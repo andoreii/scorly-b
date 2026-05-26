@@ -18,6 +18,8 @@ public struct InProgressRoundDraft: Sendable, Equatable {
     public var updatedAt: Date
     public var holeIdx: Int
     public var entriesPayload: Data
+    /// Opaque feature-owned encoding of editable setup metadata.
+    public var setupPayload: Data?
 
     public init(
         id: UUID,
@@ -28,7 +30,8 @@ public struct InProgressRoundDraft: Sendable, Equatable {
         startedAt: Date,
         updatedAt: Date,
         holeIdx: Int,
-        entriesPayload: Data
+        entriesPayload: Data,
+        setupPayload: Data? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -39,5 +42,6 @@ public struct InProgressRoundDraft: Sendable, Equatable {
         self.updatedAt = updatedAt
         self.holeIdx = holeIdx
         self.entriesPayload = entriesPayload
+        self.setupPayload = setupPayload
     }
 }

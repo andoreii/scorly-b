@@ -5,6 +5,40 @@ import Testing
 
 @MainActor
 struct RoundPlayStateTests {
+    @Test("Live round owns the setup metadata that will be filed")
+    func liveRoundSetupMetadata() {
+        let initial = RoundSetupForm(
+            roundType: .competitive,
+            roundFormat: .stableford,
+            conditions: [.cloudy, .windy],
+            temperature: 9,
+            walkingVsRiding: .riding,
+            mentalState: 4,
+            notes: "Initial"
+        )
+        let state = RoundPlayState(
+            course: Self.makeCourse(),
+            teeId: nil,
+            holesPlayed: .eighteen,
+            setupForm: initial
+        )
+        #expect(state.setupForm.roundType == .competitive)
+        #expect(state.setupForm.roundFormat == .stableford)
+        #expect(state.setupForm.conditions == [.cloudy, .windy])
+
+        var edited = state.setupForm
+        edited.roundType = .tournament
+        edited.roundFormat = .match
+        edited.conditions = [.rainy]
+        edited.notes = "Saved mid round"
+        state.updateSetup(edited)
+
+        #expect(state.setupForm.roundType == .tournament)
+        #expect(state.setupForm.roundFormat == .match)
+        #expect(state.setupForm.conditions == [.rainy])
+        #expect(state.setupForm.notes == "Saved mid round")
+    }
+
     @Test("Slices the right holes for F9 / B9 / 18")
     func holeSlicing() {
         let course = Self.makeCourse()
@@ -145,6 +179,64 @@ struct RoundPlayStateTests {
         #expect(stat.par == 5)
         #expect(stat.greenInRegulation == true)
         #expect(stat.approachLie == .green)
+    }
+
+    @Test("Par 4 driven green clears approach data and scores GIR")
+    func par4DrivenGreen() {
+        let state = RoundPlayState(course: Self.makeCourse(), teeId: nil, holesPlayed: .eighteen)
+        state.entries[0].strokes = 3
+        state.entries[0].putts = 2
+        state.entries[0].approach = "Green"
+        state.entries[0].approachModifier = "Bunker"
+        state.entries[0].approachClub = "PW"
+        state.entries[0].approachDistance = 100
+
+        state.setTeeShotResult("Green", at: 0)
+
+        let stat = state.derivedStat(for: 0)
+        #expect(state.hasDrivenGreen(at: 0))
+        #expect(state.entries[0].approach == nil)
+        #expect(state.entries[0].approachModifier == nil)
+        #expect(state.entries[0].approachClub == nil)
+        #expect(state.entries[0].approachDistance == nil)
+        #expect(stat.teeShotLie == .green)
+        #expect(stat.greenInRegulation)
+        #expect(!stat.fairwayInRegulation)
+    }
+
+    @Test("Par 5 driven green normalizes stale approach data on resume")
+    func par5DrivenGreenResumeNormalization() {
+        let course = Self.makeCourse()
+        let greenEntry = HoleEntry(
+            strokes: 4,
+            putts: 2,
+            teeShot: "Green",
+            teeShotModifier: "Bunker",
+            approach: "Miss Left",
+            approachModifier: "Bunker",
+            approachClub: "54",
+            approachDistance: 30
+        )
+        let entries = [HoleEntry(), greenEntry] + Array(repeating: HoleEntry(), count: 16)
+        let state = RoundPlayState(
+            course: course,
+            teeId: nil,
+            holesPlayed: .eighteen,
+            entries: entries,
+            holeIdx: 1,
+            startedAt: Date()
+        )
+
+        let stat = state.derivedStat(for: 1)
+        #expect(state.hasDrivenGreen(at: 1))
+        #expect(state.entries[1].teeShotModifier == nil)
+        #expect(state.entries[1].approach == nil)
+        #expect(state.entries[1].approachModifier == nil)
+        #expect(state.entries[1].approachClub == nil)
+        #expect(state.entries[1].approachDistance == nil)
+        #expect(stat.teeShotLie == .green)
+        #expect(stat.greenInRegulation)
+        #expect(!stat.fairwayInRegulation)
     }
 
     @Test("Resume init normalizes OB entry with residual teeShotDistance")

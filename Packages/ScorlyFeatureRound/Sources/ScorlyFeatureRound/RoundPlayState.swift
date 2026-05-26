@@ -75,6 +75,7 @@ public struct HoleEntry: Equatable, Sendable, Codable {
 public final class RoundPlayState {
     public let course: Course
     public let tee: Tee?
+    public private(set) var setupForm: RoundSetupForm
     public private(set) var holes: [Hole]
     public private(set) var holesPlayed: HolesPlayed
     public let startedAt: Date
@@ -91,9 +92,17 @@ public final class RoundPlayState {
         case putts
     }
 
-    public init(course: Course, teeId: UUID?, holesPlayed: HolesPlayed) {
+    public init(
+        course: Course,
+        teeId: UUID?,
+        holesPlayed: HolesPlayed,
+        setupForm: RoundSetupForm = RoundSetupForm()
+    ) {
         self.course = course
         tee = course.tees.first(where: { $0.id == teeId }) ?? course.tees.first
+        var setupForm = setupForm
+        setupForm.holesPlayed = holesPlayed
+        self.setupForm = setupForm
         self.holesPlayed = holesPlayed
         startedAt = Date()
 
@@ -115,10 +124,14 @@ public final class RoundPlayState {
         holesPlayed: HolesPlayed,
         entries: [HoleEntry],
         holeIdx: Int,
-        startedAt: Date
+        startedAt: Date,
+        setupForm: RoundSetupForm = RoundSetupForm()
     ) {
         self.course = course
         tee = course.tees.first(where: { $0.id == teeId }) ?? course.tees.first
+        var setupForm = setupForm
+        setupForm.holesPlayed = holesPlayed
+        self.setupForm = setupForm
         self.holesPlayed = holesPlayed
         self.startedAt = startedAt
 
@@ -127,22 +140,57 @@ public final class RoundPlayState {
         let raw = entries.count == slice.count
             ? entries
             : Array(repeating: HoleEntry(), count: slice.count)
-        self.entries = raw.map(Self.normalizeEntry)
+        self.entries = zip(slice, raw).map { hole, entry in
+            Self.normalizeEntry(entry, on: hole)
+        }
         self.holeIdx = max(0, min(slice.count - 1, holeIdx))
         openShot = .none
         scorecardOpen = false
         penaltySheetOpen = false
     }
 
-    /// Strip distance from any OB tee-shot entry. Guards against drafts
-    /// saved before this invariant was enforced.
-    private static func normalizeEntry(_ entry: HoleEntry) -> HoleEntry {
-        guard entry.teeShot?.hasPrefix("OB ") == true, entry.teeShotDistance != nil else {
-            return entry
-        }
+    /// Repair older drafts that predate tee-shot invariants.
+    private static func normalizeEntry(_ entry: HoleEntry, on hole: Hole) -> HoleEntry {
         var normalized = entry
-        normalized.teeShotDistance = nil
+        if normalized.teeShot?.hasPrefix("OB ") == true {
+            normalized.teeShotDistance = nil
+        }
+        if hole.par >= 4, normalized.teeShot == "Green" {
+            normalized.teeShotModifier = nil
+            clearApproach(in: &normalized)
+        }
         return normalized
+    }
+
+    private static func clearApproach(in entry: inout HoleEntry) {
+        entry.approach = nil
+        entry.approachModifier = nil
+        entry.approachClub = nil
+        entry.approachDistance = nil
+    }
+
+    /// Mutates a tee-shot result while keeping its dependent approach state valid.
+    public func setTeeShotResult(_ result: String?, at index: Int) {
+        guard entries.indices.contains(index) else { return }
+        entries[index].teeShot = result
+        if result?.hasPrefix("OB ") == true {
+            entries[index].teeShotDistance = nil
+        }
+        if holes[index].par >= 4, result == "Green" {
+            entries[index].teeShotModifier = nil
+            Self.clearApproach(in: &entries[index])
+        }
+    }
+
+    public func hasDrivenGreen(at index: Int) -> Bool {
+        entries.indices.contains(index)
+            && holes[index].par >= 4
+            && entries[index].teeShot == "Green"
+    }
+
+    public func updateSetup(_ form: RoundSetupForm) {
+        setupForm = form
+        setupForm.holesPlayed = holesPlayed
     }
 
     /// Reslice the round to a different holes-played mode mid-play.
@@ -170,6 +218,7 @@ public final class RoundPlayState {
         holes = newSlice
         entries = newEntries
         holesPlayed = newValue
+        setupForm.holesPlayed = newValue
         holeIdx = mappedIdx
         openShot = .none
     }

@@ -88,7 +88,7 @@ public struct HoleStat: Sendable, Equatable, Codable {
 
     /// Green in regulation. The classic golf-stat rule:
     /// - Par 3: tee shot finishes on the green.
-    /// - Par 4 / par 5: approach shot finishes on the green.
+    /// - Par 4 / par 5: tee shot drives the green, or approach finishes there.
     /// - **Plus** `strokes − putts ≤ par − 2` so a hole reached the green
     ///   with one stroke to spare for two putts.
     ///
@@ -99,7 +99,7 @@ public struct HoleStat: Sendable, Equatable, Codable {
     /// played) — same defensive guard as v1.
     public var greenInRegulation: Bool {
         guard strokes > 0, putts > 0, putts <= strokes else { return false }
-        let greenLanding = par == 3 ? teeShotLie : approachLie
+        let greenLanding = teeShotLie == .green ? teeShotLie : (par == 3 ? teeShotLie : approachLie)
         return greenLanding == .green && (strokes - putts) <= par - 2
     }
 

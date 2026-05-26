@@ -6,35 +6,54 @@ import SwiftUI
 /// Bunker modifier (paired with a Miss direction). Modifiers compose
 /// with the directional pick instead of replacing it.
 public struct LieKeypad: View {
+    public struct AuxButton {
+        public let label: String
+        public let isActive: Bool
+        public let action: () -> Void
+
+        public init(label: String, isActive: Bool, action: @escaping () -> Void) {
+            self.label = label
+            self.isActive = isActive
+            self.action = action
+        }
+    }
+
     @Binding private var value: String?
     @Binding private var modifier: String?
     private let target: String
+    private let extraTopRight: AuxButton?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         value: Binding<String?>,
         modifier: Binding<String?>,
-        target: String
+        target: String,
+        extraTopRight: AuxButton? = nil
     ) {
         _value = value
         _modifier = modifier
         self.target = target
+        self.extraTopRight = extraTopRight
     }
 
     public var body: some View {
         let layout: [[String?]] = [
-            [nil,        nil,         "OB Long",   nil,         nil],
-            [nil,        nil,         "Miss Long", nil,         nil],
-            ["OB Left",  "Miss Left", target,      "Miss Right", "OB Right"],
-            [nil,        nil,         "Miss Short", nil,        nil],
-            ["Water",    nil,         "OB Short",  nil,         "Bunker"],
+            [nil, nil, "OB Long", nil, nil],
+            [nil, nil, "Miss Long", nil, nil],
+            ["OB Left", "Miss Left", target, "Miss Right", "OB Right"],
+            [nil, nil, "Miss Short", nil, nil],
+            ["Water", nil, "OB Short", nil, "Bunker"],
         ]
         VStack(spacing: 4) {
             ForEach(0..<5) { row in
                 HStack(spacing: 4) {
                     ForEach(0..<5) { col in
-                        cell(layout[row][col])
+                        if row == 0, col == 4, let aux = extraTopRight {
+                            auxCell(aux)
+                        } else {
+                            cell(layout[row][col])
+                        }
                     }
                 }
             }
@@ -109,11 +128,28 @@ public struct LieKeypad: View {
             }
     }
 
+    private func auxCell(_ aux: AuxButton) -> some View {
+        Text(aux.label)
+            .font(BrutalistType.mono(.semibold, size: 9))
+            .kerning(0.4)
+            .frame(maxWidth: .infinity)
+            .frame(height: 40)
+            .background(aux.isActive ? BrutalistColor.fg : BrutalistColor.panel)
+            .foregroundStyle(aux.isActive ? BrutalistColor.bg : BrutalistColor.fg)
+            .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+            .brutalistTap {
+                Haptics.soft()
+                withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
+                    aux.action()
+                }
+            }
+    }
+
     private func modifierEnabled(_ cell: String) -> Bool {
         guard let value else { return false }
         switch cell {
         case "Bunker": return value.hasPrefix("Miss ")
-        case "Water":  return value.hasPrefix("OB ")
+        case "Water": return value.hasPrefix("OB ")
         default: return false
         }
     }

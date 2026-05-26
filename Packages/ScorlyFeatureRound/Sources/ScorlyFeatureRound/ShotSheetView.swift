@@ -79,7 +79,8 @@ struct ShotSheetView: View {
                 target: "Fairway",
                 clubs: BrutalistClubs,
                 clubDistanceDefaults: BrutalistClubDistances,
-                lie: lieBinding(\.teeShot),
+                extraTopRight: drivenGreen,
+                lie: obAwareTeeBinding,
                 lieModifier: lieBinding(\.teeShotModifier),
                 club: clubBinding(\.teeClub),
                 distance: distanceBinding(\.teeShotDistance)
@@ -97,6 +98,25 @@ struct ShotSheetView: View {
                 distance: distanceBinding(\.approachDistance)
             )
         }
+    }
+
+    /// Tee-shot binding enforces dependent state changes in `RoundPlayState`.
+    private var obAwareTeeBinding: Binding<String?> {
+        Binding(
+            get: { state.entries[state.holeIdx].teeShot },
+            set: { state.setTeeShotResult($0, at: state.holeIdx) }
+        )
+    }
+
+    /// Par-4/5 tee-shot shortcut for a green reached directly from the tee.
+    private var drivenGreen: LieKeypad.AuxButton? {
+        guard kind == .tee, state.currentHole.par >= 4 else { return nil }
+        let active = state.hasDrivenGreen(at: state.holeIdx)
+        return LieKeypad.AuxButton(
+            label: "GRN",
+            isActive: active,
+            action: { state.setTeeShotResult(active ? nil : "Green", at: state.holeIdx) }
+        )
     }
 
     private var kindLabel: String {
