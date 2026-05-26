@@ -57,6 +57,11 @@ public protocol RoundsRepository: Sendable {
     func upsertInProgressDraft(_ draft: InProgressRoundDraft) async throws
     /// Remove the in-progress draft. No-op if nothing is stored.
     func deleteInProgressDraft() async throws
+    /// Lowest `totalScore` per course among rounds matching `filter`.
+    /// Returns `[courseExternalId: bestScore]`. Courses with no eligible
+    /// rounds are absent from the dictionary, so call sites should treat
+    /// missing entries as "no best yet".
+    func bestScoresByCourse(filter: AggregateRoundFilter) async throws -> [UUID: Int]
 }
 
 public protocol GoalsRepository: Sendable {

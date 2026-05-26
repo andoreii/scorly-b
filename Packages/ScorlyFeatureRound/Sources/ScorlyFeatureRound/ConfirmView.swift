@@ -20,7 +20,7 @@ public struct ConfirmView: View {
     @State private var signed = false
     @State private var isFiling = false
     // Stable reference number for this scorecard session.
-    @State private var ref = "PRG-\(Int.random(in: 1000...9999))"
+    @State private var ref = "PRG-\(Int.random(in: 1_000...9_999))"
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
@@ -41,9 +41,17 @@ public struct ConfirmView: View {
 
     // MARK: - Aggregate stats
 
-    private var n: Int { state.holes.count }
-    private var totalPar: Int { state.holes.reduce(0) { $0 + $1.par } }
-    private var diff: Int { state.totalStrokes - totalPar }
+    private var n: Int {
+        state.holes.count
+    }
+
+    private var totalPar: Int {
+        state.holes.reduce(0) { $0 + $1.par }
+    }
+
+    private var diff: Int {
+        state.totalStrokes - totalPar
+    }
 
     private var allStats: [HoleStat?] {
         state.holes.indices.map { state.derivedStat(for: $0) }
@@ -52,9 +60,11 @@ public struct ConfirmView: View {
     private var totalPutts: Int {
         state.entries.reduce(0) { $0 + $1.putts }
     }
+
     private var par4or5Count: Int {
         state.holes.filter { $0.par > 3 }.count
     }
+
     private var firCount: Int {
         zip(state.holes, allStats).reduce(0) { acc, pair in
             let (hole, stat) = pair
@@ -62,21 +72,27 @@ public struct ConfirmView: View {
             return acc + (s.fairwayInRegulation ? 1 : 0)
         }
     }
+
     private var girCount: Int {
         allStats.reduce(0) { $0 + (($1?.greenInRegulation == true) ? 1 : 0) }
     }
+
     private var threePuttCount: Int {
         allStats.reduce(0) { $0 + (($1?.threePutt == true) ? 1 : 0) }
     }
+
     private var upDownCount: Int {
         allStats.reduce(0) { $0 + (($1?.upAndDown == true) ? 1 : 0) }
     }
+
     private var sandSaveCount: Int {
         allStats.reduce(0) { $0 + (($1?.sandSave == true) ? 1 : 0) }
     }
+
     private var penaltyTotal: Int {
         allStats.reduce(0) { $0 + ($1?.effectivePenaltyStrokes ?? 0) }
     }
+
     private var birdieCount: Int {
         zip(state.holes, state.entries).reduce(0) { acc, pair in
             let (hole, entry) = pair
@@ -84,6 +100,7 @@ public struct ConfirmView: View {
             return acc + (s < hole.par ? 1 : 0)
         }
     }
+
     private var bogeyPlusCount: Int {
         zip(state.holes, state.entries).reduce(0) { acc, pair in
             let (hole, entry) = pair
@@ -91,7 +108,10 @@ public struct ConfirmView: View {
             return acc + (s > hole.par ? 1 : 0)
         }
     }
-    private var parCount: Int { n - birdieCount - bogeyPlusCount }
+
+    private var parCount: Int {
+        n - birdieCount - bogeyPlusCount
+    }
 
     // MARK: - Body
 
@@ -192,7 +212,7 @@ public struct ConfirmView: View {
                     Text(player.name)
                         .font(BrutalistType.body)
                         .kerning(-0.2)
-                    Text("HCP \(String(format: "%.1f", Double(truncating: player.handicap as NSDecimalNumber)))")
+                    Text("HCP \(handicapLabel(player.handicap))")
                         .font(BrutalistType.monoMicro)
                         .kerning(0.6)
                         .foregroundStyle(BrutalistColor.muted)
@@ -248,11 +268,18 @@ public struct ConfirmView: View {
                     .foregroundStyle(BrutalistColor.muted)
                 Spacer()
                 if let player = setupForm.players.first {
-                    let net = state.totalStrokes - Int(truncating: player.handicap as NSDecimalNumber)
-                    Text("NET \(net)")
-                        .font(BrutalistType.monoMicro)
-                        .kerning(1.0)
-                        .foregroundStyle(BrutalistColor.muted)
+                    if let hcp = player.handicap {
+                        let net = state.totalStrokes - Int(truncating: hcp as NSDecimalNumber)
+                        Text("NET \(net)")
+                            .font(BrutalistType.monoMicro)
+                            .kerning(1.0)
+                            .foregroundStyle(BrutalistColor.muted)
+                    } else {
+                        Text("NET —")
+                            .font(BrutalistType.monoMicro)
+                            .kerning(1.0)
+                            .foregroundStyle(BrutalistColor.muted)
+                    }
                 }
             }
 
@@ -402,13 +429,17 @@ public struct ConfirmView: View {
                 guard stroke.count >= 2 else { continue }
                 var path = Path()
                 path.move(to: stroke[0])
-                for pt in stroke.dropFirst() { path.addLine(to: pt) }
+                for pt in stroke.dropFirst() {
+                    path.addLine(to: pt)
+                }
                 ctx.stroke(path, with: .color(BrutalistColor.fg), style: style)
             }
             if currentStroke.count >= 2 {
                 var path = Path()
                 path.move(to: currentStroke[0])
-                for pt in currentStroke.dropFirst() { path.addLine(to: pt) }
+                for pt in currentStroke.dropFirst() {
+                    path.addLine(to: pt)
+                }
                 ctx.stroke(path, with: .color(BrutalistColor.fg), style: style)
             }
         }
@@ -449,6 +480,11 @@ public struct ConfirmView: View {
     }
 
     // MARK: - Helpers
+
+    private func handicapLabel(_ handicap: Decimal?) -> String {
+        guard let handicap else { return "—" }
+        return String(format: "%.1f", Double(truncating: handicap as NSDecimalNumber))
+    }
 
     private var dateString: String {
         let fmt = DateFormatter()

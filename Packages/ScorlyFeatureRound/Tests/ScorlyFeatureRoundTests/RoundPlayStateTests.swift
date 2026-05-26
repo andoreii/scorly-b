@@ -4,7 +4,6 @@ import Testing
 @testable import ScorlyFeatureRound
 
 @MainActor
-@Suite("RoundPlayState")
 struct RoundPlayStateTests {
     @Test("Slices the right holes for F9 / B9 / 18")
     func holeSlicing() {
@@ -85,6 +84,157 @@ struct RoundPlayStateTests {
         #expect(state.teeYardageForCurrentHole == firstTee.teeHoles.first?.yardage)
     }
 
+    @Test("OB tee result clears teeShotDistance on entry mutation")
+    func obTeeShotClearsDistance() {
+        let course = Self.makeCourse()
+        let state = RoundPlayState(course: course, teeId: nil, holesPlayed: .eighteen)
+        state.entries[0].teeShotDistance = 240
+        state.entries[0].teeShot = "OB Left"
+        // Simulate the binding setter logic from ShotSheetView
+        if let v = state.entries[0].teeShot, v.hasPrefix("OB ") {
+            state.entries[0].teeShotDistance = nil
+        }
+        #expect(state.entries[0].teeShotDistance == nil)
+    }
+
+    @Test("Par 3 tee-shot-on-green via approach editor still scores GIR")
+    func par3GIRThroughApproachEditor() {
+        let course = Self.makeCourse()
+        let state = RoundPlayState(course: course, teeId: nil, holesPlayed: .eighteen)
+        // Hole 3 is a par 3 in the fixture. The Play UI hides the tee block
+        // on par 3 and routes the on-green pick through the approach editor,
+        // so the entry stores the pick on `approach`, not `teeShot`.
+        state.entries[2].strokes = 3
+        state.entries[2].putts = 2
+        state.entries[2].approach = "Green"
+        let stat = state.derivedStat(for: 2)
+        #expect(stat.par == 3)
+        #expect(stat.greenInRegulation == true)
+        // Par 3 has no separate approach — derivation should fold the lie
+        // into the tee-shot slot to match the domain GIR rule and the v1
+        // schema (which writes par-3 results to tee_shot).
+        #expect(stat.teeShotLie == .green)
+        #expect(stat.approachLie == nil)
+    }
+
+    @Test("Par 3 missed green via approach editor does not score GIR")
+    func par3MissesGreenNoGIR() {
+        let course = Self.makeCourse()
+        let state = RoundPlayState(course: course, teeId: nil, holesPlayed: .eighteen)
+        state.entries[2].strokes = 4
+        state.entries[2].putts = 2
+        state.entries[2].approach = "Miss Right"
+        let stat = state.derivedStat(for: 2)
+        #expect(stat.greenInRegulation == false)
+        // The approach editor decodes "Miss Right" with target=.green into
+        // the recovery family; we then fold it into teeShotLie for par 3.
+        #expect(stat.teeShotLie == .recoveryRight)
+        #expect(stat.approachLie == nil)
+    }
+
+    @Test("Par 5 ON IN 2 via approach aux button counts as GIR")
+    func par5OnInTwoGIR() {
+        let course = Self.makeCourse()
+        let state = RoundPlayState(course: course, teeId: nil, holesPlayed: .eighteen)
+        // Hole 2 is a par 5 in the fixture.
+        state.entries[1].strokes = 4
+        state.entries[1].putts = 2
+        state.entries[1].teeShot = "Fairway"
+        state.entries[1].approach = "On In 2"
+        let stat = state.derivedStat(for: 1)
+        #expect(stat.par == 5)
+        #expect(stat.greenInRegulation == true)
+        #expect(stat.approachLie == .green)
+    }
+
+    @Test("Resume init normalizes OB entry with residual teeShotDistance")
+    func resumeNormalizesOBDistance() {
+        let course = Self.makeCourse()
+        let obEntry = HoleEntry(
+            strokes: 5,
+            teeShot: "OB Right",
+            teeShotDistance: 230
+        )
+        let entries = [obEntry] + Array(repeating: HoleEntry(), count: 17)
+        let state = RoundPlayState(
+            course: course,
+            teeId: nil,
+            holesPlayed: .eighteen,
+            entries: entries,
+            holeIdx: 0,
+            startedAt: Date()
+        )
+        #expect(state.entries[0].teeShotDistance == nil)
+    }
+
+    @Test("liveGIR counts greens-in-regulation across logged holes only")
+    func liveGIRCountsLoggedOnly() {
+        let course = Self.makeCourse()
+        let state = RoundPlayState(course: course, teeId: nil, holesPlayed: .eighteen)
+        // Log holes 1 (par 4, GIR), 2 (par 5, GIR via On In 2), 3 (par 3, GIR).
+        state.entries[0].strokes = 4
+        state.entries[0].putts = 2
+        state.entries[0].teeShot = "Fairway"
+        state.entries[0].approach = "Green"
+        state.entries[1].strokes = 4
+        state.entries[1].putts = 2
+        state.entries[1].teeShot = "Fairway"
+        state.entries[1].approach = "On In 2"
+        state.entries[2].strokes = 3
+        state.entries[2].putts = 2
+        state.entries[2].approach = "Green"
+        let gir = state.liveGIR
+        #expect(gir.made == 3)
+        #expect(gir.of == 3)
+    }
+
+    @Test("liveFIR returns nil when only par-3 holes are logged")
+    func liveFIRNilWhenOnlyPar3() {
+        let course = Self.makeCourse()
+        let state = RoundPlayState(course: course, teeId: nil, holesPlayed: .eighteen)
+        // Hole 3 is par 3 in the fixture.
+        state.entries[2].strokes = 3
+        state.entries[2].putts = 2
+        state.entries[2].approach = "Green"
+        #expect(state.liveFIR == nil)
+    }
+
+    @Test("liveFIR ratio includes only logged par-4 / par-5 holes")
+    func liveFIROnlyPar4Plus() {
+        let course = Self.makeCourse()
+        let state = RoundPlayState(course: course, teeId: nil, holesPlayed: .eighteen)
+        // Hole 1 par 4 FIR ✓, hole 2 par 5 FIR ✓, hole 4 par 4 missed FIR,
+        // hole 3 par 3 (excluded from FIR denominator).
+        state.entries[0].strokes = 4
+        state.entries[0].putts = 2
+        state.entries[0].teeShot = "Fairway"
+        state.entries[1].strokes = 5
+        state.entries[1].putts = 2
+        state.entries[1].teeShot = "Fairway"
+        state.entries[2].strokes = 3
+        state.entries[2].putts = 2
+        state.entries[2].approach = "Green"
+        state.entries[3].strokes = 5
+        state.entries[3].putts = 2
+        state.entries[3].teeShot = "OB Right"
+        let fir = state.liveFIR
+        #expect(fir?.made == 2)
+        #expect(fir?.of == 3)
+    }
+
+    @Test("livePutts and liveThreePutts sum across logged holes only")
+    func livePuttsLoggedOnly() {
+        let course = Self.makeCourse()
+        let state = RoundPlayState(course: course, teeId: nil, holesPlayed: .eighteen)
+        state.entries[0].strokes = 4
+        state.entries[0].putts = 2
+        state.entries[1].strokes = 6
+        state.entries[1].putts = 3
+        // Hole 3 unplayed — must not contribute.
+        #expect(state.livePutts == 5)
+        #expect(state.liveThreePutts == 1)
+    }
+
     // MARK: - Fixture
 
     private static func makeCourse() -> Course {
@@ -101,7 +251,7 @@ struct RoundPlayStateTests {
             name: "White",
             courseRating: 71.2,
             slopeRating: 128,
-            totalYardage: 6300,
+            totalYardage: 6_300,
             teeHoles: teeHoles
         )
         return Course(

@@ -6,9 +6,12 @@ import Foundation
 /// deliberately just the name + handicap the user typed in setup.
 public struct RoundPlayer: Sendable, Equatable, Codable {
     public let name: String
-    public let handicap: Decimal
+    /// Optional — the current player ("You") gets their calculated WHS index
+    /// (which may be nil until enough rounds are filed); guest players
+    /// default to no entered handicap and remain nil unless filled in.
+    public let handicap: Decimal?
 
-    public init(name: String, handicap: Decimal) {
+    public init(name: String, handicap: Decimal? = nil) {
         self.name = name
         self.handicap = handicap
     }

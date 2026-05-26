@@ -16,6 +16,8 @@ struct ScorecardSheetView: View {
                 grabHandle
                 header
                 summary
+                quickStats
+                    .padding(.top, BrutalistSpacing.m)
                 HBar(vMargin: BrutalistSpacing.s)
                 rows
                 legend
@@ -80,6 +82,71 @@ struct ScorecardSheetView: View {
         let diff = strokes - par
         let signed = diff >= 0 ? "+\(diff)" : "\(diff)"
         return "\(strokes) STROKES · \(signed) VS PAR \(par)"
+    }
+
+    // MARK: - Live quick stats
+
+    private var quickStats: some View {
+        ZStack(alignment: .topLeading) {
+            BrutalistColor.panel
+            CornerMarks(size: 6, inset: 4)
+            HStack(spacing: 0) {
+                quickStatCell(label: "GIR", value: girValue, sub: girSub, drawBorder: false)
+                quickStatCell(label: "FIR", value: firValue, sub: firSub, drawBorder: true)
+                quickStatCell(label: "Putts", value: "\(state.livePutts)", sub: nil, drawBorder: true)
+                quickStatCell(label: "3-Putt", value: "\(state.liveThreePutts)", sub: nil, drawBorder: true)
+            }
+        }
+        .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+    }
+
+    private func quickStatCell(label: String, value: String, sub: String?, drawBorder: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label.uppercased())
+                .font(BrutalistType.monoMicro)
+                .kerning(0.8)
+                .foregroundStyle(BrutalistColor.muted)
+            Text(value)
+                .font(BrutalistType.sans(.bold, size: 22))
+                .kerning(-0.6)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(sub ?? " ")
+                .font(BrutalistType.monoMicro)
+                .kerning(0.6)
+                .monospacedDigit()
+                .foregroundStyle(BrutalistColor.dim)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .overlay(alignment: .leading) {
+            if drawBorder {
+                Rectangle().fill(BrutalistColor.rule).frame(width: 1)
+            }
+        }
+    }
+
+    private var girValue: String {
+        let (made, of) = state.liveGIR
+        return of > 0 ? "\(made)/\(of)" : "—"
+    }
+
+    private var girSub: String? {
+        let (made, of) = state.liveGIR
+        guard of > 0 else { return "—" }
+        return "\(Int((Double(made) / Double(of) * 100).rounded()))%"
+    }
+
+    private var firValue: String {
+        guard let fir = state.liveFIR else { return "—" }
+        return "\(fir.made)/\(fir.of)"
+    }
+
+    private var firSub: String? {
+        guard let fir = state.liveFIR else { return "—" }
+        return "\(Int((Double(fir.made) / Double(fir.of) * 100).rounded()))%"
     }
 
     // MARK: - Rows

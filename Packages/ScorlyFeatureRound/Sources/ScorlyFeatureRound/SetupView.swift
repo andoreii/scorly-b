@@ -90,15 +90,8 @@ public struct SetupView: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 if editingActiveRound {
-                    (
-                        Text("Edit\n")
-                            .font(BrutalistType.pageHero)
-                            .kerning(-1.8)
-                            .foregroundColor(BrutalistColor.fg)
-                        + Text("the round.")
-                            .font(BrutalistType.pageHero)
-                            .kerning(-1.8)
-                            .foregroundColor(BrutalistColor.fg)
+                    Text(
+                        "\(Text("Edit\n").font(BrutalistType.pageHero).kerning(-1.8).foregroundColor(BrutalistColor.fg))\(Text("the round.").font(BrutalistType.pageHero).kerning(-1.8).foregroundColor(BrutalistColor.fg))"
                     )
                     .lineLimit(3)
                     Text("HOLES · FORMAT · CONDITIONS · NOTES")
@@ -107,15 +100,8 @@ public struct SetupView: View {
                         .foregroundStyle(BrutalistColor.muted)
                         .padding(.top, BrutalistSpacing.xs)
                 } else {
-                    (
-                        Text("Set up\n")
-                            .font(BrutalistType.pageHero)
-                            .kerning(-1.8)
-                            .foregroundColor(BrutalistColor.fg)
-                        + Text("the round.")
-                            .font(BrutalistType.pageHero)
-                            .kerning(-1.8)
-                            .foregroundColor(BrutalistColor.fg)
+                    Text(
+                        "\(Text("Set up\n").font(BrutalistType.pageHero).kerning(-1.8).foregroundColor(BrutalistColor.fg))\(Text("the round.").font(BrutalistType.pageHero).kerning(-1.8).foregroundColor(BrutalistColor.fg))"
                     )
                     .lineLimit(3)
                     Text("COURSE · FORMAT · CONDITIONS · LOGISTICS")
@@ -167,9 +153,11 @@ public struct SetupView: View {
                 Text("DISCARD & RESUME →")
                     .font(BrutalistType.sans(.bold, size: 17))
             } caption: {
-                Text("→ ERASE H\(String(format: "%02d", range.lowerBound))–H\(String(format: "%02d", range.upperBound))")
-                    .font(BrutalistType.monoCaption)
-                    .kerning(1.2)
+                Text(
+                    "→ ERASE H\(String(format: "%02d", range.lowerBound))–H\(String(format: "%02d", range.upperBound))"
+                )
+                .font(BrutalistType.monoCaption)
+                .kerning(1.2)
             }
         } else {
             BrutalistButton(
@@ -216,7 +204,9 @@ public struct SetupView: View {
 
     private var coursePicker: some View {
         let courseIdx = currentCourseIndex
-        return Section(label: "01 — Course   /   \(String(format: "%02d", courseIdx + 1)) OF \(String(format: "%02d", max(courses.count, 1)))") {
+        return Section(
+            label: "01 — Course   /   \(String(format: "%02d", courseIdx + 1)) OF \(String(format: "%02d", max(courses.count, 1)))"
+        ) {
             if courses.isEmpty {
                 emptyCoursesPanel
             } else {
@@ -370,7 +360,10 @@ public struct SetupView: View {
                     .padding(14)
                     .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
             } else {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: max(min(tees.count, 4), 1)), spacing: 6) {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: max(min(tees.count, 4), 1)),
+                    spacing: 6
+                ) {
                     ForEach(tees) { tee in
                         teeButton(tee: tee, isActive: form.teeId == tee.id)
                     }
@@ -496,8 +489,8 @@ public struct SetupView: View {
     private static func formatChipLabel(_ format: RoundFormat) -> String {
         switch format {
         case .stroke: "Strokeplay"
-        case .match:  "Matchplay"
-        default:      format.rawValue
+        case .match: "Matchplay"
+        default: format.rawValue
         }
     }
 
@@ -628,7 +621,7 @@ public struct SetupView: View {
                     .brutalistTap {
                         Haptics.light()
                         let next = form.players.count
-                        form.players.append(.init(name: "Guest \(next)", handicap: 18))
+                        form.players.append(.init(name: "Guest \(next)", handicap: nil))
                     }
                 }
             }
@@ -778,7 +771,19 @@ private struct PlayerRowView: View {
                     .font(BrutalistType.mono(.medium, size: 9))
                     .kerning(0.6)
                     .foregroundStyle(BrutalistColor.muted)
-                HCPField(handicap: $player.handicap)
+                // "You" (the first row) shows the calculated WHS index and is
+                // not editable; guests have an editable text field that
+                // allows the value to be cleared back to nil.
+                if canDelete {
+                    HCPField(handicap: $player.handicap)
+                } else {
+                    Text(HCPField.format(player.handicap))
+                        .font(BrutalistType.mono(.semibold, size: 12))
+                        .monospacedDigit()
+                        .multilineTextAlignment(.trailing)
+                        .frame(minWidth: 44, alignment: .trailing)
+                        .foregroundStyle(BrutalistColor.fg)
+                }
             }
         }
         .padding(.horizontal, 14)
@@ -807,7 +812,7 @@ private struct PlayerRowView: View {
 // MARK: - HCP text field
 
 private struct HCPField: View {
-    @Binding var handicap: Decimal
+    @Binding var handicap: Decimal?
     @State private var text = ""
     @FocusState private var isFocused: Bool
 
@@ -818,42 +823,45 @@ private struct HCPField: View {
             .multilineTextAlignment(.trailing)
             .frame(minWidth: 44, alignment: .trailing)
             .focused($isFocused)
-            .onAppear { text = format(handicap) }
+            .onAppear { text = Self.format(handicap) }
             .onChange(of: isFocused) { _, focused in
                 if !focused { commit() }
             }
             .onChange(of: handicap) { _, value in
-                if !isFocused { text = format(value) }
+                if !isFocused { text = Self.format(value) }
             }
     }
 
     @ViewBuilder
     private var textField: some View {
         #if os(iOS)
-        TextField("0.0", text: $text)
+        TextField("—", text: $text)
             .keyboardType(.numbersAndPunctuation)
             .submitLabel(.done)
             .onSubmit { commit() }
         #else
-        TextField("0.0", text: $text)
+        TextField("—", text: $text)
             .onSubmit { commit() }
         #endif
     }
 
     private func commit() {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
-        if let d = Decimal(string: trimmed),
-           d >= Decimal(-10), d <= Decimal(54) {
+        if trimmed.isEmpty || trimmed == "—" || trimmed == "-" {
+            handicap = nil
+        } else if let d = Decimal(string: trimmed),
+                  d >= Decimal(-10), d <= Decimal(54) {
             handicap = d
         }
-        text = format(handicap)
+        text = Self.format(handicap)
     }
 
-    private func format(_ value: Decimal) -> String {
+    static func format(_ value: Decimal?) -> String {
+        guard let value else { return "—" }
         let f = NumberFormatter()
         f.numberStyle = .decimal
         f.minimumFractionDigits = 1
         f.maximumFractionDigits = 1
-        return f.string(from: value as NSDecimalNumber) ?? "0.0"
+        return f.string(from: value as NSDecimalNumber) ?? "—"
     }
 }

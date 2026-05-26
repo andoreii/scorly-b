@@ -9,22 +9,26 @@ import SwiftUI
 /// the editor with an empty draft.
 public struct CoursesView: View {
     let coursesRepository: any CoursesRepository
+    let roundsRepository: any RoundsRepository
     let onBack: () -> Void
     let onEdit: (CourseDraft) -> Void
     let onNew: () -> Void
 
     @State private var courses: [Course] = []
+    @State private var eligibleBests: [UUID: Int] = [:]
     @State private var didLoad = false
     @State private var isRefreshing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         coursesRepository: any CoursesRepository,
+        roundsRepository: any RoundsRepository,
         onBack: @escaping () -> Void,
         onEdit: @escaping (CourseDraft) -> Void,
         onNew: @escaping () -> Void
     ) {
         self.coursesRepository = coursesRepository
+        self.roundsRepository = roundsRepository
         self.onBack = onBack
         self.onEdit = onEdit
         self.onNew = onNew
@@ -237,7 +241,11 @@ public struct CoursesView: View {
     }
 
     private func bestScore(_ course: Course) -> String {
-        course.bestScore.map(String.init) ?? "—"
+        // Reads from the shared default aggregate filter (18-hole Stroke /
+        // Stableford / Match) so scrambles, 9-hole rounds, and historical
+        // missing-format rounds don't get crowned as the course best.
+        // Courses without an eligible round display the standard fallback.
+        eligibleBests[course.externalId].map(String.init) ?? "—"
     }
 
     private static let dateFormatter: DateFormatter = {
@@ -251,9 +259,14 @@ public struct CoursesView: View {
     private func reload() async {
         isRefreshing = true
         defer { isRefreshing = false }
-        if let fetched = try? await coursesRepository.fetchAll() {
+        async let fetchedCourses = try? await coursesRepository.fetchAll()
+        async let fetchedBests = try? await roundsRepository.bestScoresByCourse(filter: .default)
+        let courses = await fetchedCourses
+        let bests = await fetchedBests
+        if let courses {
             withAnimation(Motion.adaptive(Motion.easeOutQuart, reduceMotion: reduceMotion)) {
-                courses = fetched.sorted { $0.createdAt > $1.createdAt }
+                self.courses = courses.sorted { $0.createdAt > $1.createdAt }
+                self.eligibleBests = bests ?? [:]
             }
         }
     }

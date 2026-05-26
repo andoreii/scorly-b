@@ -13,6 +13,8 @@ public struct TrendsView: View {
 
     @State private var allRounds: [CompletedRound] = []
     @State private var window: TrendsWindow = .twenty
+    @State private var filter: AggregateRoundFilter = .default
+    @State private var sheetState: TrendsFilterEditState?
     @State private var didLoad = false
     @State private var isRefreshing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -26,20 +28,23 @@ public struct TrendsView: View {
     }
 
     public var body: some View {
-        let model = TrendsModel.build(rounds: allRounds, window: window)
+        // Eligibility runs before the window so LAST 10 / LAST 20 always
+        // samples from the filtered subset, not the raw archive.
+        let eligible = allRounds.eligible(for: filter)
+        let model = TrendsModel.build(rounds: eligible, window: window)
         ScreenShell {
             TopBar(left: "TREND ANALYSIS", right: "SCORLY/B  ®")
             HairlineProgress(isLoading: isRefreshing)
                 .padding(.top, BrutalistSpacing.s)
-            backRow(model: model)
+            backRow(model: model, eligibleCount: eligible.count)
                 .padding(.top, BrutalistSpacing.m)
             hero
                 .padding(.top, BrutalistSpacing.m)
             tagline
-            windowChips
+            filterRow
                 .padding(.top, BrutalistSpacing.l)
 
-            if allRounds.isEmpty {
+            if eligible.isEmpty {
                 emptyState
                     .padding(.top, BrutalistSpacing.l)
             } else {
@@ -55,17 +60,41 @@ public struct TrendsView: View {
             Motion.adaptive(Motion.easeOutQuart, reduceMotion: reduceMotion),
             value: window
         )
+        .animation(
+            Motion.adaptive(Motion.easeOutQuart, reduceMotion: reduceMotion),
+            value: filter
+        )
         .task {
             guard !didLoad else { return }
             didLoad = true
             await load()
         }
         .refreshable { await load() }
+        .sheet(item: $sheetState) { _ in
+            AggregateFilterSheet(
+                groups: HistoryFilterMappingProxy.groups(
+                    state: $sheetState,
+                    teeNames: availableTeeNames
+                ),
+                singleSelect: AggregateFilterSheet.SingleSelectGroup(
+                    id: "window",
+                    label: "Sample Window",
+                    options: TrendsFilterEditState.windowOptions,
+                    selection: Binding(
+                        get: { sheetState?.window ?? TrendsFilterEditState.label(for: window) },
+                        set: { newValue in sheetState?.window = newValue }
+                    )
+                ),
+                recordCount: previewRecordCount,
+                onApply: applyFromSheet,
+                onReset: resetSheet
+            )
+        }
     }
 
     // MARK: - Composition
 
-    private func backRow(model: TrendsModel) -> some View {
+    private func backRow(model: TrendsModel, eligibleCount: Int) -> some View {
         HStack {
             Text("← HOME")
                 .font(BrutalistType.monoLabel)
@@ -73,7 +102,7 @@ public struct TrendsView: View {
                 .foregroundStyle(BrutalistColor.fg)
                 .brutalistTap(action: onBack)
             Spacer()
-            Text(sampleSubtitle(model: model))
+            Text(sampleSubtitle(model: model, eligibleCount: eligibleCount))
                 .font(BrutalistType.monoMicro)
                 .kerning(1.0)
                 .foregroundStyle(BrutalistColor.muted)
@@ -96,26 +125,60 @@ public struct TrendsView: View {
             .foregroundStyle(BrutalistColor.muted)
     }
 
-    private var windowChips: some View {
+    private var filterRow: some View {
         HStack(spacing: 6) {
-            ForEach(TrendsWindow.allCases, id: \.rawValue) { w in
-                let active = window == w
-                Text(w.label)
-                    .font(BrutalistType.monoCaption)
-                    .kerning(0.8)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(active ? BrutalistColor.fg : .clear)
-                    .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
-                    .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
-                    .brutalistTap {
-                        Haptics.light()
-                        withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
-                            window = w
-                        }
-                    }
-            }
+            Text(filterButtonLabel)
+                .font(BrutalistType.monoCaption)
+                .kerning(0.8)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(filterIsDefault ? .clear : BrutalistColor.fg)
+                .foregroundStyle(filterIsDefault ? BrutalistColor.fg : BrutalistColor.bg)
+                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+                .brutalistTap {
+                    Haptics.light()
+                    sheetState = TrendsFilterEditState(filter: filter, window: window)
+                }
+            Text(window.label)
+                .font(BrutalistType.monoCaption)
+                .kerning(0.8)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(BrutalistColor.panel)
+                .foregroundStyle(BrutalistColor.muted)
+                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
         }
+    }
+
+    private var filterButtonLabel: String {
+        let deviations = HistoryFilterMappingProxy.deviationCount(from: filter)
+        return deviations == 0 ? "FILTER" : "FILTER · \(deviations)"
+    }
+
+    private var filterIsDefault: Bool {
+        filter == .default
+    }
+
+    private var availableTeeNames: [String] {
+        Array(Set(allRounds.compactMap(\.teeName))).sorted()
+    }
+
+    private var previewRecordCount: Int {
+        guard let sheetState else { return allRounds.eligible(for: filter).count }
+        return allRounds.eligible(for: sheetState.toFilter()).count
+    }
+
+    private func applyFromSheet() {
+        guard let sheetState else { return }
+        filter = sheetState.toFilter()
+        if let chosen = TrendsFilterEditState.window(for: sheetState.window) {
+            window = chosen
+        }
+        self.sheetState = nil
+    }
+
+    private func resetSheet() {
+        sheetState = TrendsFilterEditState(filter: .default, window: .twenty)
     }
 
     @ViewBuilder
@@ -150,9 +213,10 @@ public struct TrendsView: View {
                         .font(BrutalistType.monoLabel)
                         .kerning(1.0)
                     Spacer()
-                    Text(sampleSubtitle(model: model))
+                    Text("N=\(model.sampleCount)")
                         .font(BrutalistType.monoLabel)
                         .kerning(1.0)
+                        .monospacedDigit()
                 }
                 Rectangle()
                     .fill(BrutalistColor.invFg)
@@ -485,9 +549,9 @@ public struct TrendsView: View {
 
     // MARK: - Helpers
 
-    private func sampleSubtitle(model: TrendsModel) -> String {
+    private func sampleSubtitle(model: TrendsModel, eligibleCount: Int) -> String {
         guard let span = model.dateSpan, model.sampleCount > 0 else {
-            return "\(allRounds.count) ROUNDS ON FILE"
+            return "\(eligibleCount) ROUNDS ELIGIBLE"
         }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -512,9 +576,17 @@ public struct TrendsView: View {
         return "\(Int((rate * 100).rounded()))%"
     }
 
-    private func streakOverCount(_ s: [Int]) -> Int { s.filter { $0 > 0 }.count }
-    private func streakEvenCount(_ s: [Int]) -> Int { s.filter { $0 == 0 }.count }
-    private func streakUnderCount(_ s: [Int]) -> Int { s.filter { $0 < 0 }.count }
+    private func streakOverCount(_ s: [Int]) -> Int {
+        s.filter { $0 > 0 }.count
+    }
+
+    private func streakEvenCount(_ s: [Int]) -> Int {
+        s.filter { $0 == 0 }.count
+    }
+
+    private func streakUnderCount(_ s: [Int]) -> Int {
+        s.filter { $0 < 0 }.count
+    }
 
     @MainActor
     private func load() async {

@@ -93,17 +93,17 @@ public final class RoundPlayState {
 
     public init(course: Course, teeId: UUID?, holesPlayed: HolesPlayed) {
         self.course = course
-        self.tee = course.tees.first(where: { $0.id == teeId }) ?? course.tees.first
+        tee = course.tees.first(where: { $0.id == teeId }) ?? course.tees.first
         self.holesPlayed = holesPlayed
-        self.startedAt = Date()
+        startedAt = Date()
 
         let slice = Self.sliceHoles(course: course, holesPlayed: holesPlayed)
-        self.holes = slice
-        self.entries = Array(repeating: HoleEntry(), count: slice.count)
-        self.holeIdx = 0
-        self.openShot = .none
-        self.scorecardOpen = false
-        self.penaltySheetOpen = false
+        holes = slice
+        entries = Array(repeating: HoleEntry(), count: slice.count)
+        holeIdx = 0
+        openShot = .none
+        scorecardOpen = false
+        penaltySheetOpen = false
     }
 
     /// Resume a paused round. Caller must pre-validate that the entry
@@ -118,19 +118,31 @@ public final class RoundPlayState {
         startedAt: Date
     ) {
         self.course = course
-        self.tee = course.tees.first(where: { $0.id == teeId }) ?? course.tees.first
+        tee = course.tees.first(where: { $0.id == teeId }) ?? course.tees.first
         self.holesPlayed = holesPlayed
         self.startedAt = startedAt
 
         let slice = Self.sliceHoles(course: course, holesPlayed: holesPlayed)
-        self.holes = slice
-        self.entries = entries.count == slice.count
+        holes = slice
+        let raw = entries.count == slice.count
             ? entries
             : Array(repeating: HoleEntry(), count: slice.count)
+        self.entries = raw.map(Self.normalizeEntry)
         self.holeIdx = max(0, min(slice.count - 1, holeIdx))
-        self.openShot = .none
-        self.scorecardOpen = false
-        self.penaltySheetOpen = false
+        openShot = .none
+        scorecardOpen = false
+        penaltySheetOpen = false
+    }
+
+    /// Strip distance from any OB tee-shot entry. Guards against drafts
+    /// saved before this invariant was enforced.
+    private static func normalizeEntry(_ entry: HoleEntry) -> HoleEntry {
+        guard entry.teeShot?.hasPrefix("OB ") == true, entry.teeShotDistance != nil else {
+            return entry
+        }
+        var normalized = entry
+        normalized.teeShotDistance = nil
+        return normalized
     }
 
     /// Reslice the round to a different holes-played mode mid-play.
@@ -174,6 +186,42 @@ public final class RoundPlayState {
         }
     }
 
+    /// HoleStat snapshots for every hole the user has actually logged
+    /// (`entry.strokes != nil`). Reuses `derivedStat(for:)` so live and
+    /// sign-and-file values agree exactly (including the par-3 GIR seam).
+    public var loggedHoleStats: [HoleStat] {
+        entries.indices.compactMap { idx in
+            entries[idx].strokes != nil ? derivedStat(for: idx) : nil
+        }
+    }
+
+    /// Greens-in-regulation among logged holes. Both `made` and `of`
+    /// come from the same logged-only pool so unplayed holes never
+    /// dilute the percentage.
+    public var liveGIR: (made: Int, of: Int) {
+        let logged = loggedHoleStats
+        return (logged.filter(\.greenInRegulation).count, logged.count)
+    }
+
+    /// Fairways-in-regulation among logged par-4 / par-5 holes. Returns
+    /// `nil` when no eligible holes have been logged — render that as
+    /// `-` rather than `0/0` per the brief.
+    public var liveFIR: (made: Int, of: Int)? {
+        let eligible = loggedHoleStats.filter { $0.par >= 4 }
+        guard !eligible.isEmpty else { return nil }
+        return (eligible.filter(\.fairwayInRegulation).count, eligible.count)
+    }
+
+    /// Total putts across logged holes.
+    public var livePutts: Int {
+        loggedHoleStats.reduce(0) { $0 + $1.putts }
+    }
+
+    /// Three-putt count across logged holes.
+    public var liveThreePutts: Int {
+        loggedHoleStats.filter(\.threePutt).count
+    }
+
     /// Strokes summed across logged holes only.
     public var totalStrokes: Int {
         entries.reduce(0) { $0 + ($1.strokes ?? 0) }
@@ -187,13 +235,18 @@ public final class RoundPlayState {
         }
     }
 
-    public var vsPar: Int { totalStrokes - playedPar }
+    public var vsPar: Int {
+        totalStrokes - playedPar
+    }
 
     public var filledCount: Int {
         entries.reduce(0) { $0 + ($1.strokes == nil ? 0 : 1) }
     }
 
-    public var currentHole: Hole { holes[holeIdx] }
+    public var currentHole: Hole {
+        holes[holeIdx]
+    }
+
     public var currentEntry: HoleEntry {
         get { entries[holeIdx] }
         set { entries[holeIdx] = newValue }
@@ -238,15 +291,34 @@ public final class RoundPlayState {
         let strokes = entry.strokes ?? hole.par
         let teeDecoded = Self.decodeLie(entry.teeShot, modifier: entry.teeShotModifier, target: .fairway)
         let approachDecoded = Self.decodeLie(entry.approach, modifier: entry.approachModifier, target: .green)
+        // Par 3 is a single shot to the green. The Play UI surfaces it through
+        // the approach editor (target = Green) so the user's pick lands on
+        // `entry.approach`; HoleStat / WHS / v1 schema all expect that pick on
+        // `teeShotLie`. Coalesce so the domain reads it correctly.
+        let teeLie: Lie?
+        let approachLie: Lie?
+        let obCount: Int
+        let hazardCount: Int
+        if hole.par == 3 {
+            teeLie = approachDecoded.lie ?? teeDecoded.lie
+            approachLie = nil
+            obCount = approachDecoded.ob + teeDecoded.ob
+            hazardCount = approachDecoded.hazard + teeDecoded.hazard
+        } else {
+            teeLie = teeDecoded.lie
+            approachLie = approachDecoded.lie
+            obCount = teeDecoded.ob + approachDecoded.ob
+            hazardCount = teeDecoded.hazard + approachDecoded.hazard
+        }
         return HoleStat(
             par: hole.par,
             strokes: strokes,
             putts: entry.putts,
-            teeShotLie: teeDecoded.lie,
-            approachLie: approachDecoded.lie,
+            teeShotLie: teeLie,
+            approachLie: approachLie,
             penaltyStrokes: entry.penaltyStrokes,
-            outOfBoundsCount: teeDecoded.ob + approachDecoded.ob,
-            hazardCount: teeDecoded.hazard + approachDecoded.hazard,
+            outOfBoundsCount: obCount,
+            hazardCount: hazardCount,
             upAndDownSuccess: entry.upAndDownOverride ?? false,
             sandSaveSuccess: entry.sandSaveOverride ?? false
         )
@@ -274,6 +346,10 @@ public final class RoundPlayState {
         guard let raw else { return DecodedLie(lie: nil, ob: 0, hazard: 0) }
         if raw == "Fairway" { return DecodedLie(lie: .fairway, ob: 0, hazard: 0) }
         if raw == "Green" { return DecodedLie(lie: .green, ob: 0, hazard: 0) }
+        // Par-5 "ON IN 2" shortcut — semantically identical to Green for
+        // stats, but stored as a distinct value so the keypad's center
+        // cell and the ON IN 2 button toggle independently.
+        if raw == "On In 2" { return DecodedLie(lie: .green, ob: 0, hazard: 0) }
         // Legacy single-string entries (back-compat for any data that
         // pre-dated the modifier split).
         if raw == "Bunker" { return DecodedLie(lie: .bunkerLeft, ob: 0, hazard: 0) }
@@ -294,11 +370,11 @@ public final class RoundPlayState {
             if modifier == "Bunker" {
                 let bunker: Lie
                 switch direction {
-                case "Left":  bunker = .bunkerLeft
+                case "Left": bunker = .bunkerLeft
                 case "Right": bunker = .bunkerRight
-                case "Long":  bunker = .bunkerLong
+                case "Long": bunker = .bunkerLong
                 case "Short": bunker = .bunkerShort
-                default:      bunker = .bunkerLeft
+                default: bunker = .bunkerLeft
                 }
                 return DecodedLie(lie: bunker, ob: 0, hazard: 0)
             }

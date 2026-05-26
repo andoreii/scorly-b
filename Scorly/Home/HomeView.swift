@@ -22,16 +22,27 @@ struct HomeView: View {
     @State private var now = Date()
     @State private var showDiscardConfirm = false
     @State private var showStartNewConfirm = false
+    @State private var pendingStartNew = false
     @State private var livePulseOn = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var lastRound: CompletedRound? { rounds.first }
-    private var roundCount: Int { rounds.count }
+    private var lastRound: CompletedRound? {
+        rounds.first
+    }
+
+    private var roundCount: Int {
+        rounds.count
+    }
 
     private var averageScore: Double? {
-        guard !rounds.isEmpty else { return nil }
-        let total = rounds.reduce(0) { $0 + $1.totalScore }
-        return Double(total) / Double(rounds.count)
+        // ROUNDS counts every completed round; AVG SCORE applies the shared
+        // default aggregate filter (18-hole Stroke / Stableford / Match) so
+        // scrambles, 9-hole rounds, and historical missing-format rounds
+        // don't skew the headline number.
+        let eligible = rounds.eligible(for: .default)
+        guard !eligible.isEmpty else { return nil }
+        let total = eligible.reduce(0) { $0 + $1.totalScore }
+        return Double(total) / Double(eligible.count)
     }
 
     var body: some View {
@@ -239,6 +250,12 @@ struct HomeView: View {
                 Rectangle().fill(BrutalistColor.invFg).frame(height: 1).opacity(0.4).padding(.vertical, 12)
                 HStack(alignment: .bottom) {
                     VStack(alignment: .leading, spacing: 4) {
+                        if let typeFormat = typeFormatLabel(for: round) {
+                            Text(typeFormat)
+                                .font(BrutalistType.monoLabel)
+                                .kerning(0.6)
+                                .foregroundStyle(BrutalistColor.invMuted)
+                        }
                         Text(round.courseName ?? "—")
                             .font(BrutalistType.body)
                         Text(courseSubtitle(for: round))
@@ -309,11 +326,20 @@ struct HomeView: View {
                 message: "The round you're playing will be discarded. This can't be undone.",
                 destructiveLabel: "DISCARD & START NEW",
                 destructiveCaption: "→ TEE OFF",
-                onConfirm: {
-                    onDiscardDraft()
-                    onStartNewRound()
-                }
+                onConfirm: { pendingStartNew = true }
             )
+        }
+        .onChange(of: showStartNewConfirm) { _, isPresented in
+            guard !isPresented, pendingStartNew else { return }
+            pendingStartNew = false
+            // Wait for the sheet's dismissal animation to finish before
+            // navigating, otherwise Setup pushes underneath the still-
+            // animating sheet on slower devices.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(350))
+                onDiscardDraft()
+                onStartNewRound()
+            }
         }
     }
 
@@ -358,6 +384,25 @@ struct HomeView: View {
         if let teeName = round.teeName?.uppercased() { parts.append("\(teeName) TEES") }
         parts.append("\(round.holesPlayed.holeCount) HOLES")
         return parts.joined(separator: " — ")
+    }
+
+    private func typeFormatLabel(for round: CompletedRound) -> String? {
+        let typeLabel = round.roundType?.rawValue.uppercased()
+        let fmtLabel = round.roundFormat.map(Self.formatLabel)?.uppercased()
+        switch (typeLabel, fmtLabel) {
+        case let (type?, fmt?): return "\(type) · \(fmt)"
+        case let (type?, nil): return type
+        case let (nil, fmt?): return fmt
+        case (nil, nil): return nil
+        }
+    }
+
+    private static func formatLabel(_ format: RoundFormat) -> String {
+        switch format {
+        case .stroke: "STROKEPLAY"
+        case .match: "MATCHPLAY"
+        default: format.rawValue.uppercased()
+        }
     }
 
     private func referenceCode(for round: CompletedRound) -> String {

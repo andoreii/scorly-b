@@ -26,9 +26,13 @@ public struct RoundSetupForm: Sendable, Equatable {
     public struct Player: Sendable, Equatable, Identifiable {
         public let id: UUID
         public var name: String
-        public var handicap: Decimal
+        /// `nil` means "no handicap entered". For the "You" slot this is the
+        /// calculated WHS index (or nil if there aren't enough qualifying
+        /// rounds yet). Guest players start as nil and stay nil unless the
+        /// user types one in.
+        public var handicap: Decimal?
 
-        public init(id: UUID = UUID(), name: String, handicap: Decimal) {
+        public init(id: UUID = UUID(), name: String, handicap: Decimal? = nil) {
             self.id = id
             self.name = name
             self.handicap = handicap
@@ -47,7 +51,7 @@ public struct RoundSetupForm: Sendable, Equatable {
         walkingVsRiding: WalkingVsRiding? = .walking,
         mentalState: Int = 7,
         notes: String = "",
-        players: [Player] = [Player(name: "You", handicap: 12.4)]
+        players: [Player] = [Player(name: "You", handicap: nil)]
     ) {
         self.courseId = courseId
         self.teeId = teeId

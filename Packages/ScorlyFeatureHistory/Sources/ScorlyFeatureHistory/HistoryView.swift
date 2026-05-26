@@ -4,24 +4,18 @@ import ScorlyDomain
 import SwiftUI
 
 /// Round archive. Loads `[CompletedRound]` from the repository,
-/// renders top stats strip + filter chips + ticket-style row list,
+/// renders top stats strip + FILTER button + ticket-style row list,
 /// with an inverse `LATEST` stamp pinned to the newest entry.
 public struct HistoryView: View {
     let roundsRepository: any RoundsRepository
     let onBack: () -> Void
 
     @State private var rounds: [CompletedRound] = []
-    @State private var filter: Filter = .all
+    @State private var filter: AggregateRoundFilter = .default
     @State private var didLoad = false
     @State private var isRefreshing = false
+    @State private var sheetState: AggregateFilterEditState?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    public enum Filter: String, CaseIterable, Identifiable {
-        case all = "ALL ROUNDS"
-        case eighteen = "18 HOLES"
-        case nine = "9 HOLES"
-        public var id: String { rawValue }
-    }
 
     public init(roundsRepository: any RoundsRepository, onBack: @escaping () -> Void) {
         self.roundsRepository = roundsRepository
@@ -40,7 +34,7 @@ public struct HistoryView: View {
             mono("INDEXED · SEARCHABLE · YOURS", color: BrutalistColor.muted)
             statsStrip
                 .padding(.top, BrutalistSpacing.l)
-            filterChips
+            filterRow
                 .padding(.top, BrutalistSpacing.m)
             roundList
                 .padding(.top, BrutalistSpacing.m)
@@ -54,6 +48,20 @@ public struct HistoryView: View {
             await load()
         }
         .refreshable { await load() }
+        .sheet(item: $sheetState) { state in
+            AggregateFilterSheet(
+                groups: HistoryFilterMapping.groups(
+                    state: Binding(
+                        get: { sheetState ?? state },
+                        set: { sheetState = $0 }
+                    ),
+                    teeNames: availableTeeNames
+                ),
+                recordCount: previewRecordCount,
+                onApply: applyFromSheet,
+                onReset: resetSheet
+            )
+        }
     }
 
     // MARK: - Sub-views
@@ -87,7 +95,7 @@ public struct HistoryView: View {
             BrutalistColor.panel
             CornerMarks(size: 6, inset: 4)
             HStack(spacing: 0) {
-                BigStat(label: "Rounds", value: "\(rounds.count)")
+                BigStat(label: "Rounds", value: "\(filtered.count)")
                 BigStat(label: "Best v Par", value: bestVsPar, drawBorder: true)
                 BigStat(label: "Avg Score", value: avgScore, drawBorder: true)
             }
@@ -95,26 +103,30 @@ public struct HistoryView: View {
         .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
     }
 
-    private var filterChips: some View {
+    private var filterRow: some View {
         HStack(spacing: 6) {
-            ForEach(Filter.allCases) { f in
-                let active = filter == f
-                Text(f.rawValue)
-                    .font(BrutalistType.monoCaption)
-                    .kerning(0.8)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(active ? BrutalistColor.fg : .clear)
-                    .foregroundStyle(active ? BrutalistColor.bg : BrutalistColor.fg)
-                    .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
-                    .brutalistTap {
-                        Haptics.light()
-                        withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
-                            filter = f
-                        }
-                    }
-            }
+            Text(filterButtonLabel)
+                .font(BrutalistType.monoCaption)
+                .kerning(0.8)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(filterIsDefault ? .clear : BrutalistColor.fg)
+                .foregroundStyle(filterIsDefault ? BrutalistColor.fg : BrutalistColor.bg)
+                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+                .brutalistTap {
+                    Haptics.light()
+                    sheetState = AggregateFilterEditState(from: filter)
+                }
         }
+    }
+
+    private var filterButtonLabel: String {
+        let deviations = HistoryFilterMapping.deviationCount(from: filter)
+        return deviations == 0 ? "FILTER" : "FILTER · \(deviations)"
+    }
+
+    private var filterIsDefault: Bool {
+        filter == .default
     }
 
     @ViewBuilder
@@ -132,11 +144,11 @@ public struct HistoryView: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: BrutalistSpacing.s) {
-            Text("NO ROUNDS YET")
+            Text("NO ROUNDS MATCH")
                 .font(BrutalistType.monoLabel)
                 .kerning(1.0)
                 .foregroundStyle(BrutalistColor.muted)
-            Text("File your first scorecard from the round flow. It'll appear here.")
+            Text("Adjust the filter or file your first scorecard from the round flow.")
                 .font(BrutalistType.inputBody)
                 .foregroundStyle(BrutalistColor.fg)
         }
@@ -162,6 +174,12 @@ public struct HistoryView: View {
                 HBar(vMargin: 10)
                 HStack(alignment: .bottom) {
                     VStack(alignment: .leading, spacing: 4) {
+                        if let typeFormat = typeFormatLabel(round) {
+                            Text(typeFormat)
+                                .font(BrutalistType.monoMicro)
+                                .kerning(0.6)
+                                .foregroundStyle(BrutalistColor.muted)
+                        }
                         Text(round.courseName ?? "—")
                             .font(BrutalistType.sans(.bold, size: 18))
                             .kerning(-0.4)
@@ -233,24 +251,48 @@ public struct HistoryView: View {
 
     // MARK: - Derived
 
-    private var filtered: [CompletedRound] {
-        switch filter {
-        case .all: return rounds
-        case .eighteen: return rounds.filter { $0.holesPlayed == .eighteen }
-        case .nine: return rounds.filter { $0.holesPlayed == .front9 || $0.holesPlayed == .back9 }
-        }
+    /// Available tee names for the sheet picker, derived from the full
+    /// (unfiltered) round set. Sorted for stable display.
+    private var availableTeeNames: [String] {
+        let names = rounds.compactMap(\.teeName)
+        return Array(Set(names)).sorted()
+    }
+
+    var filtered: [CompletedRound] {
+        rounds.eligible(for: filter)
     }
 
     private var bestVsPar: String {
-        guard !rounds.isEmpty else { return "—" }
-        let best = rounds.map(\.scoreVsPar).min() ?? 0
+        let pool = filtered
+        guard !pool.isEmpty else { return "—" }
+        let best = pool.map(\.scoreVsPar).min() ?? 0
         return best >= 0 ? "+\(best)" : "\(best)"
     }
 
     private var avgScore: String {
-        guard !rounds.isEmpty else { return "—" }
-        let avg = Double(rounds.reduce(0) { $0 + $1.totalScore }) / Double(rounds.count)
+        let pool = filtered
+        guard !pool.isEmpty else { return "—" }
+        let avg = Double(pool.reduce(0) { $0 + $1.totalScore }) / Double(pool.count)
         return String(format: "%.1f", avg)
+    }
+
+    /// Live preview of how many rounds the in-progress sheet selection
+    /// would produce — recomputed as the user toggles chips.
+    private var previewRecordCount: Int {
+        guard let sheetState else { return filtered.count }
+        return rounds.eligible(for: sheetState.toFilter()).count
+    }
+
+    // MARK: - Sheet wiring
+
+    private func applyFromSheet() {
+        guard let sheetState else { return }
+        filter = sheetState.toFilter()
+        self.sheetState = nil
+    }
+
+    private func resetSheet() {
+        sheetState = AggregateFilterEditState(from: .default)
     }
 
     // MARK: - Formatters
@@ -276,6 +318,25 @@ public struct HistoryView: View {
         parts.append("\(holesCount(round)) HOLES")
         if let weather = weatherLabel(round.conditions) { parts.append(weather.uppercased()) }
         return parts.joined(separator: " — ")
+    }
+
+    private func typeFormatLabel(_ round: CompletedRound) -> String? {
+        let typeLabel = round.roundType?.rawValue.uppercased()
+        let fmtLabel = round.roundFormat.map(Self.formatLabel)?.uppercased()
+        switch (typeLabel, fmtLabel) {
+        case let (type?, fmt?): return "\(type) · \(fmt)"
+        case let (type?, nil): return type
+        case let (nil, fmt?): return fmt
+        case (nil, nil): return nil
+        }
+    }
+
+    private static func formatLabel(_ format: RoundFormat) -> String {
+        switch format {
+        case .stroke: "STROKEPLAY"
+        case .match: "MATCHPLAY"
+        default: format.rawValue.uppercased()
+        }
     }
 
     private func holesCount(_ round: CompletedRound) -> Int {

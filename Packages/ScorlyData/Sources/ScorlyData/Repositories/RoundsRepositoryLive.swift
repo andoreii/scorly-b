@@ -112,6 +112,41 @@ public actor RoundsRepositoryLive: RoundsRepository {
         }
     }
 
+    public func bestScoresByCourse(filter: AggregateRoundFilter) async throws -> [UUID: Int] {
+        let teeLookup = try teeLookup()
+        let descriptor = FetchDescriptor<LocalRound>(
+            predicate: #Predicate { $0.isDraft == false }
+        )
+        let rounds = try modelContext.fetch(descriptor)
+        var best: [UUID: Int] = [:]
+        for local in rounds {
+            // Lightweight projection — we deliberately skip hydrating
+            // LocalHoleStat since AggregateRoundFilter only inspects
+            // metadata columns.
+            guard
+                let holesPlayed = HolesPlayed(rawValue: local.holesPlayed),
+                let totalScore = local.totalScore
+            else { continue }
+            let format = local.roundFormat.flatMap(RoundFormat.init(rawValue:))
+            let type = local.roundType.flatMap(RoundType.init(rawValue:))
+            let tee = local.teeExternalId.flatMap { teeLookup.nameByExternalId[$0] }
+            guard aggregateFilterIncludes(
+                format: format,
+                type: type,
+                holes: holesPlayed,
+                tee: tee,
+                filter: filter
+            )
+            else { continue }
+            if let prev = best[local.courseExternalId] {
+                best[local.courseExternalId] = min(prev, totalScore)
+            } else {
+                best[local.courseExternalId] = totalScore
+            }
+        }
+        return best
+    }
+
     public func refreshFromRemote(limit: Int) async throws {
         guard let supabase else { return }
         let userId = userId
@@ -409,12 +444,27 @@ private extension RoundsRepositoryLive {
     ) -> CompletedRound {
         let holesPlayed = HolesPlayed(rawValue: local.holesPlayed) ?? .eighteen
         let stats: [HoleStat] = holeStats.map { stat in
-            HoleStat(
+            let teeLie = stat.teeShot.flatMap(Mappings.lie(fromV1ShotLocation:))
+            let approachLie = stat.approach.flatMap(Mappings.lie(fromV1ShotLocation:))
+            // Par 3 is a single shot — historical v1 wrote it on tee_shot,
+            // some early v2 rounds wrote it on approach. Coalesce on read so
+            // the domain's par-3 GIR rule (which inspects teeShotLie) fires
+            // either way.
+            let resolvedTee: Lie?
+            let resolvedApproach: Lie?
+            if stat.par == 3 {
+                resolvedTee = teeLie ?? approachLie
+                resolvedApproach = nil
+            } else {
+                resolvedTee = teeLie
+                resolvedApproach = approachLie
+            }
+            return HoleStat(
                 par: stat.par,
                 strokes: stat.strokes,
                 putts: stat.putts,
-                teeShotLie: stat.teeShot.flatMap(Mappings.lie(fromV1ShotLocation:)),
-                approachLie: stat.approach.flatMap(Mappings.lie(fromV1ShotLocation:)),
+                teeShotLie: resolvedTee,
+                approachLie: resolvedApproach,
                 penaltyStrokes: stat.penaltyStrokes,
                 outOfBoundsCount: stat.outOfBoundsCount,
                 hazardCount: stat.hazardCount,

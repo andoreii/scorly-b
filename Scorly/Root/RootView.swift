@@ -65,8 +65,8 @@ struct RootView: View {
         }
     }
 
-    // Build live repos scoped to the current userId, then fetch courses.
-    // Called whenever userId changes (sign-in, sign-out, account switch).
+    /// Build live repos scoped to the current userId, then fetch courses.
+    /// Called whenever userId changes (sign-in, sign-out, account switch).
     private func buildReposAndLoadCourses() async {
         guard let userId = authService.userId else {
             courses = []
@@ -115,7 +115,6 @@ struct RootView: View {
         #endif
     }
 
-    @ViewBuilder
     private var content: some View {
         ZStack {
             BrutalistColor.bg.ignoresSafeArea()
@@ -209,6 +208,7 @@ struct RootView: View {
             case .courses:
                 CoursesView(
                     coursesRepository: coursesRepository,
+                    roundsRepository: roundsRepository,
                     onBack: { flow.resetTo(.home) },
                     onEdit: { draft in flow.go(.courseEditor(draft)) },
                     onNew: { flow.go(.courseEditor(nil)) }
@@ -348,6 +348,16 @@ struct RootView: View {
         let differentials = fetched.compactMap(\.differential).prefix(20).map { $0 }
         homeRounds = sorted
         homeHandicap = WHSCalculator.handicapIndex(from: differentials)
+        // Keep the "You" slot in setup in sync with the calculated index so
+        // the read-only field in Round Setup always reflects the latest WHS
+        // value rather than a stale captured one.
+        if let first = setupForm.players.first {
+            setupForm.players[0] = RoundSetupForm.Player(
+                id: first.id,
+                name: first.name,
+                handicap: homeHandicap
+            )
+        }
     }
 
     @MainActor
