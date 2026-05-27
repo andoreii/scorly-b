@@ -48,6 +48,7 @@ public actor RoundsRepositoryLive: RoundsRepository {
     public func fetchAllCompleted() async throws -> [CompletedRound] {
         let courseNames = try courseNameLookup()
         let teeLookup = try teeLookup()
+        let yardages = try teeHoleYardageLookup()
         let descriptor = FetchDescriptor<LocalRound>(
             predicate: #Predicate { $0.isDraft == false },
             sortBy: [SortDescriptor(\.datePlayed, order: .reverse)]
@@ -59,7 +60,8 @@ public actor RoundsRepositoryLive: RoundsRepository {
                 from: local,
                 holeStats: stats,
                 courseName: courseNames[local.courseExternalId],
-                teeLookup: teeLookup
+                teeLookup: teeLookup,
+                yardages: yardages
             )
         }
     }
@@ -67,6 +69,7 @@ public actor RoundsRepositoryLive: RoundsRepository {
     public func fetchRecent(limit: Int) async throws -> [CompletedRound] {
         let courseNames = try courseNameLookup()
         let teeLookup = try teeLookup()
+        let yardages = try teeHoleYardageLookup()
         var descriptor = FetchDescriptor<LocalRound>(
             predicate: #Predicate { $0.isDraft == false },
             sortBy: [SortDescriptor(\.datePlayed, order: .reverse)]
@@ -79,7 +82,8 @@ public actor RoundsRepositoryLive: RoundsRepository {
                 from: local,
                 holeStats: stats,
                 courseName: courseNames[local.courseExternalId],
-                teeLookup: teeLookup
+                teeLookup: teeLookup,
+                yardages: yardages
             )
         }
     }
@@ -92,6 +96,7 @@ public actor RoundsRepositoryLive: RoundsRepository {
 
         let courseNames = try courseNameLookup()
         let teeLookup = try teeLookup()
+        let yardages = try teeHoleYardageLookup()
         let selectedCourseExternalId = courseExternalId
         var descriptor = FetchDescriptor<LocalRound>(
             predicate: #Predicate {
@@ -107,7 +112,8 @@ public actor RoundsRepositoryLive: RoundsRepository {
                 from: local,
                 holeStats: stats,
                 courseName: courseNames[local.courseExternalId],
-                teeLookup: teeLookup
+                teeLookup: teeLookup,
+                yardages: yardages
             )
         }
     }
@@ -127,7 +133,7 @@ public actor RoundsRepositoryLive: RoundsRepository {
                 let holesPlayed = HolesPlayed(rawValue: local.holesPlayed),
                 let totalScore = local.totalScore
             else { continue }
-            let format = local.roundFormat.flatMap(RoundFormat.init(rawValue:))
+            let format = local.roundFormat.flatMap(Mappings.roundFormat(fromUILabel:))
             let type = local.roundType.flatMap(RoundType.init(rawValue:))
             let tee = local.teeExternalId.flatMap { teeLookup.nameByExternalId[$0] }
             guard aggregateFilterIncludes(
@@ -147,8 +153,10 @@ public actor RoundsRepositoryLive: RoundsRepository {
         return best
     }
 
-    public func refreshFromRemote(limit: Int) async throws {
-        guard let supabase else { return }
+    public func refreshFromRemote(limit: Int) async throws -> Int {
+        guard let supabase else {
+            throw RoundsRepositoryError.remoteUnavailable
+        }
         let userId = userId
         let rows: [RoundRow] = try await supabase
             .from("rounds")
@@ -158,41 +166,7 @@ public actor RoundsRepositoryLive: RoundsRepository {
             .limit(limit)
             .execute()
             .value
-        for row in rows {
-            guard
-                let externalIdString = row.roundExternalId,
-                let externalId = UUID(uuidString: externalIdString)
-            else { continue }
-            let descriptor = FetchDescriptor<LocalRound>(
-                predicate: #Predicate { $0.externalId == externalId }
-            )
-            if let existing = try modelContext.fetch(descriptor).first {
-                existing.serverId = row.roundId
-                existing.datePlayed = row.datePlayed
-                existing.holesPlayed = row.holesPlayed
-                existing.roundType = row.roundType
-                existing.conditions = row.conditions
-                existing.totalScore = row.totalScore
-                existing.whsDifferential = row.whsDifferential
-            } else {
-                let local = LocalRound(
-                    serverId: row.roundId,
-                    externalId: externalId,
-                    userId: row.userId,
-                    courseExternalId: UUID(),
-                    datePlayed: row.datePlayed,
-                    holesPlayed: row.holesPlayed,
-                    roundType: row.roundType,
-                    conditions: row.conditions,
-                    totalScore: row.totalScore,
-                    whsDifferential: row.whsDifferential,
-                    createdAt: row.createdAt,
-                    isDraft: false
-                )
-                modelContext.insert(local)
-            }
-        }
-        try modelContext.save()
+        return try await syncEngine.reconcileRounds(rows, localUserId: userId)
     }
 
     public func save(_ round: RoundDraft) async throws {
@@ -237,11 +211,27 @@ public actor RoundsRepositoryLive: RoundsRepository {
                 putts: stat.putts,
                 teeShot: Mappings.v1ShotLocation(for: stat.teeShotLie),
                 approach: Mappings.v1ShotLocation(for: stat.approachLie),
+                teeClub: stat.teeClub,
+                approachClub: stat.approachClub,
                 outOfBoundsCount: stat.outOfBoundsCount,
                 penaltyStrokes: stat.penaltyStrokes,
                 hazardCount: stat.hazardCount,
+                greenInReg: stat.greenInRegulation,
+                threePutt: stat.threePutt,
                 upAndDownSuccess: stat.upAndDownSuccess,
-                sandSaveSuccess: stat.sandSaveSuccess
+                sandSaveSuccess: stat.sandSaveSuccess,
+                puttDistances: stat.puttDistances,
+                teeShotDistance: stat.teeShotDistance,
+                approachDistance: stat.approachDistance,
+                pinPosition: stat.pinPosition,
+                outOfBoundsLeft: stat.outOfBoundsLeft,
+                outOfBoundsRight: stat.outOfBoundsRight,
+                outOfBoundsLong: stat.outOfBoundsLong,
+                outOfBoundsShort: stat.outOfBoundsShort,
+                hazardLeft: stat.hazardLeft,
+                hazardRight: stat.hazardRight,
+                hazardLong: stat.hazardLong,
+                hazardShort: stat.hazardShort
             )
             modelContext.insert(statLocal)
             pendingHoleStats.append(
@@ -252,11 +242,29 @@ public actor RoundsRepositoryLive: RoundsRepository {
                     putts: stat.putts,
                     teeShot: Mappings.v1ShotLocation(for: stat.teeShotLie),
                     approach: Mappings.v1ShotLocation(for: stat.approachLie),
+                    teeClub: stat.teeClub,
+                    approachClub: stat.approachClub,
                     outOfBoundsCount: stat.outOfBoundsCount,
                     penaltyStrokes: stat.penaltyStrokes,
                     hazardCount: stat.hazardCount,
+                    greenInReg: stat.greenInRegulation,
+                    threePutt: stat.threePutt,
+                    girOpportunity: true,
+                    fairwayOpportunity: stat.fairwayOpportunity,
                     upAndDownSuccess: stat.upAndDownSuccess,
-                    sandSaveSuccess: stat.sandSaveSuccess
+                    sandSaveSuccess: stat.sandSaveSuccess,
+                    puttDistances: stat.puttDistances,
+                    teeShotDistance: stat.teeShotDistance,
+                    approachDistance: stat.approachDistance,
+                    pinPosition: stat.pinPosition,
+                    outOfBoundsLeft: stat.outOfBoundsLeft,
+                    outOfBoundsRight: stat.outOfBoundsRight,
+                    outOfBoundsLong: stat.outOfBoundsLong,
+                    outOfBoundsShort: stat.outOfBoundsShort,
+                    hazardLeft: stat.hazardLeft,
+                    hazardRight: stat.hazardRight,
+                    hazardLong: stat.hazardLong,
+                    hazardShort: stat.hazardShort
                 )
             )
         }
@@ -377,6 +385,73 @@ public actor RoundsRepositoryLive: RoundsRepository {
         modelContext.delete(local)
         try modelContext.save()
     }
+
+    public func backfillHoleStatsToCloud() async throws -> Int {
+        guard let supabase else {
+            throw RoundsRepositoryError.remoteUnavailable
+        }
+        // Only rounds that already landed in Supabase (serverId != nil)
+        // are candidates — rows without serverId still have an outbox
+        // insert entry that will carry the full payload when it drains.
+        let descriptor = FetchDescriptor<LocalRound>(
+            predicate: #Predicate { $0.isDraft == false }
+        )
+        let locals = try modelContext.fetch(descriptor)
+
+        // Collect (external id, patch) pairs across every round + hole.
+        // The schema's UNIQUE index on `hole_stat_external_id` is
+        // partial (`WHERE hole_stat_external_id IS NOT NULL`), so
+        // Postgres rejects it as an `ON CONFLICT` target — we PATCH
+        // each row by external id instead of upserting.
+        var patches: [(externalId: String, patch: HoleStatPatch)] = []
+        for local in locals where local.serverId != nil {
+            for stat in fetchHoleStats(for: local.externalId) {
+                patches.append((
+                    externalId: stat.externalId.uuidString,
+                    patch: HoleStatPatch(
+                        teeShot: stat.teeShot,
+                        approach: stat.approach,
+                        teeClub: stat.teeClub,
+                        approachClub: stat.approachClub,
+                        outOfBoundsCount: stat.outOfBoundsCount,
+                        penaltyStrokes: stat.penaltyStrokes,
+                        hazardCount: stat.hazardCount,
+                        greenInReg: stat.greenInReg,
+                        threePutt: stat.threePutt,
+                        girOpportunity: true,
+                        fairwayOpportunity: stat.par >= 4,
+                        upAndDownSuccess: stat.upAndDownSuccess,
+                        sandSaveSuccess: stat.sandSaveSuccess,
+                        puttDistances: stat.puttDistances,
+                        teeShotDistance: stat.teeShotDistance,
+                        approachDistance: stat.approachDistance,
+                        pinPosition: stat.pinPosition,
+                        outOfBoundsLeft: stat.outOfBoundsLeft,
+                        outOfBoundsRight: stat.outOfBoundsRight,
+                        outOfBoundsLong: stat.outOfBoundsLong,
+                        outOfBoundsShort: stat.outOfBoundsShort,
+                        hazardLeft: stat.hazardLeft,
+                        hazardRight: stat.hazardRight,
+                        hazardLong: stat.hazardLong,
+                        hazardShort: stat.hazardShort
+                    )
+                ))
+            }
+        }
+        guard !patches.isEmpty else { return 0 }
+        for entry in patches {
+            do {
+                try await supabase
+                    .from("hole_stats")
+                    .update(entry.patch, returning: .minimal)
+                    .eq("hole_stat_external_id", value: entry.externalId)
+                    .execute()
+            } catch {
+                throw RoundsRepositoryError.backfillFailed(error.localizedDescription)
+            }
+        }
+        return patches.count
+    }
 }
 
 // MARK: - Internals
@@ -439,11 +514,24 @@ private extension RoundsRepositoryLive {
         )
     }
 
+    /// Per-tee, per-hole yardage map. Used to feed `SGCalculator` with
+    /// the hole length each shot started from. One global fetch, then a
+    /// nested-dictionary lookup keyed `[teeExternalId][holeNumber]`.
+    private func teeHoleYardageLookup() throws -> [UUID: [Int: Int]] {
+        let teeHoles = try modelContext.fetch(FetchDescriptor<LocalTeeHole>())
+        var byTee: [UUID: [Int: Int]] = [:]
+        for th in teeHoles {
+            byTee[th.teeExternalId, default: [:]][th.holeNumber] = th.yardage
+        }
+        return byTee
+    }
+
     private func makeCompleted(
         from local: LocalRound,
         holeStats: [LocalHoleStat],
         courseName: String? = nil,
-        teeLookup: TeeLookup
+        teeLookup: TeeLookup,
+        yardages: [UUID: [Int: Int]]
     ) -> CompletedRound {
         let holesPlayed = HolesPlayed(rawValue: local.holesPlayed) ?? .eighteen
         let stats: [HoleStat] = holeStats.map { stat in
@@ -472,16 +560,31 @@ private extension RoundsRepositoryLive {
                 outOfBoundsCount: stat.outOfBoundsCount,
                 hazardCount: stat.hazardCount,
                 upAndDownSuccess: stat.upAndDownSuccess ?? false,
-                sandSaveSuccess: stat.sandSaveSuccess ?? false
+                sandSaveSuccess: stat.sandSaveSuccess ?? false,
+                teeShotDistance: stat.teeShotDistance,
+                approachDistance: stat.approachDistance,
+                puttDistances: stat.puttDistances,
+                teeClub: stat.teeClub,
+                approachClub: stat.approachClub,
+                pinPosition: stat.pinPosition,
+                outOfBoundsLeft: stat.outOfBoundsLeft,
+                outOfBoundsRight: stat.outOfBoundsRight,
+                outOfBoundsLong: stat.outOfBoundsLong,
+                outOfBoundsShort: stat.outOfBoundsShort,
+                hazardLeft: stat.hazardLeft,
+                hazardRight: stat.hazardRight,
+                hazardLong: stat.hazardLong,
+                hazardShort: stat.hazardShort
             )
         }
         let par = stats.reduce(0) { $0 + $1.par }
         let roundType = local.roundType.flatMap(RoundType.init(rawValue:))
-        let roundFormat = local.roundFormat.flatMap(RoundFormat.init(rawValue:))
+        let roundFormat = local.roundFormat.flatMap(Mappings.roundFormat(fromUILabel:))
         let conditions = local.conditions.map(Mappings.conditions(fromCSV:)) ?? []
         let walkingVsRiding = local.walkingVsRiding.flatMap(WalkingVsRiding.init(rawValue:))
         let teeName = local.teeExternalId.flatMap { teeLookup.nameByExternalId[$0] }
         let teeCategory = local.teeExternalId.flatMap { teeLookup.categoryByExternalId[$0] }
+        let sg = computeSG(local: local, localStats: holeStats, stats: stats, yardages: yardages)
         return CompletedRound(
             id: local.externalId,
             datePlayed: local.datePlayed,
@@ -491,7 +594,8 @@ private extension RoundsRepositoryLive {
             courseRating: nil,
             slope: nil,
             holeStats: stats,
-            sgTotals: nil,
+            sgTotals: sg.totals,
+            sgHoles: sg.holes,
             roundType: roundType,
             roundFormat: roundFormat,
             conditions: conditions,
@@ -501,6 +605,47 @@ private extension RoundsRepositoryLive {
             teeCategory: teeCategory,
             walkingVsRiding: walkingVsRiding
         )
+    }
+
+    /// Strokes Gained for a finished round, if every played hole carries
+    /// the minimum data the calculator needs: a tee yardage from
+    /// `LocalTeeHole` + recorded putt distances. Rounds logged before
+    /// distance capture was wired (v1 imports) fail this gate and get
+    /// `nil` SG; the detail view renders its placeholder card in that case.
+    ///
+    /// `SGCalculator` itself is tolerant of partial per-shot data
+    /// (missing distances → nil per-shot SG, aggregates skip nils), so
+    /// the gate here is a UX choice — distinguish "round had no SG
+    /// logging" from "round was a flat scratch performance".
+    private func computeSG(
+        local: LocalRound,
+        localStats: [LocalHoleStat],
+        stats: [HoleStat],
+        yardages: [UUID: [Int: Int]]
+    ) -> (totals: SGTotals?, holes: [SGTotals]?) {
+        guard !localStats.isEmpty, !stats.isEmpty else { return (nil, nil) }
+        guard
+            let teeExternalId = local.teeExternalId,
+            let perHoleYardage = yardages[teeExternalId]
+        else { return (nil, nil) }
+        let canCompute = localStats.allSatisfy { stat in
+            perHoleYardage[stat.holeNumber] != nil && stat.puttDistances != nil
+        }
+        guard canCompute else { return (nil, nil) }
+        let inputs: [HoleSGInput] = zip(localStats, stats).map { localStat, domainStat in
+            HoleSGInput(
+                par: domainStat.par,
+                yardage: perHoleYardage[localStat.holeNumber] ?? 0,
+                teeShotLie: domainStat.teeShotLie,
+                teeShotDistance: localStat.teeShotDistance,
+                approachLie: domainStat.approachLie,
+                approachDistance: localStat.approachDistance,
+                puttDistancesFeet: localStat.puttDistances,
+                strokes: domainStat.strokes
+            )
+        }
+        let result = SGCalculator.compute(holes: inputs)
+        return (result.totals, result.holes.map(\.totals))
     }
 
     private func makeRoundOutboxBody(
@@ -555,6 +700,23 @@ private extension RoundsRepositoryLive {
     static let encoder = SupabaseConfig.encoder
 }
 
-public enum RoundsRepositoryError: Error, Sendable, Equatable {
+public enum RoundsRepositoryError: Error, LocalizedError, Sendable, Equatable {
     case notFound(UUID)
+    /// Repository wasn't constructed with a Supabase client (e.g. in-memory
+    /// preview path). The operation requires a network round-trip.
+    case remoteUnavailable
+    /// A retroactive backfill push failed. The wrapped string is the
+    /// underlying error's `localizedDescription` for surface in UI.
+    case backfillFailed(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case let .notFound(id):
+            "Round \(id.uuidString.prefix(8)) not found"
+        case .remoteUnavailable:
+            "Supabase client not configured on this repository"
+        case let .backfillFailed(message):
+            "Backfill push failed: \(message)"
+        }
+    }
 }

@@ -11,7 +11,7 @@ import SwiftUI
 struct ScoreTimelineChart: View {
     let values: [Int]
     /// Inverse mode draws against an ink ground (bone-cream paint).
-    var inverse: Bool = false
+    var inverse = false
 
     var body: some View {
         Canvas { ctx, size in

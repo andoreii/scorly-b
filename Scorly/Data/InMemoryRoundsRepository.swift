@@ -25,7 +25,10 @@ final class InMemoryRoundsRepository: RoundsRepository, @unchecked Sendable {
         Array(rounds.filter { $0.courseExternalId == forCourseExternalId }.prefix(limit))
     }
 
-    func refreshFromRemote(limit _: Int) async throws {}
+    func refreshFromRemote(limit _: Int) async throws -> Int {
+        0
+    }
+
     func save(_: RoundDraft) async throws {}
     func update(_: RoundDraft) async throws {}
     func delete(id _: UUID) async throws {}
@@ -52,5 +55,9 @@ final class InMemoryRoundsRepository: RoundsRepository, @unchecked Sendable {
             }
         }
         return best
+    }
+
+    func backfillHoleStatsToCloud() async throws -> Int {
+        0
     }
 }

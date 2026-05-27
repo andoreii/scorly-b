@@ -359,6 +359,14 @@ public final class RoundPlayState {
             obCount = teeDecoded.ob + approachDecoded.ob
             hazardCount = teeDecoded.hazard + approachDecoded.hazard
         }
+        // Collect only the entries the player actually logged. A nil
+        // value in `puttDistances` means "this putt happened but no
+        // distance was recorded"; the SG calculator wants a clean
+        // `[Int]` so we filter. A wholly empty list still passes
+        // through as an empty `[]` — distinct from "never opened the
+        // putting sheet" (nil).
+        let loggedPutts = entry.puttDistances.compactMap { $0 }
+        let puttDistances: [Int]? = entry.puttDistances.isEmpty ? nil : loggedPutts
         return HoleStat(
             par: hole.par,
             strokes: strokes,
@@ -369,7 +377,13 @@ public final class RoundPlayState {
             outOfBoundsCount: obCount,
             hazardCount: hazardCount,
             upAndDownSuccess: entry.upAndDownOverride ?? false,
-            sandSaveSuccess: entry.sandSaveOverride ?? false
+            sandSaveSuccess: entry.sandSaveOverride ?? false,
+            teeShotDistance: entry.teeShotDistance,
+            approachDistance: entry.approachDistance,
+            puttDistances: puttDistances,
+            teeClub: entry.teeClub,
+            approachClub: entry.approachClub,
+            pinPosition: entry.pinPosition
         )
     }
 

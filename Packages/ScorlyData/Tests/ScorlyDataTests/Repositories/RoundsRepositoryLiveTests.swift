@@ -236,6 +236,43 @@ struct RoundsRepositoryLiveTests {
         #expect(bests[courseB] == nil)
     }
 
+    @Test("fetchAllCompleted normalizes stored format aliases for aggregate filters")
+    func fetchNormalizesStoredFormatAliases() async throws {
+        let fixture = try Fixture()
+        let context = ModelContext(fixture.container)
+
+        for (index, rawFormat) in ["Stroke Play", "Match Play"].enumerated() {
+            let round = LocalRound(
+                externalId: UUID(),
+                userId: fixture.userId,
+                courseExternalId: UUID(),
+                teeExternalId: nil,
+                datePlayed: Date(timeIntervalSince1970: 1_700_000_000 + TimeInterval(index)),
+                holesPlayed: HolesPlayed.eighteen.rawValue,
+                roundType: nil,
+                roundFormat: rawFormat,
+                conditions: nil,
+                temperature: nil,
+                walkingVsRiding: nil,
+                startedAt: nil,
+                finishedAt: nil,
+                mentalState: nil,
+                notes: nil,
+                totalScore: 82,
+                whsDifferential: nil,
+                createdAt: Date(),
+                isDraft: false
+            )
+            context.insert(round)
+        }
+        try context.save()
+
+        let rounds = try await fixture.repository.fetchAllCompleted()
+        #expect(rounds.eligible(for: .default).count == 2)
+        #expect(rounds.contains(where: { $0.roundFormat == .stroke }))
+        #expect(rounds.contains(where: { $0.roundFormat == .match }))
+    }
+
     @Test("Par-3 GIR is recovered when legacy v2 row stored on-green pick on approach")
     func par3GIRRecoveredFromApproachOnlyRow() async throws {
         let fixture = try Fixture()
@@ -290,7 +327,184 @@ struct RoundsRepositoryLiveTests {
         #expect(fetched.holeStats.first?.approachLie == nil)
     }
 
+    @Test("save persists per-hole detail fields (clubs, pin, derived flags) locally")
+    func savePersistsAllHoleDetailLocally() async throws {
+        let fixture = try Fixture()
+        let draft = RoundDraft(
+            id: UUID(),
+            externalId: UUID(),
+            userId: fixture.userId,
+            courseId: UUID(),
+            datePlayed: Date(timeIntervalSince1970: 1_700_000_000),
+            holesPlayed: .eighteen,
+            totalScore: 4,
+            createdAt: Date(),
+            holeStats: [
+                HoleStat(
+                    par: 4,
+                    strokes: 4,
+                    putts: 2,
+                    teeShotLie: .fairway,
+                    approachLie: .green,
+                    teeShotDistance: 240,
+                    approachDistance: 160,
+                    puttDistances: [18, 3],
+                    teeClub: "Driver",
+                    approachClub: "7 iron",
+                    pinPosition: "Middle"
+                ),
+            ]
+        )
+        try await fixture.repository.save(draft)
+
+        // Verify the SwiftData row carries the new detail.
+        let context = ModelContext(fixture.container)
+        let saved = try #require(try context.fetch(FetchDescriptor<LocalHoleStat>()).first)
+        #expect(saved.teeClub == "Driver")
+        #expect(saved.approachClub == "7 iron")
+        #expect(saved.pinPosition == "Middle")
+        #expect(saved.greenInReg == true)
+        #expect(saved.threePutt == false)
+        #expect(saved.teeShotDistance == 240)
+        #expect(saved.approachDistance == 160)
+        #expect(saved.puttDistances == [18, 3])
+
+        // Verify the outbox payload carries everything we'll push to Supabase.
+        let outboxEntries = try context.fetch(FetchDescriptor<OutboxEntry>())
+        let roundEntry = try #require(outboxEntries.first { $0.aggregate == OutboxAggregate.round.rawValue })
+        let body = try SupabaseConfig.decoder.decode(RoundOutboxBody.self, from: roundEntry.payload)
+        let payload = try #require(body.holeStats.first)
+        #expect(payload.teeClub == "Driver")
+        #expect(payload.approachClub == "7 iron")
+        #expect(payload.pinPosition == "Middle")
+        #expect(payload.greenInReg == true)
+        #expect(payload.threePutt == false)
+        #expect(payload.girOpportunity == true)
+        #expect(payload.fairwayOpportunity == true)
+        #expect(payload.teeShotDistance == 240)
+        #expect(payload.approachDistance == 160)
+        #expect(payload.puttDistances == [18, 3])
+    }
+
+    @Test("fetchAllCompleted populates sgTotals + sgHoles when distances + yardages are present")
+    func fetchPopulatesSGWhenDataPresent() async throws {
+        let fixture = try Fixture()
+        let courseId = UUID()
+        let teeId = UUID()
+        // Seed the tee-hole yardage table the SG path reads from.
+        let context = ModelContext(fixture.container)
+        for holeNumber in 1...3 {
+            context.insert(LocalTeeHole(
+                externalId: UUID(),
+                teeExternalId: teeId,
+                holeNumber: holeNumber,
+                yardage: 400
+            ))
+        }
+        try context.save()
+        let draft = RoundDraft(
+            id: UUID(),
+            externalId: UUID(),
+            userId: fixture.userId,
+            courseId: courseId,
+            teeId: teeId,
+            datePlayed: Date(timeIntervalSince1970: 1_700_000_000),
+            holesPlayed: .eighteen,
+            totalScore: 12,
+            createdAt: Date(),
+            holeStats: [
+                HoleStat(
+                    par: 4,
+                    strokes: 4,
+                    putts: 2,
+                    teeShotLie: .fairway,
+                    approachLie: .green,
+                    teeShotDistance: 240,
+                    approachDistance: 160,
+                    puttDistances: [18, 3]
+                ),
+                HoleStat(
+                    par: 4,
+                    strokes: 5,
+                    putts: 2,
+                    teeShotLie: .roughLeft,
+                    approachLie: .green,
+                    teeShotDistance: 220,
+                    approachDistance: 180,
+                    puttDistances: [22, 4]
+                ),
+                HoleStat(
+                    par: 3,
+                    strokes: 3,
+                    putts: 2,
+                    teeShotLie: .green,
+                    teeShotDistance: 170,
+                    puttDistances: [25, 6]
+                ),
+            ]
+        )
+        try await fixture.repository.save(draft)
+        let rounds = try await fixture.repository.fetchAllCompleted()
+        let round = try #require(rounds.first)
+        let totals = try #require(round.sgTotals)
+        let holes = try #require(round.sgHoles)
+        let firstHole = try #require(round.holeStats.first)
+        #expect(firstHole.teeShotDistance == 240)
+        #expect(firstHole.approachDistance == 160)
+        #expect(firstHole.puttDistances == [18, 3])
+        #expect(holes.count == round.holeStats.count)
+        // The actual numeric SG values come from SGCalculator + the
+        // benchmark table; what we're asserting here is that the
+        // populate-when-data-present contract holds. A non-trivial total
+        // catches the case where every shot returned nil SG.
+        let nonZeroHoles = holes.filter { decimalToDouble($0.total) != 0 }
+        #expect(!nonZeroHoles.isEmpty)
+        // Total = sum of category contributions (the calc invariant).
+        let summed = totals.ott + totals.app + totals.arg + totals.putt
+        #expect(summed == totals.total)
+    }
+
+    @Test("fetchAllCompleted leaves sgTotals + sgHoles nil when yardages are missing")
+    func fetchSkipsSGWithoutYardages() async throws {
+        let fixture = try Fixture()
+        // No LocalTeeHole rows inserted. Saving with a teeId should
+        // still succeed, but SG must remain nil because the calculator
+        // can't determine hole length.
+        let draft = RoundDraft(
+            id: UUID(),
+            externalId: UUID(),
+            userId: fixture.userId,
+            courseId: UUID(),
+            teeId: UUID(),
+            datePlayed: Date(timeIntervalSince1970: 1_700_000_000),
+            holesPlayed: .eighteen,
+            totalScore: 4,
+            createdAt: Date(),
+            holeStats: [
+                HoleStat(
+                    par: 4,
+                    strokes: 4,
+                    putts: 2,
+                    teeShotLie: .fairway,
+                    approachLie: .green,
+                    teeShotDistance: 240,
+                    approachDistance: 160,
+                    puttDistances: [18, 3]
+                ),
+            ]
+        )
+        try await fixture.repository.save(draft)
+        let rounds = try await fixture.repository.fetchAllCompleted()
+        let round = try #require(rounds.first)
+        #expect(round.sgTotals == nil)
+        #expect(round.sgHoles == nil)
+    }
+
     // MARK: - Helpers
+
+    private func decimalToDouble(_ value: Decimal) -> Double {
+        NSDecimalNumber(decimal: value).doubleValue
+    }
 
     private func makeDraft(
         userId: UUID,

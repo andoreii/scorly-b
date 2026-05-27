@@ -113,8 +113,8 @@ public struct CourseEditorView: View {
 
     private var tagline: some View {
         Text(draft.isEditingExisting
-                ? "EDIT METADATA · HOLES + TEES PRESERVED"
-                : "NAME · LOCATION · NOTES · STANDARD PAR 72")
+            ? "EDIT METADATA · HOLES + TEES PRESERVED"
+            : "NAME · LOCATION · NOTES · STANDARD PAR 72")
             .font(BrutalistType.monoLabel)
             .kerning(1.0)
             .foregroundStyle(BrutalistColor.muted)

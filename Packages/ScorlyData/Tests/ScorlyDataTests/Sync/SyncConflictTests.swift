@@ -104,6 +104,118 @@ struct SyncConflictTests {
         #expect(after?.title == "Local fresher") // Unchanged.
     }
 
+    @Test("Limited round reconciliation persists the pulled hole statistics")
+    func limitedRoundReconciliationHydratesHoleStats() async throws {
+        let fixture = try Fixture()
+        let userId = UUID()
+        let courseExternalId = UUID()
+        let teeExternalId = UUID()
+        let roundExternalId = UUID()
+        let statExternalId = UUID()
+        let context = ModelContext(fixture.container)
+        context.insert(
+            LocalCourse(
+                serverId: 12,
+                externalId: courseExternalId,
+                userId: userId,
+                name: "Taiyo Golf Course",
+                createdAt: Date()
+            )
+        )
+        context.insert(
+            LocalTee(
+                serverId: 19,
+                externalId: teeExternalId,
+                courseExternalId: courseExternalId,
+                name: "Blue"
+            )
+        )
+        context.insert(
+            LocalHole(
+                serverId: 101,
+                externalId: UUID(),
+                courseExternalId: courseExternalId,
+                number: 1,
+                par: 5
+            )
+        )
+        try context.save()
+
+        let row = RoundRow(
+            roundId: 33,
+            userId: userId,
+            courseId: 12,
+            teeId: 19,
+            datePlayed: Date(timeIntervalSince1970: 1_700_000_000),
+            holesPlayed: "18",
+            roundType: "Casual",
+            roundFormat: "Stroke Play",
+            conditions: "Sunny",
+            temperature: 80,
+            walkingVsRiding: "Walking",
+            startedAt: nil,
+            finishedAt: nil,
+            mentalState: 8,
+            roundExternalId: roundExternalId.uuidString,
+            notes: nil,
+            whsDifferential: Decimal(string: "10.3"),
+            totalScore: 82,
+            createdAt: Date(),
+            holeStats: [
+                HoleStatRow(
+                    holeStatId: 44,
+                    roundId: 33,
+                    holeNumber: 1,
+                    strokes: 6,
+                    putts: 2,
+                    teeShot: "Fairway",
+                    approach: "Short",
+                    teeClub: "Driver",
+                    approachClub: "7i",
+                    outOfBoundsCount: 0,
+                    penaltyStrokes: 0,
+                    hazardCount: 0,
+                    greenInReg: false,
+                    threePutt: false,
+                    girOpportunity: true,
+                    fairwayOpportunity: true,
+                    upAndDownSuccess: false,
+                    sandSaveSuccess: false,
+                    puttDistances: [16, 2],
+                    teeShotDistance: 244,
+                    approachDistance: 164,
+                    pinPosition: "Middle",
+                    holeStatExternalId: statExternalId.uuidString,
+                    createdAt: Date(),
+                    outOfBoundsLeft: 0,
+                    outOfBoundsRight: 0,
+                    outOfBoundsLong: 0,
+                    outOfBoundsShort: 0,
+                    hazardLeft: 0,
+                    hazardRight: 0,
+                    hazardLong: 0,
+                    hazardShort: 0
+                ),
+            ],
+            players: nil
+        )
+
+        let changed = try await fixture.engine.reconcileRounds([row], localUserId: userId)
+
+        #expect(changed == 1)
+        let pulledRound = try #require(
+            try ModelContext(fixture.container).fetch(FetchDescriptor<LocalRound>()).first
+        )
+        #expect(pulledRound.courseExternalId == courseExternalId)
+        #expect(pulledRound.teeExternalId == teeExternalId)
+        let pulledStat = try #require(
+            try ModelContext(fixture.container).fetch(FetchDescriptor<LocalHoleStat>()).first
+        )
+        #expect(pulledStat.roundExternalId == roundExternalId)
+        #expect(pulledStat.par == 5)
+        #expect(pulledStat.puttDistances == [16, 2])
+    }
+
     struct Fixture {
         let container: ModelContainer
         let remote: InMemoryRemoteSyncAPI

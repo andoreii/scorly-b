@@ -259,12 +259,30 @@ public struct LiveSupabaseRemoteSyncAPI: RemoteSyncAPI {
                     putts: stat.putts,
                     teeShot: stat.teeShot,
                     approach: stat.approach,
+                    teeClub: stat.teeClub,
+                    approachClub: stat.approachClub,
                     outOfBoundsCount: stat.outOfBoundsCount,
                     penaltyStrokes: stat.penaltyStrokes,
                     hazardCount: stat.hazardCount,
+                    greenInReg: stat.greenInReg,
+                    threePutt: stat.threePutt,
+                    girOpportunity: stat.girOpportunity,
+                    fairwayOpportunity: stat.fairwayOpportunity,
                     upAndDownSuccess: stat.upAndDownSuccess,
                     sandSaveSuccess: stat.sandSaveSuccess,
-                    holeStatExternalId: stat.holeStatExternalId
+                    puttDistances: stat.puttDistances,
+                    teeShotDistance: stat.teeShotDistance,
+                    approachDistance: stat.approachDistance,
+                    pinPosition: stat.pinPosition,
+                    holeStatExternalId: stat.holeStatExternalId,
+                    outOfBoundsLeft: stat.outOfBoundsLeft,
+                    outOfBoundsRight: stat.outOfBoundsRight,
+                    outOfBoundsLong: stat.outOfBoundsLong,
+                    outOfBoundsShort: stat.outOfBoundsShort,
+                    hazardLeft: stat.hazardLeft,
+                    hazardRight: stat.hazardRight,
+                    hazardLong: stat.hazardLong,
+                    hazardShort: stat.hazardShort
                 )
             }
             do {

@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import ScorlyDesignSystem
+import ScorlyDomain
 import ScorlyFeatureCourses
 import ScorlyFeatureRound
 import SwiftUI
@@ -20,10 +21,15 @@ final class AppFlow {
         case play(RoundPlayState)
         case confirm(RoundPlayState)
         case courseEditor(CourseDraft?)
+        /// Round Detail. The season list is metadata passed through to
+        /// the destination view (powers the SG card's vs-season
+        /// comparison); it intentionally does not participate in screen
+        /// identity for `flow.go` deduping.
+        case roundDetail(CompletedRound, season: [CompletedRound])
 
-        // Equality compares only the case identity, not the associated
-        // state. Two `.play` entries are "the same screen" for the
-        // purposes of `flow.go` deduping.
+        /// Equality compares only the case identity, not the associated
+        /// state. Two `.play` entries are "the same screen" for the
+        /// purposes of `flow.go` deduping.
         var caseTag: Int {
             switch self {
             case .home: 0
@@ -35,6 +41,7 @@ final class AppFlow {
             case .settings: 6
             case .courses: 7
             case .courseEditor: 8
+            case .roundDetail: 9
             }
         }
 
@@ -48,7 +55,9 @@ final class AppFlow {
     /// forward slide, popping = back slide).
     private(set) var stack: [Screen] = [.home]
 
-    var current: Screen { stack.last ?? .home }
+    var current: Screen {
+        stack.last ?? .home
+    }
 
     /// Forward navigation. Pushes the screen.
     func go(_ screen: Screen) {

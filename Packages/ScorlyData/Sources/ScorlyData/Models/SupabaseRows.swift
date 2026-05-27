@@ -3,7 +3,12 @@
 // state that a non-optional Bool can't express. Disabling the lint here
 // is the right tradeoff. Snake-case keys live on the wire, not on these
 // types — the JSON coder bridges them.
-// swiftlint:disable discouraged_optional_boolean
+//
+// file_length: this file is a deliberate single-source-of-truth catalog
+// for the Supabase row shapes — splitting by table would scatter the
+// schema across N files and make schema-evolution review harder. We
+// take the file-length carve-out instead.
+// swiftlint:disable discouraged_optional_boolean file_length
 
 import Foundation
 import ScorlyDomain
@@ -323,12 +328,31 @@ public struct RoundOutboxBody: Sendable, Codable, Equatable {
         public let putts: Int
         public let teeShot: String?
         public let approach: String?
+        public let teeClub: String?
+        public let approachClub: String?
         public let outOfBoundsCount: Int
         public let penaltyStrokes: Int
         public let hazardCount: Int
+        public let greenInReg: Bool?
+        public let threePutt: Bool?
+        public let girOpportunity: Bool?
+        public let fairwayOpportunity: Bool?
         public let upAndDownSuccess: Bool?
         public let sandSaveSuccess: Bool?
+        public let puttDistances: [Int]?
+        public let teeShotDistance: Int?
+        public let approachDistance: Int?
+        public let pinPosition: String?
+        public let outOfBoundsLeft: Int
+        public let outOfBoundsRight: Int
+        public let outOfBoundsLong: Int
+        public let outOfBoundsShort: Int
+        public let hazardLeft: Int
+        public let hazardRight: Int
+        public let hazardLong: Int
+        public let hazardShort: Int
 
+        // swiftlint:disable:next function_default_parameter_at_end
         public init(
             holeStatExternalId: String,
             holeNumber: Int,
@@ -336,11 +360,29 @@ public struct RoundOutboxBody: Sendable, Codable, Equatable {
             putts: Int,
             teeShot: String? = nil,
             approach: String? = nil,
+            teeClub: String? = nil,
+            approachClub: String? = nil,
             outOfBoundsCount: Int = 0,
             penaltyStrokes: Int = 0,
             hazardCount: Int = 0,
+            greenInReg: Bool? = nil,
+            threePutt: Bool? = nil,
+            girOpportunity: Bool? = nil,
+            fairwayOpportunity: Bool? = nil,
             upAndDownSuccess: Bool? = nil,
-            sandSaveSuccess: Bool? = nil
+            sandSaveSuccess: Bool? = nil,
+            puttDistances: [Int]? = nil,
+            teeShotDistance: Int? = nil,
+            approachDistance: Int? = nil,
+            pinPosition: String? = nil,
+            outOfBoundsLeft: Int = 0,
+            outOfBoundsRight: Int = 0,
+            outOfBoundsLong: Int = 0,
+            outOfBoundsShort: Int = 0,
+            hazardLeft: Int = 0,
+            hazardRight: Int = 0,
+            hazardLong: Int = 0,
+            hazardShort: Int = 0
         ) {
             self.holeStatExternalId = holeStatExternalId
             self.holeNumber = holeNumber
@@ -348,11 +390,29 @@ public struct RoundOutboxBody: Sendable, Codable, Equatable {
             self.putts = putts
             self.teeShot = teeShot
             self.approach = approach
+            self.teeClub = teeClub
+            self.approachClub = approachClub
             self.outOfBoundsCount = outOfBoundsCount
             self.penaltyStrokes = penaltyStrokes
             self.hazardCount = hazardCount
+            self.greenInReg = greenInReg
+            self.threePutt = threePutt
+            self.girOpportunity = girOpportunity
+            self.fairwayOpportunity = fairwayOpportunity
             self.upAndDownSuccess = upAndDownSuccess
             self.sandSaveSuccess = sandSaveSuccess
+            self.puttDistances = puttDistances
+            self.teeShotDistance = teeShotDistance
+            self.approachDistance = approachDistance
+            self.pinPosition = pinPosition
+            self.outOfBoundsLeft = outOfBoundsLeft
+            self.outOfBoundsRight = outOfBoundsRight
+            self.outOfBoundsLong = outOfBoundsLong
+            self.outOfBoundsShort = outOfBoundsShort
+            self.hazardLeft = hazardLeft
+            self.hazardRight = hazardRight
+            self.hazardLong = hazardLong
+            self.hazardShort = hazardShort
         }
     }
 
@@ -427,6 +487,14 @@ public struct HoleStatRow: Sendable, Codable, Equatable {
     public let pinPosition: String?
     public let holeStatExternalId: String?
     public let createdAt: Date
+    public let outOfBoundsLeft: Int?
+    public let outOfBoundsRight: Int?
+    public let outOfBoundsLong: Int?
+    public let outOfBoundsShort: Int?
+    public let hazardLeft: Int?
+    public let hazardRight: Int?
+    public let hazardLong: Int?
+    public let hazardShort: Int?
 }
 
 public struct HoleStatInsert: Sendable, Codable, Equatable {
@@ -452,6 +520,14 @@ public struct HoleStatInsert: Sendable, Codable, Equatable {
     public let approachDistance: Int?
     public let pinPosition: String?
     public let holeStatExternalId: String
+    public let outOfBoundsLeft: Int
+    public let outOfBoundsRight: Int
+    public let outOfBoundsLong: Int
+    public let outOfBoundsShort: Int
+    public let hazardLeft: Int
+    public let hazardRight: Int
+    public let hazardLong: Int
+    public let hazardShort: Int
 
     public init(
         roundId: Int,
@@ -475,7 +551,15 @@ public struct HoleStatInsert: Sendable, Codable, Equatable {
         teeShotDistance: Int? = nil,
         approachDistance: Int? = nil,
         pinPosition: String? = nil,
-        holeStatExternalId: String
+        holeStatExternalId: String,
+        outOfBoundsLeft: Int = 0,
+        outOfBoundsRight: Int = 0,
+        outOfBoundsLong: Int = 0,
+        outOfBoundsShort: Int = 0,
+        hazardLeft: Int = 0,
+        hazardRight: Int = 0,
+        hazardLong: Int = 0,
+        hazardShort: Int = 0
     ) {
         self.roundId = roundId
         self.holeNumber = holeNumber
@@ -499,6 +583,105 @@ public struct HoleStatInsert: Sendable, Codable, Equatable {
         self.approachDistance = approachDistance
         self.pinPosition = pinPosition
         self.holeStatExternalId = holeStatExternalId
+        self.outOfBoundsLeft = outOfBoundsLeft
+        self.outOfBoundsRight = outOfBoundsRight
+        self.outOfBoundsLong = outOfBoundsLong
+        self.outOfBoundsShort = outOfBoundsShort
+        self.hazardLeft = hazardLeft
+        self.hazardRight = hazardRight
+        self.hazardLong = hazardLong
+        self.hazardShort = hazardShort
+    }
+}
+
+/// Partial-update payload for `hole_stats`. Used by the one-shot
+/// backfill to PATCH already-pushed rows with the per-hole detail that
+/// the original insert didn't carry (distances, clubs, pin, derived
+/// flags). Identified by `hole_stat_external_id` in the WHERE clause —
+/// not part of the body.
+///
+/// `Insert`-only columns (`round_id`, `hole_number`, `strokes`,
+/// `putts`) are intentionally omitted: they're already correct on the
+/// row and re-sending them is noise.
+public struct HoleStatPatch: Sendable, Codable, Equatable {
+    public let teeShot: String?
+    public let approach: String?
+    public let teeClub: String?
+    public let approachClub: String?
+    public let outOfBoundsCount: Int
+    public let penaltyStrokes: Int
+    public let hazardCount: Int
+    public let greenInReg: Bool?
+    public let threePutt: Bool?
+    public let girOpportunity: Bool?
+    public let fairwayOpportunity: Bool?
+    public let upAndDownSuccess: Bool?
+    public let sandSaveSuccess: Bool?
+    public let puttDistances: [Int]?
+    public let teeShotDistance: Int?
+    public let approachDistance: Int?
+    public let pinPosition: String?
+    public let outOfBoundsLeft: Int
+    public let outOfBoundsRight: Int
+    public let outOfBoundsLong: Int
+    public let outOfBoundsShort: Int
+    public let hazardLeft: Int
+    public let hazardRight: Int
+    public let hazardLong: Int
+    public let hazardShort: Int
+
+    public init(
+        teeShot: String? = nil,
+        approach: String? = nil,
+        teeClub: String? = nil,
+        approachClub: String? = nil,
+        outOfBoundsCount: Int = 0,
+        penaltyStrokes: Int = 0,
+        hazardCount: Int = 0,
+        greenInReg: Bool? = nil,
+        threePutt: Bool? = nil,
+        girOpportunity: Bool? = nil,
+        fairwayOpportunity: Bool? = nil,
+        upAndDownSuccess: Bool? = nil,
+        sandSaveSuccess: Bool? = nil,
+        puttDistances: [Int]? = nil,
+        teeShotDistance: Int? = nil,
+        approachDistance: Int? = nil,
+        pinPosition: String? = nil,
+        outOfBoundsLeft: Int = 0,
+        outOfBoundsRight: Int = 0,
+        outOfBoundsLong: Int = 0,
+        outOfBoundsShort: Int = 0,
+        hazardLeft: Int = 0,
+        hazardRight: Int = 0,
+        hazardLong: Int = 0,
+        hazardShort: Int = 0
+    ) {
+        self.teeShot = teeShot
+        self.approach = approach
+        self.teeClub = teeClub
+        self.approachClub = approachClub
+        self.outOfBoundsCount = outOfBoundsCount
+        self.penaltyStrokes = penaltyStrokes
+        self.hazardCount = hazardCount
+        self.greenInReg = greenInReg
+        self.threePutt = threePutt
+        self.girOpportunity = girOpportunity
+        self.fairwayOpportunity = fairwayOpportunity
+        self.upAndDownSuccess = upAndDownSuccess
+        self.sandSaveSuccess = sandSaveSuccess
+        self.puttDistances = puttDistances
+        self.teeShotDistance = teeShotDistance
+        self.approachDistance = approachDistance
+        self.pinPosition = pinPosition
+        self.outOfBoundsLeft = outOfBoundsLeft
+        self.outOfBoundsRight = outOfBoundsRight
+        self.outOfBoundsLong = outOfBoundsLong
+        self.outOfBoundsShort = outOfBoundsShort
+        self.hazardLeft = hazardLeft
+        self.hazardRight = hazardRight
+        self.hazardLong = hazardLong
+        self.hazardShort = hazardShort
     }
 }
 
@@ -564,4 +747,4 @@ public struct GoalUpdate: Sendable, Codable, Equatable {
     }
 }
 
-// swiftlint:enable discouraged_optional_boolean
+// swiftlint:enable discouraged_optional_boolean file_length

@@ -133,14 +133,8 @@ public struct BrutalistAuthView: View {
                     .font(BrutalistType.monoLabel)
                     .kerning(1.4)
                     .foregroundStyle(BrutalistColor.muted)
-                (
-                    Text("SCOR\nLY")
-                        .font(BrutalistType.wordmark)
-                        .kerning(-3)
-                        .foregroundColor(BrutalistColor.fg)
-                    + Text("/B")
-                        .font(BrutalistType.sans(.regular, size: 76))
-                        .foregroundColor(BrutalistColor.fg)
+                Text(
+                    "\(Text("SCOR\nLY").font(BrutalistType.wordmark).kerning(-3).foregroundColor(BrutalistColor.fg))\(Text("/B").font(BrutalistType.sans(.regular, size: 76)).foregroundColor(BrutalistColor.fg))"
                 )
                 .lineLimit(2)
             }

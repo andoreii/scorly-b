@@ -43,7 +43,8 @@ public protocol RoundsRepository: Sendable {
     func fetchRecentCompleted(forCourseExternalId courseExternalId: UUID, limit: Int) async throws -> [CompletedRound]
     /// Pull the most recent `limit` rounds from Supabase and upsert them
     /// into the local SwiftData cache. Idempotent; never enqueues outbox entries.
-    func refreshFromRemote(limit: Int) async throws
+    /// Returns the number of remote rows received for the active user.
+    func refreshFromRemote(limit: Int) async throws -> Int
     /// Persist a finished round. The implementation derives `CompletedRound`
     /// state from the draft for downstream consumers.
     func save(_ round: RoundDraft) async throws
@@ -62,6 +63,20 @@ public protocol RoundsRepository: Sendable {
     /// rounds are absent from the dictionary, so call sites should treat
     /// missing entries as "no best yet".
     func bestScoresByCourse(filter: AggregateRoundFilter) async throws -> [UUID: Int]
+    /// One-shot retroactive push of per-hole detail to Supabase.
+    ///
+    /// The outbox/save path only began carrying `puttDistances`,
+    /// `teeShotDistance`, `approachDistance`, `teeClub`, `approachClub`,
+    /// `pinPosition`, `greenInReg`, `threePutt`, `girOpportunity`, and
+    /// `fairwayOpportunity` recently. Existing `hole_stats` rows in
+    /// Supabase are NULL for those columns. This method upserts every
+    /// local round's hole detail back to Supabase using the
+    /// `hole_stat_external_id` UNIQUE constraint as the conflict key —
+    /// idempotent, safe to run multiple times.
+    ///
+    /// Returns the number of hole rows pushed. Throws if the network
+    /// is unreachable or the user isn't authenticated.
+    func backfillHoleStatsToCloud() async throws -> Int
 }
 
 public protocol GoalsRepository: Sendable {

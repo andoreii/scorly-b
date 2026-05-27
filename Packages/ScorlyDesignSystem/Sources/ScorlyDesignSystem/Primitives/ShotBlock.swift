@@ -95,6 +95,7 @@ public struct ShotEditor: View {
     private let distanceRange: ClosedRange<Int>
     private let distanceLabel: String
     private let fieldOrder: ShotBlock.FieldOrder
+    private let clearsDistanceWhenOB: Bool
     private let extraTopRight: LieKeypad.AuxButton?
     @Binding private var lie: String?
     @Binding private var lieModifier: String?
@@ -108,6 +109,7 @@ public struct ShotEditor: View {
         distanceRange: ClosedRange<Int> = 0...400,
         distanceLabel: String = "Distance",
         fieldOrder: ShotBlock.FieldOrder = .resultFirst,
+        clearsDistanceWhenOB: Bool = false,
         extraTopRight: LieKeypad.AuxButton? = nil,
         lie: Binding<String?>,
         lieModifier: Binding<String?>,
@@ -120,6 +122,7 @@ public struct ShotEditor: View {
         self.distanceRange = distanceRange
         self.distanceLabel = distanceLabel
         self.fieldOrder = fieldOrder
+        self.clearsDistanceWhenOB = clearsDistanceWhenOB
         self.extraTopRight = extraTopRight
         _lie = lie
         _lieModifier = lieModifier
@@ -142,7 +145,6 @@ public struct ShotEditor: View {
         }
     }
 
-    @ViewBuilder
     private var resultSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             SubLabel("Result")
@@ -150,7 +152,6 @@ public struct ShotEditor: View {
         }
     }
 
-    @ViewBuilder
     private var clubSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             SubLabel("Club")
@@ -162,11 +163,17 @@ public struct ShotEditor: View {
         }
     }
 
+    private var isOBLie: Bool {
+        lie?.hasPrefix("OB ") == true
+    }
+
     @ViewBuilder
     private var distanceSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SubLabel(distanceLabel)
-            DistanceWheel(value: $distance, range: distanceRange, step: 1, unit: "YDS")
+        if !(clearsDistanceWhenOB && isOBLie) {
+            VStack(alignment: .leading, spacing: 6) {
+                SubLabel(distanceLabel)
+                DistanceWheel(value: $distance, range: distanceRange, step: 1, majorEvery: 5, unit: "YDS")
+            }
         }
     }
 }

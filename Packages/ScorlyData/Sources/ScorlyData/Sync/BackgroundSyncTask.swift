@@ -20,7 +20,7 @@ public enum BackgroundSyncTask {
 }
 
 #if canImport(BackgroundTasks) && os(iOS)
-import BackgroundTasks
+@preconcurrency import BackgroundTasks
 
 public extension BackgroundSyncTask {
     /// Register the BGAppRefreshTask identifier and wire up the handler.
@@ -39,11 +39,14 @@ public extension BackgroundSyncTask {
             // Schedule the next pass before doing work — if the work
             // crashes, we still get another chance.
             scheduleNext(taskIdentifier: taskIdentifier, scheduler: scheduler)
-            let work = Task { @Sendable in
+            let work = Task {
                 await handler()
-                task.setTaskCompleted(success: true)
             }
             task.expirationHandler = { work.cancel() }
+            Task {
+                _ = await work.result
+                task.setTaskCompleted(success: !work.isCancelled)
+            }
         }
     }
 

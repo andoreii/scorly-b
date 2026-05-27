@@ -45,6 +45,23 @@ public struct HoleStat: Sendable, Equatable, Codable {
     /// Per-hole count of shots that finished in a water hazard / penalty
     /// area. Same shape rationale as `outOfBoundsCount`.
     public let hazardCount: Int
+
+    /// OB shots that finished left of the target line.
+    public let outOfBoundsLeft: Int
+    /// OB shots that finished right of the target line.
+    public let outOfBoundsRight: Int
+    /// OB shots that finished long (past the green / fairway target).
+    public let outOfBoundsLong: Int
+    /// OB shots that finished short (well short of the target).
+    public let outOfBoundsShort: Int
+    /// Water / penalty shots that finished left of the target line.
+    public let hazardLeft: Int
+    /// Water / penalty shots that finished right of the target line.
+    public let hazardRight: Int
+    /// Water / penalty shots that finished long.
+    public let hazardLong: Int
+    /// Water / penalty shots that finished short.
+    public let hazardShort: Int
     /// Manual override flag. If the player ticked "I scrambled here" but
     /// the auto-derivation (missed GIR + 1 putt + ≤ par) doesn't fire
     /// (e.g. they two-putted from the fringe), this lets `upAndDown`
@@ -52,6 +69,25 @@ public struct HoleStat: Sendable, Equatable, Codable {
     public let upAndDownSuccess: Bool
     /// Manual override flag for sand save. Same role as `upAndDownSuccess`.
     public let sandSaveSuccess: Bool
+    /// Distance the tee shot travelled, yards. Optional — only some
+    /// rounds (v2 round play) record this. Needed by `SGCalculator`.
+    public let teeShotDistance: Int?
+    /// Distance remaining when the approach shot was taken, yards.
+    /// Unused on par 3 (tee shot is the approach). Optional for the
+    /// same reason as `teeShotDistance`.
+    public let approachDistance: Int?
+    /// Putt distances in feet, ordered by stroke (first putt → last).
+    /// Optional — populated only when the player logged distances on
+    /// the green during the round.
+    public let puttDistances: [Int]?
+    /// Club used for the tee shot, free-form string (e.g. "Driver",
+    /// "5 iron"). Optional — only populated when the player logged it.
+    public let teeClub: String?
+    /// Club used for the approach shot, free-form string. Unused on
+    /// par 3 (the tee shot is the approach). Optional.
+    public let approachClub: String?
+    /// Pin position string (e.g. "Front", "Middle", "Back"). Optional.
+    public let pinPosition: String?
 
     public init(
         par: Int,
@@ -63,7 +99,21 @@ public struct HoleStat: Sendable, Equatable, Codable {
         outOfBoundsCount: Int = 0,
         hazardCount: Int = 0,
         upAndDownSuccess: Bool = false,
-        sandSaveSuccess: Bool = false
+        sandSaveSuccess: Bool = false,
+        teeShotDistance: Int? = nil,
+        approachDistance: Int? = nil,
+        puttDistances: [Int]? = nil,
+        teeClub: String? = nil,
+        approachClub: String? = nil,
+        pinPosition: String? = nil,
+        outOfBoundsLeft: Int = 0,
+        outOfBoundsRight: Int = 0,
+        outOfBoundsLong: Int = 0,
+        outOfBoundsShort: Int = 0,
+        hazardLeft: Int = 0,
+        hazardRight: Int = 0,
+        hazardLong: Int = 0,
+        hazardShort: Int = 0
     ) {
         self.par = par
         self.strokes = strokes
@@ -75,6 +125,92 @@ public struct HoleStat: Sendable, Equatable, Codable {
         self.hazardCount = hazardCount
         self.upAndDownSuccess = upAndDownSuccess
         self.sandSaveSuccess = sandSaveSuccess
+        self.teeShotDistance = teeShotDistance
+        self.approachDistance = approachDistance
+        self.puttDistances = puttDistances
+        self.teeClub = teeClub
+        self.approachClub = approachClub
+        self.pinPosition = pinPosition
+        self.outOfBoundsLeft = outOfBoundsLeft
+        self.outOfBoundsRight = outOfBoundsRight
+        self.outOfBoundsLong = outOfBoundsLong
+        self.outOfBoundsShort = outOfBoundsShort
+        self.hazardLeft = hazardLeft
+        self.hazardRight = hazardRight
+        self.hazardLong = hazardLong
+        self.hazardShort = hazardShort
+    }
+
+    // MARK: - Codable
+
+    // Forwards-compat decode: the eight directional hazard fields were
+    // added after launch. Older serialized HoleStat blobs (test fixtures,
+    // any in-memory snapshots) won't include them; decodeIfPresent
+    // defaults each to 0 so old payloads continue to round-trip.
+
+    enum CodingKeys: String, CodingKey {
+        case par, strokes, putts, teeShotLie, approachLie, penaltyStrokes,
+             outOfBoundsCount, hazardCount, upAndDownSuccess, sandSaveSuccess,
+             teeShotDistance, approachDistance, puttDistances, teeClub,
+             approachClub, pinPosition,
+             outOfBoundsLeft, outOfBoundsRight, outOfBoundsLong, outOfBoundsShort,
+             hazardLeft, hazardRight, hazardLong, hazardShort
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        par = try container.decode(Int.self, forKey: .par)
+        strokes = try container.decode(Int.self, forKey: .strokes)
+        putts = try container.decode(Int.self, forKey: .putts)
+        teeShotLie = try container.decodeIfPresent(Lie.self, forKey: .teeShotLie)
+        approachLie = try container.decodeIfPresent(Lie.self, forKey: .approachLie)
+        penaltyStrokes = try container.decode(Int.self, forKey: .penaltyStrokes)
+        outOfBoundsCount = try container.decode(Int.self, forKey: .outOfBoundsCount)
+        hazardCount = try container.decode(Int.self, forKey: .hazardCount)
+        upAndDownSuccess = try container.decode(Bool.self, forKey: .upAndDownSuccess)
+        sandSaveSuccess = try container.decode(Bool.self, forKey: .sandSaveSuccess)
+        teeShotDistance = try container.decodeIfPresent(Int.self, forKey: .teeShotDistance)
+        approachDistance = try container.decodeIfPresent(Int.self, forKey: .approachDistance)
+        puttDistances = try container.decodeIfPresent([Int].self, forKey: .puttDistances)
+        teeClub = try container.decodeIfPresent(String.self, forKey: .teeClub)
+        approachClub = try container.decodeIfPresent(String.self, forKey: .approachClub)
+        pinPosition = try container.decodeIfPresent(String.self, forKey: .pinPosition)
+        outOfBoundsLeft = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsLeft) ?? 0
+        outOfBoundsRight = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsRight) ?? 0
+        outOfBoundsLong = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsLong) ?? 0
+        outOfBoundsShort = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsShort) ?? 0
+        hazardLeft = try container.decodeIfPresent(Int.self, forKey: .hazardLeft) ?? 0
+        hazardRight = try container.decodeIfPresent(Int.self, forKey: .hazardRight) ?? 0
+        hazardLong = try container.decodeIfPresent(Int.self, forKey: .hazardLong) ?? 0
+        hazardShort = try container.decodeIfPresent(Int.self, forKey: .hazardShort) ?? 0
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(par, forKey: .par)
+        try container.encode(strokes, forKey: .strokes)
+        try container.encode(putts, forKey: .putts)
+        try container.encodeIfPresent(teeShotLie, forKey: .teeShotLie)
+        try container.encodeIfPresent(approachLie, forKey: .approachLie)
+        try container.encode(penaltyStrokes, forKey: .penaltyStrokes)
+        try container.encode(outOfBoundsCount, forKey: .outOfBoundsCount)
+        try container.encode(hazardCount, forKey: .hazardCount)
+        try container.encode(upAndDownSuccess, forKey: .upAndDownSuccess)
+        try container.encode(sandSaveSuccess, forKey: .sandSaveSuccess)
+        try container.encodeIfPresent(teeShotDistance, forKey: .teeShotDistance)
+        try container.encodeIfPresent(approachDistance, forKey: .approachDistance)
+        try container.encodeIfPresent(puttDistances, forKey: .puttDistances)
+        try container.encodeIfPresent(teeClub, forKey: .teeClub)
+        try container.encodeIfPresent(approachClub, forKey: .approachClub)
+        try container.encodeIfPresent(pinPosition, forKey: .pinPosition)
+        try container.encode(outOfBoundsLeft, forKey: .outOfBoundsLeft)
+        try container.encode(outOfBoundsRight, forKey: .outOfBoundsRight)
+        try container.encode(outOfBoundsLong, forKey: .outOfBoundsLong)
+        try container.encode(outOfBoundsShort, forKey: .outOfBoundsShort)
+        try container.encode(hazardLeft, forKey: .hazardLeft)
+        try container.encode(hazardRight, forKey: .hazardRight)
+        try container.encode(hazardLong, forKey: .hazardLong)
+        try container.encode(hazardShort, forKey: .hazardShort)
     }
 
     // MARK: - Derived
@@ -108,6 +244,13 @@ public struct HoleStat: Sendable, Equatable, Codable {
     /// fairway.
     public var fairwayInRegulation: Bool {
         par >= 4 && teeShotLie == .fairway
+    }
+
+    /// Whether this hole counts as a fairway-in-regulation *opportunity*
+    /// (the denominator for FIR rate). Par 4 and par 5 always; par 3
+    /// never.
+    public var fairwayOpportunity: Bool {
+        par >= 4
     }
 
     /// Three-putt (or worse). Pure putt count; doesn't care about the

@@ -3,9 +3,8 @@ import Foundation
 /// Single source of truth for cross-translation between v2 domain types
 /// and external string forms:
 ///
-/// - **v1 UI aliases** that don't match the DB-canonical set
-///   (e.g. `RoundType.competitive` UI alias). v2 now treats `Stableford`
-///   as a first-class `RoundFormat`, so the rawValue match handles it.
+/// - **Stored/UI aliases** that don't match the current domain raw values
+///   (e.g. `"Stroke Play"` for `RoundFormat.stroke`).
 /// - **Conditions ↔ CSV** for `rounds.conditions`.
 /// - **v1 shot-location → v2 `Lie`**: collapses v1's 14-value free-form
 ///   enum into v2's 12-case `Lie`, dropping the unused `Out *` /
@@ -36,11 +35,17 @@ public enum Mappings {
         roundFormat.rawValue
     }
 
-    /// Parses a UI label into a `RoundFormat`. The rawValue match handles
-    /// every UI label (including `"Stableford"`, which is now first-class).
+    /// Parses a UI label or stored database value into a `RoundFormat`.
     public static func roundFormat(fromUILabel label: String) -> RoundFormat? {
         let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
-        return RoundFormat(rawValue: trimmed)
+        switch trimmed {
+        case "Stroke Play":
+            return .stroke
+        case "Match Play":
+            return .match
+        default:
+            return RoundFormat(rawValue: trimmed)
+        }
     }
 
     // MARK: - Conditions ↔ CSV

@@ -79,6 +79,7 @@ struct ShotSheetView: View {
                 target: "Fairway",
                 clubs: BrutalistClubs,
                 clubDistanceDefaults: BrutalistClubDistances,
+                clearsDistanceWhenOB: true,
                 extraTopRight: drivenGreen,
                 lie: obAwareTeeBinding,
                 lieModifier: lieBinding(\.teeShotModifier),
@@ -92,6 +93,7 @@ struct ShotSheetView: View {
                 clubDistanceDefaults: BrutalistClubDistances,
                 distanceLabel: "Distance to Pin",
                 fieldOrder: .distanceFirst,
+                extraTopRight: par5OnInTwo,
                 lie: lieBinding(\.approach),
                 lieModifier: lieBinding(\.approachModifier),
                 club: clubBinding(\.approachClub),
@@ -116,6 +118,22 @@ struct ShotSheetView: View {
             label: "GRN",
             isActive: active,
             action: { state.setTeeShotResult(active ? nil : "Green", at: state.holeIdx) }
+        )
+    }
+
+    /// Par-5-only "ON IN 2" aux button for the approach keypad. Stored
+    /// as the sentinel `"On In 2"` so it toggles independently from
+    /// the center GRN cell; both decode to `Lie.green` for stats.
+    private var par5OnInTwo: LieKeypad.AuxButton? {
+        guard kind == .approach, state.currentHole.par == 5 else { return nil }
+        let active = state.entries[state.holeIdx].approach == "On In 2"
+        return LieKeypad.AuxButton(
+            label: "ON IN 2",
+            isActive: active,
+            action: {
+                state.entries[state.holeIdx].approach = active ? nil : "On In 2"
+                state.entries[state.holeIdx].approachModifier = nil
+            }
         )
     }
 

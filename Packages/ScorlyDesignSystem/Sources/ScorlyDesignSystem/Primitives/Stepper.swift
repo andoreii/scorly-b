@@ -27,7 +27,6 @@ public struct BrutalistStepper: View {
         }
     }
 
-    @ViewBuilder
     private func stepButton(_ glyph: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Text(glyph)
             .font(BrutalistType.mono(.medium, size: 20))

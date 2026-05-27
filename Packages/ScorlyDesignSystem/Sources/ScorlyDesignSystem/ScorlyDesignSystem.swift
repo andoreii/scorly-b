@@ -46,7 +46,9 @@ public enum ScorlyDesignSystem {
         var error: Unmanaged<CFError>?
         let ok = CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error)
         if !ok {
-            assertionFailure("Failed to register \(name): \(error?.takeRetainedValue().localizedDescription ?? "unknown")")
+            assertionFailure(
+                "Failed to register \(name): \(error?.takeRetainedValue().localizedDescription ?? "unknown")"
+            )
         }
     }
 }

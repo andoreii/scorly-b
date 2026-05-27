@@ -9,6 +9,10 @@ import SwiftUI
 public struct HistoryView: View {
     let roundsRepository: any RoundsRepository
     let onBack: () -> Void
+    /// Invoked when a row is tapped. Passes the selected round and the
+    /// full in-memory `[CompletedRound]` so the destination can compute
+    /// season-relative comparisons without a second fetch.
+    let onSelect: (CompletedRound, [CompletedRound]) -> Void
 
     @State private var rounds: [CompletedRound] = []
     @State private var filter: AggregateRoundFilter = .default
@@ -17,9 +21,14 @@ public struct HistoryView: View {
     @State private var sheetState: AggregateFilterEditState?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(roundsRepository: any RoundsRepository, onBack: @escaping () -> Void) {
+    public init(
+        roundsRepository: any RoundsRepository,
+        onBack: @escaping () -> Void,
+        onSelect: @escaping (CompletedRound, [CompletedRound]) -> Void = { _, _ in }
+    ) {
         self.roundsRepository = roundsRepository
         self.onBack = onBack
+        self.onSelect = onSelect
     }
 
     public var body: some View {
@@ -159,6 +168,7 @@ public struct HistoryView: View {
 
     private func ticketRow(round: CompletedRound, isLatest: Bool) -> some View {
         let diff = round.scoreVsPar
+        let pool = rounds
         return ZStack(alignment: .topTrailing) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
@@ -226,6 +236,7 @@ public struct HistoryView: View {
                     .foregroundStyle(BrutalistColor.bg)
             }
         }
+        .brutalistTap { onSelect(round, pool) }
     }
 
     private var footerLine: some View {
