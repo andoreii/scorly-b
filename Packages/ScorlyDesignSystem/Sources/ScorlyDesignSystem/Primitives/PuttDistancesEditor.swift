@@ -40,7 +40,8 @@ public struct PuttDistancesEditor: View {
                             range: 0...80,
                             step: 1,
                             majorEvery: 3,
-                            unit: "FT"
+                            unit: "FT",
+                            majorTopLabel: { ft in ft > 0 ? "\(ft / 3)" : nil }
                         )
                     }
                 }
@@ -55,7 +56,9 @@ public struct PuttDistancesEditor: View {
                 return distances[index]
             },
             set: { newValue in
-                while distances.count <= index { distances.append(nil) }
+                while distances.count <= index {
+                    distances.append(nil)
+                }
                 distances[index] = newValue
             }
         )

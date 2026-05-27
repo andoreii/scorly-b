@@ -11,6 +11,7 @@ let package = Package(
         .package(path: "../ScorlyDomain"),
         .package(path: "../ScorlyData"),
         .package(path: "../ScorlyDesignSystem"),
+        .package(path: "../ScorlyReviewKit"),
     ],
     targets: [
         .target(
@@ -19,6 +20,7 @@ let package = Package(
                 .product(name: "ScorlyDomain", package: "ScorlyDomain"),
                 .product(name: "ScorlyData", package: "ScorlyData"),
                 .product(name: "ScorlyDesignSystem", package: "ScorlyDesignSystem"),
+                .product(name: "ScorlyReviewKit", package: "ScorlyReviewKit"),
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),

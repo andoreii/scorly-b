@@ -1,6 +1,7 @@
 import Testing
 @testable import ScorlyFeatureHistory
 
-@Test func moduleExists() {
+@Test
+func moduleExists() {
     _ = ScorlyFeatureHistory.self
 }

@@ -13,8 +13,7 @@ import SwiftUI
 /// everywhere in this brutalist UI).
 public extension View {
     func brutalistTap(disabled: Bool = false, action: @escaping () -> Void) -> some View {
-        self
-            .contentShape(Rectangle())
+        contentShape(Rectangle())
             .onTapGesture {
                 guard !disabled else { return }
                 action()

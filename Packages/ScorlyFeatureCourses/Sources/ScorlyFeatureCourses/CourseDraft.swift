@@ -35,7 +35,9 @@ public struct CourseDraft: Equatable {
         )
     }
 
-    public var isEditingExisting: Bool { existing != nil }
+    public var isEditingExisting: Bool {
+        existing != nil
+    }
 
     /// True when name has at least one non-blank character — the only
     /// hard requirement to save.

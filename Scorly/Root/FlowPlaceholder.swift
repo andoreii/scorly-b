@@ -28,15 +28,8 @@ struct FlowPlaceholder: View {
             .padding(.top, BrutalistSpacing.l)
 
             VStack(alignment: .leading, spacing: 0) {
-                (
-                    Text(title.lowercased() + ".\n")
-                        .font(BrutalistType.pageHero)
-                        .kerning(-1.8)
-                        .foregroundColor(BrutalistColor.fg)
-                    + Text("coming next.")
-                        .font(BrutalistType.pageHero)
-                        .kerning(-1.8)
-                        .foregroundColor(BrutalistColor.muted)
+                Text(
+                    "\(Text(title.lowercased() + ".\n").font(BrutalistType.pageHero).kerning(-1.8).foregroundColor(BrutalistColor.fg))\(Text("coming next.").font(BrutalistType.pageHero).kerning(-1.8).foregroundColor(BrutalistColor.muted))"
                 )
                 .lineLimit(3)
             }

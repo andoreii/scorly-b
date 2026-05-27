@@ -8,25 +8,38 @@ import SwiftUI
 public struct SettingsView: View {
     let onBack: () -> Void
     let onSyncCourses: (() async -> Void)?
+    let onFetchRounds: (() async throws -> Int)?
     let onSignOut: (() -> Void)?
+    /// Optional one-shot upsert that re-pushes every local round's
+    /// hole detail to Supabase, returning the number of hole rows
+    /// pushed. nil hides the row.
+    let onBackfillStats: (() async throws -> Int)?
 
     @State private var isSyncing = false
+    @State private var isFetchingRounds = false
+    @State private var fetchRoundsStatus: String?
+    @State private var isBackfilling = false
+    @State private var backfillStatus: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         onBack: @escaping () -> Void,
         onSyncCourses: (() async -> Void)? = nil,
-        onSignOut: (() -> Void)? = nil
+        onFetchRounds: (() async throws -> Int)? = nil,
+        onSignOut: (() -> Void)? = nil,
+        onBackfillStats: (() async throws -> Int)? = nil
     ) {
         self.onBack = onBack
         self.onSyncCourses = onSyncCourses
+        self.onFetchRounds = onFetchRounds
         self.onSignOut = onSignOut
+        self.onBackfillStats = onBackfillStats
     }
 
     public var body: some View {
         ScreenShell {
             TopBar(left: "PREFERENCES", right: "SCORLY/B  ®")
-            HairlineProgress(isLoading: isSyncing)
+            HairlineProgress(isLoading: isSyncing || isFetchingRounds || isBackfilling)
                 .padding(.top, BrutalistSpacing.s)
             backRow
                 .padding(.top, BrutalistSpacing.m)
@@ -36,6 +49,16 @@ public struct SettingsView: View {
 
             dataSection
                 .padding(.top, BrutalistSpacing.xl)
+
+            if onFetchRounds != nil {
+                roundArchiveSection
+                    .padding(.top, BrutalistSpacing.xl)
+            }
+
+            if onBackfillStats != nil {
+                backfillSection
+                    .padding(.top, BrutalistSpacing.xl)
+            }
 
             identitySection
                 .padding(.top, BrutalistSpacing.xl)
@@ -119,6 +142,110 @@ public struct SettingsView: View {
                 caption: "OFFLINE"
             )
             .padding(.top, BrutalistSpacing.s)
+        }
+    }
+
+    @ViewBuilder
+    private var roundArchiveSection: some View {
+        sectionHeader(
+            label: "Round Archive",
+            sub: "PULL COMPLETED CARDS FROM REMOTE"
+        )
+        if let onFetchRounds {
+            BrutalistButton(
+                kind: .ghost,
+                action: {
+                    guard !isFetchingRounds else { return }
+                    Task {
+                        isFetchingRounds = true
+                        defer { isFetchingRounds = false }
+                        do {
+                            let count = try await onFetchRounds()
+                            fetchRoundsStatus = count == 0
+                                ? "NO ROUNDS FOR SIGNED-IN USER"
+                                : "\(count) ROUNDS FETCHED"
+                        } catch {
+                            fetchRoundsStatus = "FAILED: \(error.localizedDescription.uppercased())"
+                        }
+                    }
+                },
+                isDisabled: isFetchingRounds,
+                padding: EdgeInsets(top: 18, leading: 18, bottom: 18, trailing: 18)
+            ) {
+                Text(isFetchingRounds ? "↓  FETCHING…" : "↓  FETCH ROUNDS")
+                    .font(BrutalistType.sans(.bold, size: 16))
+                    .kerning(-0.2)
+            } caption: {
+                Text(isFetchingRounds ? "WAIT" : "LATEST 20")
+                    .font(BrutalistType.monoLabel)
+                    .kerning(1.0)
+                    .foregroundStyle(BrutalistColor.muted)
+            }
+            .padding(.top, BrutalistSpacing.s)
+            Text("Imports the latest 20 completed rounds and hole stats for history and trends.")
+                .font(BrutalistType.inputBody)
+                .foregroundStyle(BrutalistColor.muted)
+                .padding(.top, BrutalistSpacing.s)
+            if let fetchRoundsStatus {
+                Text(fetchRoundsStatus)
+                    .font(BrutalistType.monoLabel)
+                    .kerning(1.0)
+                    .foregroundStyle(BrutalistColor.fg)
+                    .padding(.top, BrutalistSpacing.s)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var backfillSection: some View {
+        sectionHeader(
+            label: "Round Detail",
+            sub: "RE-PUSH FULL STATS TO REMOTE"
+        )
+        if let onBackfillStats {
+            BrutalistButton(
+                kind: .ghost,
+                action: {
+                    guard !isBackfilling else { return }
+                    Task {
+                        isBackfilling = true
+                        defer { isBackfilling = false }
+                        do {
+                            let count = try await onBackfillStats()
+                            backfillStatus = count == 0
+                                ? "NO ROUNDS TO RE-PUSH"
+                                : "\(count) HOLE STATS PUSHED"
+                        } catch {
+                            backfillStatus = "FAILED — \(error.localizedDescription.uppercased())"
+                        }
+                    }
+                },
+                isDisabled: isBackfilling,
+                padding: EdgeInsets(top: 18, leading: 18, bottom: 18, trailing: 18)
+            ) {
+                Text(isBackfilling ? "↑  RE-PUSHING…" : "↑  RE-PUSH ROUND DETAIL")
+                    .font(BrutalistType.sans(.bold, size: 16))
+                    .kerning(-0.2)
+            } caption: {
+                Text(isBackfilling ? "WAIT" : "TO REMOTE")
+                    .font(BrutalistType.monoLabel)
+                    .kerning(1.0)
+                    .foregroundStyle(BrutalistColor.muted)
+            }
+            .padding(.top, BrutalistSpacing.s)
+            Text(
+                "Upserts every saved round's hole stats (distances, clubs, pin, derived flags) into Supabase. Idempotent — safe to run multiple times."
+            )
+            .font(BrutalistType.inputBody)
+            .foregroundStyle(BrutalistColor.muted)
+            .padding(.top, BrutalistSpacing.s)
+            if let backfillStatus {
+                Text(backfillStatus)
+                    .font(BrutalistType.monoLabel)
+                    .kerning(1.0)
+                    .foregroundStyle(BrutalistColor.fg)
+                    .padding(.top, BrutalistSpacing.s)
+            }
         }
     }
 

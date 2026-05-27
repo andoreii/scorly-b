@@ -9,6 +9,7 @@ public struct DistanceWheel: View {
     private let step: Int
     private let majorEvery: Int
     private let unit: String
+    private let majorTopLabel: ((Int) -> String?)?
     private let itemWidth: CGFloat = 30
 
     @State private var lastTickValue: Int?
@@ -18,13 +19,19 @@ public struct DistanceWheel: View {
         range: ClosedRange<Int> = 0...400,
         step: Int = 5,
         majorEvery: Int? = nil,
-        unit: String = "YDS"
+        unit: String = "YDS",
+        majorTopLabel: ((Int) -> String?)? = nil
     ) {
         _value = value
         self.range = range
         self.step = step
         self.majorEvery = majorEvery ?? (step * 4)
         self.unit = unit
+        self.majorTopLabel = majorTopLabel
+    }
+
+    private var wheelHeight: CGFloat {
+        majorTopLabel != nil ? 100 : 90
     }
 
     public var body: some View {
@@ -54,9 +61,13 @@ public struct DistanceWheel: View {
                 .frame(maxHeight: .infinity, alignment: .bottom)
                 .allowsHitTesting(false)
         }
-        .frame(height: 76)
+        .frame(height: wheelHeight)
         .background(BrutalistColor.panel)
         .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+    }
+
+    private var tickStripHeight: CGFloat {
+        majorTopLabel != nil ? 54 : 44
     }
 
     private func wheel(values: [Int]) -> some View {
@@ -73,7 +84,7 @@ public struct DistanceWheel: View {
             .scrollTargetBehavior(.viewAligned)
             .safeAreaPadding(.horizontal, max(0, (geo.size.width - itemWidth) / 2))
         }
-        .frame(height: 30)
+        .frame(height: tickStripHeight)
     }
 
     private func scrollBinding(values: [Int]) -> Binding<Int?> {
@@ -92,18 +103,34 @@ public struct DistanceWheel: View {
 
     private func tick(_ v: Int) -> some View {
         let isMajor = v % majorEvery == 0
-        return ZStack(alignment: .top) {
+        let hasTopLabel = majorTopLabel != nil
+        let topLabel: String? = hasTopLabel ? majorTopLabel.flatMap { $0(v) } : nil
+        let labelHeight: CGFloat = 10
+        let gap: CGFloat = 6
+        return VStack(spacing: gap) {
+            if hasTopLabel {
+                if isMajor, let topLabel {
+                    Text(topLabel)
+                        .font(BrutalistType.mono(.medium, size: 8))
+                        .foregroundStyle(BrutalistColor.muted)
+                        .frame(height: labelHeight)
+                } else {
+                    Color.clear.frame(height: labelHeight)
+                }
+            }
             Rectangle()
                 .fill(BrutalistColor.fg.opacity(isMajor ? 0.7 : 0.25))
                 .frame(width: 1, height: isMajor ? 18 : 10)
-                .frame(maxWidth: .infinity, alignment: .center)
             if isMajor {
                 Text("\(v)")
                     .font(BrutalistType.mono(.medium, size: 8))
                     .foregroundStyle(BrutalistColor.muted)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .frame(height: labelHeight)
+            } else {
+                Color.clear.frame(height: labelHeight)
             }
         }
-        .frame(height: 30)
+        .frame(maxWidth: .infinity)
+        .frame(height: tickStripHeight)
     }
 }

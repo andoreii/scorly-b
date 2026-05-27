@@ -13,6 +13,8 @@ packages:
     path: Packages/ScorlyData
   ScorlyDesignSystem:
     path: Packages/ScorlyDesignSystem
+  ScorlyReviewKit:
+    path: Packages/ScorlyReviewKit
   ScorlyFeatureAuth:
     path: Packages/ScorlyFeatureAuth
   ScorlyFeatureRound:

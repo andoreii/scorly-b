@@ -189,6 +189,15 @@ public actor SyncEngine {
         )
     }
 
+    /// Reconcile a caller-selected window of remote rounds using the same
+    /// parent/child merge path as a full pull.
+    @discardableResult
+    func reconcileRounds(_ rows: [RoundRow], localUserId: UUID? = nil) throws -> Int {
+        let rounds = mergeRounds(rows, localUserId: localUserId)
+        try modelContext.save()
+        return rounds
+    }
+
     /// Outbox depth — exposed for tests + diagnostics dashboards.
     public func pendingCount() -> Int {
         let descriptor = FetchDescriptor<OutboxEntry>()

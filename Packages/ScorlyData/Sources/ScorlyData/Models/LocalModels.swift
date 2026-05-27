@@ -316,6 +316,18 @@ public final class LocalHoleStat {
     public var approachDistance: Int?
     public var pinPosition: String?
 
+    // Directional hazard counts. SwiftData migrates these in by treating
+    // a missing column as 0 — the additive shape means existing rounds
+    // continue to load.
+    public var outOfBoundsLeft = 0
+    public var outOfBoundsRight = 0
+    public var outOfBoundsLong = 0
+    public var outOfBoundsShort = 0
+    public var hazardLeft = 0
+    public var hazardRight = 0
+    public var hazardLong = 0
+    public var hazardShort = 0
+
     // swiftlint:disable:next function_default_parameter_at_end
     public init(
         serverId: Int? = nil,
@@ -339,7 +351,15 @@ public final class LocalHoleStat {
         puttDistances: [Int]? = nil,
         teeShotDistance: Int? = nil,
         approachDistance: Int? = nil,
-        pinPosition: String? = nil
+        pinPosition: String? = nil,
+        outOfBoundsLeft: Int = 0,
+        outOfBoundsRight: Int = 0,
+        outOfBoundsLong: Int = 0,
+        outOfBoundsShort: Int = 0,
+        hazardLeft: Int = 0,
+        hazardRight: Int = 0,
+        hazardLong: Int = 0,
+        hazardShort: Int = 0
     ) {
         self.serverId = serverId
         self.externalId = externalId
@@ -363,6 +383,14 @@ public final class LocalHoleStat {
         self.teeShotDistance = teeShotDistance
         self.approachDistance = approachDistance
         self.pinPosition = pinPosition
+        self.outOfBoundsLeft = outOfBoundsLeft
+        self.outOfBoundsRight = outOfBoundsRight
+        self.outOfBoundsLong = outOfBoundsLong
+        self.outOfBoundsShort = outOfBoundsShort
+        self.hazardLeft = hazardLeft
+        self.hazardRight = hazardRight
+        self.hazardLong = hazardLong
+        self.hazardShort = hazardShort
     }
 }
 

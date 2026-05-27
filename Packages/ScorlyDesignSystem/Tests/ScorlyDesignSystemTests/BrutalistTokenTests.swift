@@ -1,7 +1,6 @@
 import Testing
 @testable import ScorlyDesignSystem
 
-@Suite("Brutalist tokens")
 struct BrutalistTokenTests {
     @Test("Spacing scale is the documented monotonic sequence")
     func spacingScaleIsMonotonic() {
@@ -45,7 +44,6 @@ struct BrutalistTokenTests {
     }
 }
 
-@Suite("Pip scoring notation")
 struct PipScoringTests {
     @Test("Score label maps differences to authentic golf shorthand")
     func scoreLabelKnownValues() {
@@ -60,9 +58,9 @@ struct PipScoringTests {
     }
 }
 
-@Suite("LieKeypad short labels")
 struct LieKeypadShortTests {
     @Test("Every documented lie has a short label")
+    @MainActor
     func everyLieHasShort() {
         let lies = [
             "Fairway", "Green",
@@ -73,5 +71,23 @@ struct LieKeypadShortTests {
         for lie in lies {
             #expect(LieKeypad.short[lie] != nil, "Missing short label for \(lie)")
         }
+    }
+}
+
+struct ReviewChartValueTests {
+    @Test("Putt distances map to the shared review buckets")
+    func puttDistanceBuckets() {
+        #expect(PuttDistanceBucket.bucket(forFeet: 0) == .feet0to3)
+        #expect(PuttDistanceBucket.bucket(forFeet: 10) == .feet7to10)
+        #expect(PuttDistanceBucket.bucket(forFeet: 31) == .feet31plus)
+    }
+
+    @Test("Scoring outcomes collapse to four review buckets")
+    func scoringOutcomes() {
+        #expect(ScoringOutcome.outcome(forVsPar: -2) == .birdiePlus)
+        #expect(ScoringOutcome.outcome(forVsPar: -1) == .birdiePlus)
+        #expect(ScoringOutcome.outcome(forVsPar: 0) == .par)
+        #expect(ScoringOutcome.outcome(forVsPar: 1) == .bogey)
+        #expect(ScoringOutcome.outcome(forVsPar: 2) == .doublePlus)
     }
 }

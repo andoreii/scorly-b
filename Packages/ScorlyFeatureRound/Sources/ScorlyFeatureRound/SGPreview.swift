@@ -1,0 +1,33 @@
+import ScorlyDomain
+
+/// Sign-and-File-time SG computation. Mirrors the gate enforced in
+/// `RoundsRepositoryLive.computeSG` so the user sees the same SG card
+/// (or placeholder) before and after the round is filed. Pure function
+/// so it's easy to unit-test the gate without touching SwiftUI.
+enum SGPreview {
+    static func compute(
+        holes: [Hole],
+        stats: [HoleStat],
+        yardageByHoleNumber: [Int: Int]
+    ) -> (totals: SGTotals?, holes: [SGTotals]?) {
+        guard !holes.isEmpty, holes.count == stats.count else { return (nil, nil) }
+        let canCompute = zip(holes, stats).allSatisfy { hole, stat in
+            yardageByHoleNumber[hole.number] != nil && stat.puttDistances != nil
+        }
+        guard canCompute else { return (nil, nil) }
+        let inputs: [HoleSGInput] = zip(holes, stats).map { hole, stat in
+            HoleSGInput(
+                par: stat.par,
+                yardage: yardageByHoleNumber[hole.number] ?? 0,
+                teeShotLie: stat.teeShotLie,
+                teeShotDistance: stat.teeShotDistance,
+                approachLie: stat.approachLie,
+                approachDistance: stat.approachDistance,
+                puttDistancesFeet: stat.puttDistances,
+                strokes: stat.strokes
+            )
+        }
+        let result = SGCalculator.compute(holes: inputs)
+        return (result.totals, result.holes.map(\.totals))
+    }
+}

@@ -13,7 +13,7 @@ public struct PlayView: View {
     private let onFinish: () -> Void
     private let onAutosave: () -> Void
 
-    @State private var lastHoleIdx: Int = 0
+    @State private var lastHoleIdx = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
@@ -45,29 +45,22 @@ public struct PlayView: View {
             SubLabel("Strokes")
             strokesPanel
 
-            shotBlocks
-            puttingBlock
+            VStack(alignment: .leading, spacing: 0) {
+                shotBlocks
+                puttingBlock
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            Spacer(minLength: 0)
+
             pinSection
+            HBar(vMargin: BrutalistSpacing.m)
+            navRow
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, BrutalistSpacing.pageHorizontal)
+        .padding(.bottom, BrutalistSpacing.xs)
         .background(BrutalistColor.bg.ignoresSafeArea())
         .foregroundStyle(BrutalistColor.fg)
-        // Reserve the bottom inset for the nav row so the top column
-        // always lays out above it. The previous ZStack overlay worked
-        // on iPhone 17 but on shorter devices (iPhone 14 with its
-        // larger bottom safe area) the top content extended into the
-        // nav's vertical band and the HBar clipped through the buttons.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 0) {
-                HBar(vMargin: BrutalistSpacing.xs)
-                navRow
-                    .padding(.top, BrutalistSpacing.xs)
-            }
-            .padding(.horizontal, BrutalistSpacing.pageHorizontal)
-            .padding(.bottom, BrutalistSpacing.xs)
-            .background(BrutalistColor.bg)
-        }
         .onChange(of: state.holeIdx, initial: true) { _, newValue in
             lastHoleIdx = newValue
             onAutosave()
@@ -185,11 +178,10 @@ public struct PlayView: View {
                 heroStat(label: "HCP", value: hole.handicapIndex.map { String(format: "%02d", $0) } ?? "—", big: false)
             }
         }
-        .frame(height: 200, alignment: .topLeading)
+        .frame(height: 176, alignment: .topLeading)
         .padding(.top, BrutalistSpacing.l)
     }
 
-    @ViewBuilder
     private func heroStat(label: String, value: String, big: Bool) -> some View {
         VStack(alignment: .trailing, spacing: 2) {
             Text(label.uppercased())
@@ -247,7 +239,6 @@ public struct PlayView: View {
         .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
     }
 
-    @ViewBuilder
     private func strokeStepButton(_ glyph: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Text(glyph)
             .font(BrutalistType.mono(.medium, size: 20))
@@ -370,7 +361,7 @@ public struct PlayView: View {
             Spacer(minLength: 0)
         }
         .frame(height: 22, alignment: .leading)
-        .padding(.top, BrutalistSpacing.m)
+        .padding(.top, BrutalistSpacing.xxs)
     }
 
     private func metricChip(_ label: String, active: Bool) -> some View {
@@ -434,7 +425,6 @@ public struct PlayView: View {
         }
     }
 
-    @ViewBuilder
     private func navButton(
         title: String,
         caption: String,

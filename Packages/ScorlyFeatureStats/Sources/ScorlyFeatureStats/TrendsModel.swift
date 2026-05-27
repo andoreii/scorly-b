@@ -9,7 +9,9 @@ public enum TrendsWindow: Int, CaseIterable, Sendable {
     case ten = 10
     case twenty = 20
 
-    public var label: String { "LAST \(rawValue)" }
+    public var label: String {
+        "LAST \(rawValue)"
+    }
 }
 
 /// One round's contribution to the timeline. Pre-baked so the view
@@ -18,6 +20,9 @@ public struct TrendsTimelinePoint: Sendable, Equatable, Identifiable {
     public let id: UUID
     public let date: Date
     public let scoreVsPar: Int
+    /// Raw total strokes for the round. Used by the new Trend page
+    /// score line graph, which plots raw scores instead of vs-par.
+    public let totalScore: Int
     /// Three-putts on the round.
     public let threePutts: Int
     /// Effective penalty strokes summed across all holes.
@@ -27,14 +32,28 @@ public struct TrendsTimelinePoint: Sendable, Equatable, Identifiable {
         id: UUID,
         date: Date,
         scoreVsPar: Int,
+        totalScore: Int,
         threePutts: Int,
         penalties: Int
     ) {
         self.id = id
         self.date = date
         self.scoreVsPar = scoreVsPar
+        self.totalScore = totalScore
         self.threePutts = threePutts
         self.penalties = penalties
+    }
+}
+
+/// Bundled inputs for the new score-line chart. Carries date + score
+/// per round so the chart can render month-zone labels and per-point
+/// score callouts in one pass without rederiving the timeline.
+public struct ScoreLinePoint: Sendable, Equatable, Hashable {
+    public let date: Date
+    public let score: Int
+    public init(date: Date, score: Int) {
+        self.date = date
+        self.score = score
     }
 }
 
@@ -95,8 +114,14 @@ public struct SGBreakdownRow: Sendable, Equatable, Identifiable {
         self.category = category
         self.average = average
     }
-    public var id: SGCategory { category }
-    public var label: String { category.rawValue.uppercased() }
+
+    public var id: SGCategory {
+        category
+    }
+
+    public var label: String {
+        category.rawValue.uppercased()
+    }
 }
 
 /// Pre-baked Trends payload. The view consumes this and renders. All
@@ -129,7 +154,7 @@ public struct TrendsModel: Sendable, Equatable {
     public let distributionHoles: Int
     public let distribution: [ScoreBucket: Int]
 
-    // SG
+    /// SG
     /// nil when no round in the sample has SG totals recorded.
     public let sg: [SGBreakdownRow]?
 
@@ -138,6 +163,9 @@ public struct TrendsModel: Sendable, Equatable {
     public let girRate: Double?
     public let puttsPerRound: Double?
     public let threePuttRate: Double?
+    /// Rate of one-putt holes across the window. Used alongside
+    /// `threePuttRate` in the touch carousel's mini-stats.
+    public let onePuttRate: Double?
     public let firSeries: [Double]
     public let girSeries: [Double]
     public let puttsSeries: [Double]
@@ -146,6 +174,11 @@ public struct TrendsModel: Sendable, Equatable {
     // Penalty heatmap
     public let penalties: [Int]
     public let penaltyMax: Int
+
+    /// Eight-axis skills radar inputs. Scores use recorded scorecard
+    /// measures so imported rounds are comparable even when SG cannot
+    /// reconstruct every shot endpoint.
+    public let radarAxes: [RadarAxis]
 
     public init(
         window: TrendsWindow,
@@ -165,12 +198,14 @@ public struct TrendsModel: Sendable, Equatable {
         girRate: Double?,
         puttsPerRound: Double?,
         threePuttRate: Double?,
+        onePuttRate: Double? = nil,
         firSeries: [Double],
         girSeries: [Double],
         puttsSeries: [Double],
         threePuttSeries: [Double],
         penalties: [Int],
-        penaltyMax: Int
+        penaltyMax: Int,
+        radarAxes: [RadarAxis] = []
     ) {
         self.window = window
         self.sampleCount = sampleCount
@@ -189,12 +224,14 @@ public struct TrendsModel: Sendable, Equatable {
         self.girRate = girRate
         self.puttsPerRound = puttsPerRound
         self.threePuttRate = threePuttRate
+        self.onePuttRate = onePuttRate
         self.firSeries = firSeries
         self.girSeries = girSeries
         self.puttsSeries = puttsSeries
         self.threePuttSeries = threePuttSeries
         self.penalties = penalties
         self.penaltyMax = penaltyMax
+        self.radarAxes = radarAxes
     }
 
     /// Empty model for the empty-state branch (no rounds yet).
@@ -222,7 +259,10 @@ public struct TrendsModel: Sendable, Equatable {
             puttsSeries: [],
             threePuttSeries: [],
             penalties: [],
-            penaltyMax: 0
+            penaltyMax: 0,
+            radarAxes: RadarAxisKey.allCases.map {
+                RadarAxis(key: $0, windowValue: 0, seasonValue: 0)
+            }
         )
     }
 
@@ -272,6 +312,7 @@ public struct TrendsModel: Sendable, Equatable {
                 id: round.id,
                 date: round.datePlayed,
                 scoreVsPar: round.scoreVsPar,
+                totalScore: round.totalScore,
                 threePutts: round.threePuttCount,
                 penalties: round.holeStats.reduce(0) { $0 + $1.effectivePenaltyStrokes }
             )
@@ -316,6 +357,7 @@ public struct TrendsModel: Sendable, Equatable {
         var totalPutts = 0
         var totalHoles = 0
         var threePuttCount = 0
+        var onePuttCount = 0
 
         for round in chrono {
             let holes = round.holeStats
@@ -338,6 +380,7 @@ public struct TrendsModel: Sendable, Equatable {
             totalPutts += round.totalPutts
             totalHoles += girHoles
             threePuttCount += round.threePuttCount
+            onePuttCount += holes.filter { $0.putts == 1 }.count
         }
 
         let firRate: Double? = firDenominator > 0
@@ -352,10 +395,18 @@ public struct TrendsModel: Sendable, Equatable {
         let threePuttRate: Double? = totalHoles > 0
             ? Double(threePuttCount) / Double(totalHoles)
             : nil
+        let onePuttRate: Double? = totalHoles > 0
+            ? Double(onePuttCount) / Double(totalHoles)
+            : nil
 
         // Penalty heatmap (chronological, one cell per round).
         let penalties = timeline.map(\.penalties)
         let penaltyMax = penalties.max() ?? 0
+
+        // Radar — THIS WINDOW vs SEASON AVG. `rounds` is already the
+        // post-filter eligible set; the season is the same collection.
+        // Falls back gracefully when a metric can't be computed.
+        let radarAxes = RadarAxis.makeAll(window: sample, season: rounds)
 
         return TrendsModel(
             window: window,
@@ -375,12 +426,14 @@ public struct TrendsModel: Sendable, Equatable {
             girRate: girRate,
             puttsPerRound: puttsPerRound,
             threePuttRate: threePuttRate,
+            onePuttRate: onePuttRate,
             firSeries: firSeries,
             girSeries: girSeries,
             puttsSeries: puttsSeries,
             threePuttSeries: threePuttSeries,
             penalties: penalties,
-            penaltyMax: penaltyMax
+            penaltyMax: penaltyMax,
+            radarAxes: radarAxes
         )
     }
 }

@@ -12,8 +12,14 @@ final class InMemoryCoursesRepository: CoursesRepository {
         self.courses = courses
     }
 
-    func fetchAll() async throws -> [Course] { courses }
-    func fetch(id: UUID) async throws -> Course? { courses.first(where: { $0.id == id }) }
+    func fetchAll() async throws -> [Course] {
+        courses
+    }
+
+    func fetch(id: UUID) async throws -> Course? {
+        courses.first(where: { $0.id == id })
+    }
+
     func save(_: Course) async throws {}
     func update(_: Course) async throws {}
     func delete(id _: UUID) async throws {}
@@ -32,10 +38,10 @@ final class InMemoryCoursesRepository: CoursesRepository {
                 location: "Monterey, CA",
                 pars: [4, 5, 3, 4, 4, 5, 3, 4, 4, 4, 4, 3, 4, 5, 4, 4, 3, 5],
                 teeSpecs: [
-                    .init(name: "Black", rating: 74.8, slope: 138, yardage: 6912),
-                    .init(name: "Blue", rating: 73.4, slope: 134, yardage: 6504),
-                    .init(name: "White", rating: 71.2, slope: 128, yardage: 6128),
-                    .init(name: "Red", rating: 68.9, slope: 119, yardage: 5421),
+                    .init(name: "Black", rating: 74.8, slope: 138, yardage: 6_912),
+                    .init(name: "Blue", rating: 73.4, slope: 134, yardage: 6_504),
+                    .init(name: "White", rating: 71.2, slope: 128, yardage: 6_128),
+                    .init(name: "Red", rating: 68.9, slope: 119, yardage: 5_421),
                 ]
             ),
             buildCourse(
@@ -44,9 +50,9 @@ final class InMemoryCoursesRepository: CoursesRepository {
                 location: "Carmel, CA",
                 pars: [4, 4, 3, 5, 4, 4, 5, 3, 4, 4, 4, 4, 3, 5, 4, 4, 3, 4],
                 teeSpecs: [
-                    .init(name: "Blue", rating: 71.8, slope: 128, yardage: 6312),
-                    .init(name: "White", rating: 69.6, slope: 122, yardage: 5984),
-                    .init(name: "Red", rating: 67.4, slope: 116, yardage: 5410),
+                    .init(name: "Blue", rating: 71.8, slope: 128, yardage: 6_312),
+                    .init(name: "White", rating: 69.6, slope: 122, yardage: 5_984),
+                    .init(name: "Red", rating: 67.4, slope: 116, yardage: 5_410),
                 ]
             ),
             buildCourse(
@@ -55,9 +61,9 @@ final class InMemoryCoursesRepository: CoursesRepository {
                 location: "Half Moon Bay, CA",
                 pars: [4, 5, 4, 3, 4, 4, 5, 3, 4, 4, 4, 3, 5, 4, 4, 4, 3, 5],
                 teeSpecs: [
-                    .init(name: "Championship", rating: 74.2, slope: 141, yardage: 6788),
-                    .init(name: "Members", rating: 72.1, slope: 134, yardage: 6402),
-                    .init(name: "Forward", rating: 69.5, slope: 124, yardage: 5602),
+                    .init(name: "Championship", rating: 74.2, slope: 141, yardage: 6_788),
+                    .init(name: "Members", rating: 72.1, slope: 134, yardage: 6_402),
+                    .init(name: "Forward", rating: 69.5, slope: 124, yardage: 5_602),
                 ]
             ),
             buildCourse(
@@ -66,8 +72,8 @@ final class InMemoryCoursesRepository: CoursesRepository {
                 location: "San Jose, CA",
                 pars: [4, 4, 3, 4, 5, 3, 4, 4, 4, 4, 3, 4, 5, 4, 4, 4, 3, 4],
                 teeSpecs: [
-                    .init(name: "White", rating: 69.5, slope: 119, yardage: 5910),
-                    .init(name: "Red", rating: 67.2, slope: 113, yardage: 5320),
+                    .init(name: "White", rating: 69.5, slope: 119, yardage: 5_910),
+                    .init(name: "Red", rating: 67.2, slope: 113, yardage: 5_320),
                 ]
             ),
         ]

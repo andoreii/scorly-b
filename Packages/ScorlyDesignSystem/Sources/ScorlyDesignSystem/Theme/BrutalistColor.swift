@@ -30,4 +30,39 @@ public enum BrutalistColor {
     public static let invFg = Color(red: 0xEF / 255, green: 0xEB / 255, blue: 0xE2 / 255)
     /// Captions on inverse panel. `#9A9A95`.
     public static let invMuted = Color(red: 0x9A / 255, green: 0x9A / 255, blue: 0x95 / 255)
+
+    // MARK: - Strokes Gained accents
+
+    //
+    // **Documented exception.** DESIGN.md states the accent budget is
+    // zero and "no accent color ever." Strokes Gained is the single,
+    // deliberate carve-out: green/red here are *notation* — same role
+    // as the circle-under-par / box-over-par convention in `Pip` —
+    // encoding the direction of a signed number. They are only used in
+    // `StrokesGainedCard` (`SGDivergingBars`, `SGHoleTimeline`, and the
+    // summary cells). Never use these tokens for buttons, highlights,
+    // or "important" things. The rest of the app remains accent-free.
+
+    /// Muted green for strokes gained. `#2F6B3A`.
+    public static let sgPos = Color(red: 0x2F / 255, green: 0x6B / 255, blue: 0x3A / 255)
+    /// Muted red for strokes lost. `#9A2A1F`.
+    public static let sgNeg = Color(red: 0x9A / 255, green: 0x2A / 255, blue: 0x1F / 255)
+    /// Low-opacity green fill for bar interiors. ~`rgba(47,107,58,0.16)`.
+    public static let sgPosFill = sgPos.opacity(0.16)
+    /// Low-opacity red fill for bar interiors. ~`rgba(154,42,31,0.14)`.
+    public static let sgNegFill = sgNeg.opacity(0.14)
+
+    // MARK: - Score grid
+
+    //
+    // Score-distribution + hole-heatmap palette. Same notation rationale
+    // as the SG accents above — green/red/bogey here encode the
+    // direction of a score relative to par, not decoration. Used only by
+    // the Trend page's distribution bars and hole-by-hole heat grid.
+
+    /// Warm ochre for bogey cells. `#B5862A`, OKLCH ~ L 0.66 / C 0.10 /
+    /// H 78 — sits between sand and ink on bone paper.
+    public static let bogey = Color(red: 0xB5 / 255, green: 0x86 / 255, blue: 0x2A / 255)
+    /// Low-opacity ochre fill for bogey grid cells.
+    public static let bogeyFill = bogey.opacity(0.22)
 }

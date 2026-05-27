@@ -4,16 +4,15 @@ import Testing
 @testable import ScorlyFeatureAuth
 
 @MainActor
-@Suite("AuthGateView wiring")
 struct AuthGateTests {
     @Test("AuthGateView accepts an authenticated content slot")
-    func gateAcceptsAuthenticatedSlot() async throws {
+    func gateAcceptsAuthenticatedSlot() {
         let service = AuthService(client: MockAuthClient())
         _ = AuthGateView(authService: service) { Text("home") }
     }
 
     @Test("BrutalistAuthView builds with a mock AuthService")
-    func authViewConstructs() async throws {
+    func authViewConstructs() {
         let service = AuthService(client: MockAuthClient())
         _ = BrutalistAuthView(authService: service)
     }

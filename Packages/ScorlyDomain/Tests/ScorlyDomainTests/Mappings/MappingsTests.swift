@@ -45,6 +45,12 @@ struct MappingsTests {
         #expect(Mappings.roundFormat(fromUILabel: "  Stableford  ") == .stableford)
     }
 
+    @Test("RoundFormat — database aliases normalize to canonical cases")
+    func roundFormatDatabaseAliases() {
+        #expect(Mappings.roundFormat(fromUILabel: "Stroke Play") == .stroke)
+        #expect(Mappings.roundFormat(fromUILabel: "Match Play") == .match)
+    }
+
     @Test("RoundFormat — unknown label yields nil")
     func roundFormatUnknown() {
         #expect(Mappings.roundFormat(fromUILabel: "BestBall") == nil)

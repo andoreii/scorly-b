@@ -20,6 +20,10 @@ public struct CompletedRound: Sendable, Equatable, Identifiable {
     public let slope: Decimal?
     public let holeStats: [HoleStat]
     public let sgTotals: SGTotals?
+    /// Per-hole SG breakdown, parallel-indexed with `holeStats`. Same nil
+    /// semantics as `sgTotals`: populated together or both nil. Used by
+    /// the Round Detail view to render the per-hole timeline.
+    public let sgHoles: [SGTotals]?
     public let roundType: RoundType?
     public let roundFormat: RoundFormat?
     public let conditions: Conditions
@@ -39,6 +43,7 @@ public struct CompletedRound: Sendable, Equatable, Identifiable {
         slope: Decimal? = nil,
         holeStats: [HoleStat] = [],
         sgTotals: SGTotals? = nil,
+        sgHoles: [SGTotals]? = nil,
         roundType: RoundType? = nil,
         roundFormat: RoundFormat? = nil,
         conditions: Conditions = [],
@@ -57,6 +62,7 @@ public struct CompletedRound: Sendable, Equatable, Identifiable {
         self.slope = slope
         self.holeStats = holeStats
         self.sgTotals = sgTotals
+        self.sgHoles = sgHoles
         self.roundType = roundType
         self.roundFormat = roundFormat
         self.conditions = conditions

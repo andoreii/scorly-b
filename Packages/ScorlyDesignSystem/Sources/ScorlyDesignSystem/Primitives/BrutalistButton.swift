@@ -119,7 +119,9 @@ public struct BrutalistButton<Title: View, Caption: View>: View {
         return pressed ? inverted : normal
     }
 
-    private var border: Color { BrutalistColor.fg }
+    private var border: Color {
+        BrutalistColor.fg
+    }
 }
 
 // MARK: - Convenience initializers

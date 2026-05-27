@@ -193,7 +193,19 @@ struct RootView: View {
             case .history:
                 HistoryView(
                     roundsRepository: roundsRepository,
-                    onBack: { flow.resetTo(.home) }
+                    onBack: { flow.resetTo(.home) },
+                    onSelect: { round, season in
+                        flow.go(.roundDetail(round, season: season))
+                    }
+                )
+                .transition(transition)
+            case let .roundDetail(round, season):
+                RoundDetailView(
+                    round: round,
+                    seasonRounds: season,
+                    roundsRepository: roundsRepository,
+                    onBack: { flow.back() },
+                    onDeleted: { flow.back() }
                 )
                 .transition(transition)
             case .stats:
@@ -206,7 +218,9 @@ struct RootView: View {
                 SettingsView(
                     onBack: { flow.resetTo(.home) },
                     onSyncCourses: refreshCourses,
-                    onSignOut: signOut
+                    onFetchRounds: refreshRounds,
+                    onSignOut: signOut,
+                    onBackfillStats: { try await roundsRepository.backfillHoleStatsToCloud() }
                 )
                 .transition(transition)
             case .courses:
@@ -358,6 +372,16 @@ struct RootView: View {
     }
 
     @MainActor
+    private func refreshRounds() async throws -> Int {
+        guard authService.userId != nil else {
+            throw RootViewError.roundFetchRequiresSignIn
+        }
+        let count = try await roundsRepository.refreshFromRemote(limit: 20)
+        await reloadHomeRounds()
+        return count
+    }
+
+    @MainActor
     private func reloadHomeRounds() async {
         guard
             let fetched = try? await roundsRepository.fetchAllCompleted()
@@ -430,6 +454,17 @@ struct RootView: View {
             devBypassAuth = false
             #endif
             flow.resetTo(.home)
+        }
+    }
+}
+
+private enum RootViewError: LocalizedError {
+    case roundFetchRequiresSignIn
+
+    var errorDescription: String? {
+        switch self {
+        case .roundFetchRequiresSignIn:
+            "Sign in to fetch rounds from Supabase"
         }
     }
 }
