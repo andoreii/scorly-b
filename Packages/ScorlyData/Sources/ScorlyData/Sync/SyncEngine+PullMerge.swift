@@ -260,9 +260,7 @@ extension SyncEngine {
                 existing.approach = row.approach
                 existing.teeClub = row.teeClub
                 existing.approachClub = row.approachClub
-                existing.outOfBoundsCount = row.outOfBoundsCount ?? 0
                 existing.penaltyStrokes = row.penaltyStrokes ?? 0
-                existing.hazardCount = row.hazardCount ?? 0
                 existing.greenInReg = row.greenInReg
                 existing.threePutt = row.threePutt
                 existing.upAndDownSuccess = row.upAndDownSuccess
@@ -271,14 +269,7 @@ extension SyncEngine {
                 existing.teeShotDistance = row.teeShotDistance
                 existing.approachDistance = row.approachDistance
                 existing.pinPosition = row.pinPosition
-                existing.outOfBoundsLeft = row.outOfBoundsLeft ?? 0
-                existing.outOfBoundsRight = row.outOfBoundsRight ?? 0
-                existing.outOfBoundsLong = row.outOfBoundsLong ?? 0
-                existing.outOfBoundsShort = row.outOfBoundsShort ?? 0
-                existing.hazardLeft = row.hazardLeft ?? 0
-                existing.hazardRight = row.hazardRight ?? 0
-                existing.hazardLong = row.hazardLong ?? 0
-                existing.hazardShort = row.hazardShort ?? 0
+                existing.penaltyEventsJSON = row.penaltyEventsJson
             } else {
                 modelContext.insert(
                     LocalHoleStat(
@@ -293,9 +284,7 @@ extension SyncEngine {
                         approach: row.approach,
                         teeClub: row.teeClub,
                         approachClub: row.approachClub,
-                        outOfBoundsCount: row.outOfBoundsCount ?? 0,
                         penaltyStrokes: row.penaltyStrokes ?? 0,
-                        hazardCount: row.hazardCount ?? 0,
                         greenInReg: row.greenInReg,
                         threePutt: row.threePutt,
                         upAndDownSuccess: row.upAndDownSuccess,
@@ -304,14 +293,7 @@ extension SyncEngine {
                         teeShotDistance: row.teeShotDistance,
                         approachDistance: row.approachDistance,
                         pinPosition: row.pinPosition,
-                        outOfBoundsLeft: row.outOfBoundsLeft ?? 0,
-                        outOfBoundsRight: row.outOfBoundsRight ?? 0,
-                        outOfBoundsLong: row.outOfBoundsLong ?? 0,
-                        outOfBoundsShort: row.outOfBoundsShort ?? 0,
-                        hazardLeft: row.hazardLeft ?? 0,
-                        hazardRight: row.hazardRight ?? 0,
-                        hazardLong: row.hazardLong ?? 0,
-                        hazardShort: row.hazardShort ?? 0
+                        penaltyEventsJSON: row.penaltyEventsJson
                     )
                 )
             }

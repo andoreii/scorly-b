@@ -11,17 +11,26 @@ import SwiftUI
 /// `SGCardValues`) mirrors the convention in Round Detail.
 struct MultiRoundSGCard: View {
     let rounds: [CompletedRound]
+    let baselineRounds: [CompletedRound]
+    let comparisonReference: SGComparisonReference
 
     var body: some View {
+        let projection = SGReferenceProjection.project(
+            reference: comparisonReference,
+            totals: averagedTotals(),
+            holes: nil,
+            baselineRounds: baselineRounds
+        )
         // The cumulative timeline section is intentionally omitted on
         // the Trend page — multi-round cumulative SG doesn't read as
         // well as the same chart does intra-round on Round Detail.
         // Hero + 4 category rows + summary footer only.
         StrokesGainedCard(
             meta: "LAST \(eligibleCount) ROUNDS · 4 CATEGORIES",
-            total: averagedTotals(),
+            total: projection.totals.map(cardValues),
             holes: nil,
             seasonAverages: nil,
+            referenceLabel: projection.referenceLabel,
             summaryStyle: .categoryExtremes,
             breakdownDensity: .spacious
         )
@@ -34,7 +43,7 @@ struct MultiRoundSGCard: View {
     /// Average each SG category across every round that recorded SG.
     /// Returns nil when the window has no SG-enabled rounds — that
     /// fires the design-system card's placeholder branch.
-    private func averagedTotals() -> SGCardValues? {
+    private func averagedTotals() -> SGTotals? {
         let totals = rounds.compactMap(\.sgTotals)
         guard !totals.isEmpty else { return nil }
         let count = Decimal(totals.count)
@@ -49,12 +58,22 @@ struct MultiRoundSGCard: View {
         let app = avg(sum.app)
         let arg = avg(sum.arg)
         let putt = avg(sum.putt)
-        return SGCardValues(
+        return SGTotals(
             ott: ott,
             app: app,
             arg: arg,
             putt: putt,
             total: ott + app + arg + putt
+        )
+    }
+
+    private func cardValues(_ totals: SGTotals) -> SGCardValues {
+        SGCardValues(
+            ott: totals.ott,
+            app: totals.app,
+            arg: totals.arg,
+            putt: totals.putt,
+            total: totals.total
         )
     }
 }

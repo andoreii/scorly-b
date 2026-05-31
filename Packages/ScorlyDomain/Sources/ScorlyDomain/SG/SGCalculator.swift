@@ -24,11 +24,16 @@ import Foundation
 ///    approach and the first putt. All categorised `.arg`.
 /// 4. Putts — one per entry in `puttDistancesFeet`. All `.putt`.
 ///
-/// **Missing data → `nil` SG.** Any shot whose start *or* end position
-/// can't be fully determined returns `nil` for its SG. Aggregates
-/// (per-category totals, round total) sum only the non-nil shots —
-/// matching the "aggregates exclude nils" rule. A category with zero
-/// shots aggregates to `0`.
+/// **Missing data → bounded defaults.** Any shot whose start *or* end
+/// position can't be fully determined returns `nil` for its SG, and
+/// aggregates (per-category totals, round total) sum only the non-nil
+/// shots. For the chip phase specifically — where users routinely
+/// don't record exact distances — `reconstruct` falls back to
+/// `DefaultARGStart.distance(forLie:)` rather than skipping the shot,
+/// so ARG gets a bounded estimate (within ±0.3 SG per chip) instead
+/// of dumping every unattributable stroke into one category. Explicit
+/// user data (`argShots`, `approachLandingDistance`, `layupLie`,
+/// `layupDistance`) always wins over the defaults.
 public enum SGCalculator {
     // MARK: - Public API
 
@@ -123,29 +128,77 @@ public enum SGCalculator {
         let end: ShotEnd
     }
 
-    /// Walks the v1-style hole inputs into a per-stroke timeline.
+    /// Walks the hole inputs into a per-stroke timeline. Each shot's
+    /// start uses the previous shot's end when known (continuity); the
+    /// user-supplied `argShots` / `approachLandingDistance` / `layupLie`
+    /// fields anchor the chain at the otherwise-ambiguous points. When
+    /// a chip's start can't be pinned from user data, we fall back to
+    /// `DefaultARGStart.distance(forLie:)` — bounded lie-based defaults
+    /// so the error stays small rather than dumping into a residual.
     /// Internal so tests can pin the reconstruction independent of the
     /// SG arithmetic.
     static func reconstruct(_ input: HoleSGInput) -> [ReconstructedShot] {
         guard input.strokes >= 1 else { return [] }
         let putts = input.puttDistancesFeet ?? []
         let isPar3 = input.par == 3
+        let argShots = input.argShots ?? []
 
         var shots: [ReconstructedShot] = []
+        // Tracks where the last known ball position sits. Nil = the
+        // chain broke (a shot's end couldn't be pinned), which forces
+        // the next shot's start to be reconstructed from user fields
+        // alone (or fall through to default).
+        var prevEnd: ShotPosition?
 
-        // 1. Tee shot — always present.
-        shots.append(reconstructTeeShot(input: input, putts: putts, isPar3: isPar3))
+        // 1. Tee shot.
+        let teeShot = reconstructTeeShot(input: input, putts: putts, isPar3: isPar3)
+        shots.append(teeShot)
+        prevEnd = positionFromEnd(teeShot.end)
 
-        // 2. Approach (par 4 / par 5 with at least 2 strokes).
-        if !isPar3, input.strokes >= 2 {
-            shots.append(reconstructApproachShot(input: input, putts: putts))
+        // 2. Layup (par 5 only, when the user marked one).
+        if input.par == 5, input.strokes >= 3,
+           let layupLie = input.layupLie,
+           let layupDistance = input.layupDistance,
+           layupDistance > 0 {
+            let layupEnd = ShotPosition(
+                lie: sgBenchmark(for: layupLie),
+                distance: Decimal(layupDistance)
+            )
+            shots.append(ReconstructedShot(
+                category: .app,
+                start: prevEnd,
+                end: .position(layupEnd)
+            ))
+            prevEnd = layupEnd
         }
 
-        // 3. ARG fillers between approach and first putt.
-        let preARG = shots.count
-        let argCount = max(0, input.strokes - preARG - putts.count)
+        // 3. Approach (par 4 / par 5 with at least one shot remaining
+        //    after tee + optional layup).
+        if !isPar3, input.strokes > shots.count {
+            let approach = reconstructApproachShot(
+                input: input,
+                putts: putts,
+                prevEnd: prevEnd,
+                argShots: argShots,
+                isHoledShot: putts.isEmpty && input.strokes == shots.count + 1
+            )
+            shots.append(approach)
+            prevEnd = positionFromEnd(approach.end)
+        }
+
+        // 4. ARG fillers between the approach (or par-3 tee) and the
+        //    first putt. Count = remaining strokes minus the putts.
+        let argCount = max(0, input.strokes - shots.count - putts.count)
         for index in 0..<argCount {
             let isLast = index == argCount - 1
+            let start = argStart(
+                index: index,
+                argShots: argShots,
+                prevEnd: prevEnd,
+                isFirstARG: index == 0,
+                landingLie: argLandingLie(input: input, isPar3: isPar3),
+                landingDistance: argLandingDistance(input: input, isPar3: isPar3)
+            )
             let end: ShotEnd = {
                 if isLast {
                     if let firstPutt = putts.first {
@@ -153,16 +206,25 @@ public enum SGCalculator {
                     }
                     return .holed
                 }
-                return .unknown
+                if let next = argShots[safe: index + 1] {
+                    return .position(ShotPosition(
+                        lie: sgBenchmark(for: next.lie),
+                        distance: Decimal(next.distanceToPinYards)
+                    ))
+                }
+                // Intermediate chip with no user-recorded next shot —
+                // assume a midpoint default so the chain stays computable
+                // rather than nilling out.
+                return .position(ShotPosition(
+                    lie: sgBenchmark(for: argLandingLie(input: input, isPar3: isPar3) ?? .fairway),
+                    distance: Decimal(DefaultARGStart.intermediateDistance)
+                ))
             }()
-            // Intermediate ARG shots have no recoverable start position
-            // (we only know the lie of the approach landing, not the
-            // distance); mark `nil` so SG comes out `nil` rather than
-            // guessed.
-            shots.append(ReconstructedShot(category: .arg, start: nil, end: end))
+            shots.append(ReconstructedShot(category: .arg, start: start, end: end))
+            prevEnd = positionFromEnd(end)
         }
 
-        // 4. Putts.
+        // 5. Putts.
         for (index, distanceFeet) in putts.enumerated() {
             let start = ShotPosition(lie: .green, distance: Decimal(distanceFeet))
             let end: ShotEnd
@@ -178,6 +240,58 @@ public enum SGCalculator {
     }
 
     // MARK: - Reconstruction helpers
+
+    private static func positionFromEnd(_ end: ShotEnd) -> ShotPosition? {
+        switch end {
+        case let .position(pos): pos
+        case .holed, .unknown: nil
+        }
+    }
+
+    /// Lie of the shot that landed off-green and set up the chip phase.
+    /// Par 3: the tee shot. Par 4/5: the approach.
+    private static func argLandingLie(input: HoleSGInput, isPar3: Bool) -> Lie? {
+        isPar3 ? input.teeShotLie : input.approachLie
+    }
+
+    /// User-provided landing distance for the shot that set up the chip
+    /// phase, if any. We reuse `approachLandingDistance` for par 3 too
+    /// (semantically: distance from pin where the approach-class shot
+    /// finished), since the par-3 UI surfaces it on the same editor.
+    private static func argLandingDistance(input: HoleSGInput, isPar3: Bool) -> Int? {
+        input.approachLandingDistance
+    }
+
+    /// Computes the start position for ARG shot at index `index`,
+    /// preferring (in order): explicit `argShots[index]`, the previous
+    /// shot's known end position, the user-recorded landing distance
+    /// (first ARG only), or a lie-based default.
+    private static func argStart(
+        index: Int,
+        argShots: [ARGShot],
+        prevEnd: ShotPosition?,
+        isFirstARG: Bool,
+        landingLie: Lie?,
+        landingDistance: Int?
+    ) -> ShotPosition? {
+        if let userShot = argShots[safe: index] {
+            return ShotPosition(
+                lie: sgBenchmark(for: userShot.lie),
+                distance: Decimal(userShot.distanceToPinYards)
+            )
+        }
+        if let prevEnd {
+            return prevEnd
+        }
+        if isFirstARG, let landingLie {
+            let distance = landingDistance ?? DefaultARGStart.distance(forLie: landingLie)
+            return ShotPosition(
+                lie: sgBenchmark(for: landingLie),
+                distance: Decimal(distance)
+            )
+        }
+        return nil
+    }
 
     private static func reconstructTeeShot(
         input: HoleSGInput,
@@ -207,12 +321,22 @@ public enum SGCalculator {
             return ReconstructedShot(category: category, start: start, end: .unknown)
         }
 
-        // Off-green tee shot. For par 4 / par 5 we can derive the
-        // remaining distance from `teeShotDistance`; for par 3 we
-        // typically don't have it (the v1 UI only recorded
-        // teeShotDistance on holes where the tee-then-approach split
-        // applies), so end stays unknown.
-        guard !isPar3, let teeShotDistance = input.teeShotDistance else {
+        // Off-green tee shot. On par 4/5 the remaining distance comes
+        // from `teeShotDistance`. On par 3 we route through the
+        // approach-landing pathway (so the LANDED AT field captured on
+        // the par-3 tee editor still anchors the end position).
+        if isPar3 {
+            if let landing = input.approachLandingDistance, landing > 0 {
+                let pos = ShotPosition(lie: benchLie, distance: Decimal(landing))
+                return ReconstructedShot(category: category, start: start, end: .position(pos))
+            }
+            // No user-recorded landing distance — use a lie-based
+            // default so the chip chain stays computable.
+            let defaulted = DefaultARGStart.distance(forLie: teeShotLie)
+            let pos = ShotPosition(lie: benchLie, distance: Decimal(defaulted))
+            return ReconstructedShot(category: category, start: start, end: .position(pos))
+        }
+        guard let teeShotDistance = input.teeShotDistance else {
             return ReconstructedShot(category: category, start: start, end: .unknown)
         }
         let remaining = Decimal(input.yardage - teeShotDistance)
@@ -225,11 +349,19 @@ public enum SGCalculator {
 
     private static func reconstructApproachShot(
         input: HoleSGInput,
-        putts: [Int]
+        putts: [Int],
+        prevEnd: ShotPosition?,
+        argShots: [ARGShot],
+        isHoledShot: Bool
     ) -> ReconstructedShot {
+        // Approach start prefers the chain continuity (prevEnd); falls
+        // back to (teeShotLie_bench, approachDistance) so historical
+        // rounds without explicit layup data still compute.
         let start: ShotPosition? = {
+            if let prevEnd { return prevEnd }
             guard let teeShotLie = input.teeShotLie,
-                  let approachDistance = input.approachDistance, approachDistance > 0
+                  let approachDistance = input.approachDistance,
+                  approachDistance > 0
             else {
                 return nil
             }
@@ -244,17 +376,25 @@ public enum SGCalculator {
             if approachLie == .green {
                 if let firstPutt = putts.first {
                     end = .position(ShotPosition(lie: .green, distance: Decimal(firstPutt)))
-                } else if input.strokes == 2 {
-                    // Holed-out approach with no putts and exactly 2
-                    // strokes total — the approach is the holed shot.
+                } else if isHoledShot {
+                    // Holed approach with no putts → the approach is
+                    // the holed shot.
                     end = .holed
                 } else {
                     end = .unknown
                 }
             } else {
-                // Approach missed the green; the actual end-distance
-                // is unrecoverable from the v1 fields. SG comes out nil.
-                end = .unknown
+                // Approach missed the green. End = where the ball
+                // actually came to rest, prefer explicit landing data,
+                // then the first user-recorded chip start, then a
+                // lie-based default. The chain stays continuous.
+                let landingDistance = input.approachLandingDistance
+                    ?? argShots.first?.distanceToPinYards
+                    ?? DefaultARGStart.distance(forLie: approachLie)
+                end = .position(ShotPosition(
+                    lie: sgBenchmark(for: approachLie),
+                    distance: Decimal(landingDistance)
+                ))
             }
         } else {
             end = .unknown
@@ -273,6 +413,36 @@ public enum SGCalculator {
         case .recoveryLeft, .recoveryRight, .recoveryShort, .recoveryLong: .recovery
         case .green: .green
         }
+    }
+}
+
+/// Bounded lie-based defaults for the start distance of an
+/// around-the-green shot when the user didn't record it. Magnitudes
+/// follow Broadie's typical greenside-miss distributions — close
+/// enough that the SG error stays in single-tenths, far enough that
+/// a chip from sand and a chip from recovery rough are distinguished.
+enum DefaultARGStart {
+    /// Distance to pin (yards) we assume the chip started from, by
+    /// the lie of the shot that landed there.
+    static func distance(forLie lie: Lie) -> Int {
+        switch lie {
+        case .fairway: 35
+        case .roughLeft, .roughRight: 20
+        case .bunkerLeft, .bunkerRight, .bunkerShort, .bunkerLong: 12
+        case .recoveryLeft, .recoveryRight, .recoveryShort, .recoveryLong: 30
+        case .green: 0
+        }
+    }
+
+    /// Distance assigned to the end of an intermediate ARG shot when
+    /// the user didn't record the chain. Keeps the chip-to-chip SG
+    /// bounded; consumers should treat intermediates as best-effort.
+    static let intermediateDistance = 10
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
 
@@ -306,6 +476,19 @@ public struct HoleSGInput: Sendable, Equatable {
     /// to infer the count of around-the-green shots between the
     /// approach and the first putt.
     public let strokes: Int
+    /// Distance from the pin where the approach finished, in yards.
+    /// Only meaningful when `approachLie` is non-green (anchors the
+    /// chip start). Nil → lie-based default applied at reconstruction.
+    public let approachLandingDistance: Int?
+    /// One entry per around-the-green shot, ordered by stroke. When
+    /// shorter than the inferred ARG count, missing entries fall back
+    /// to lie-based defaults.
+    public let argShots: [ARGShot]?
+    /// Par-5 only: lie where the layup landed. Presence flips the
+    /// reconstruction into a three-shot pre-green chain.
+    public let layupLie: Lie?
+    /// Par-5 only: yards remaining to the pin after the layup.
+    public let layupDistance: Int?
 
     public init(
         par: Int,
@@ -315,7 +498,11 @@ public struct HoleSGInput: Sendable, Equatable {
         approachLie: Lie? = nil,
         approachDistance: Int? = nil,
         puttDistancesFeet: [Int]? = nil,
-        strokes: Int
+        strokes: Int,
+        approachLandingDistance: Int? = nil,
+        argShots: [ARGShot]? = nil,
+        layupLie: Lie? = nil,
+        layupDistance: Int? = nil
     ) {
         self.par = par
         self.yardage = yardage
@@ -325,6 +512,10 @@ public struct HoleSGInput: Sendable, Equatable {
         self.approachDistance = approachDistance
         self.puttDistancesFeet = puttDistancesFeet
         self.strokes = strokes
+        self.approachLandingDistance = approachLandingDistance
+        self.argShots = argShots
+        self.layupLie = layupLie
+        self.layupDistance = layupDistance
     }
 }
 

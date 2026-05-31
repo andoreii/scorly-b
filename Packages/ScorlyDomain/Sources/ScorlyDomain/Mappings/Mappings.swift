@@ -100,8 +100,9 @@ public enum Mappings {
     /// shot-location string for a `Lie`, or `nil` for "no shot recorded".
     /// Used by the data layer when writing `hole_stats.tee_shot` /
     /// `hole_stats.approach` to keep wire-format compatibility with v1
-    /// rounds. The mapping prefers the `Out *` variants for recovery lies
-    /// (which is what v1 wrote for tee/approach misses).
+    /// rounds. Recovery lies remain playable misses, so they use bare
+    /// direction labels. OB / hazard labels are reconstructed from
+    /// `PenaltyEvent` at the data-layer write boundary.
     public static func v1ShotLocation(for lie: Lie?) -> String? {
         guard let lie else { return nil }
         return lieToV1ShotLocation[lie]
@@ -111,10 +112,10 @@ public enum Mappings {
         .fairway: "Fairway",
         .roughLeft: "Left",
         .roughRight: "Right",
-        .recoveryLeft: "Out Left",
-        .recoveryRight: "Out Right",
-        .recoveryShort: "Out Short",
-        .recoveryLong: "Out Long",
+        .recoveryLeft: "Left",
+        .recoveryRight: "Right",
+        .recoveryShort: "Short",
+        .recoveryLong: "Long",
         .bunkerLeft: "Bunker Left",
         .bunkerRight: "Bunker Right",
         .bunkerShort: "Bunker Short",

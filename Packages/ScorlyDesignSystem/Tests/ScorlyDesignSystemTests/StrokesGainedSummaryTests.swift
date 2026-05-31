@@ -12,12 +12,12 @@ struct StrokesGainedSummaryTests {
             total: -1.10
         )
 
-        let items = SGSummaryItem.items(for: values, style: .categoryExtremes)
+        let items = SGSummaryItem.items(for: values, style: .categoryExtremes, referenceLabel: "VS SCRATCH")
+        let fullItems = SGSummaryItem.items(for: values, style: .full, referenceLabel: "VS PERSONAL AVG")
 
         #expect(items.map(\.label) == ["BEST CATEGORY", "WORST CATEGORY"])
         #expect(items.map(\.title) == ["APPROACH", "PUTTING"])
-        #expect(SGSummaryStyle.full.showsScratchMetaRow)
-        #expect(!SGSummaryStyle.categoryExtremes.showsScratchMetaRow)
+        #expect(fullItems.map(\.label) == ["BEST CATEGORY", "WORST CATEGORY", "NET VS PERSONAL AVG"])
     }
 
     @Test("Spacious breakdown allocates more horizontal room to the x axis")

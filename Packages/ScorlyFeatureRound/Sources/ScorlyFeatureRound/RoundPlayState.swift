@@ -24,6 +24,21 @@ public struct HoleEntry: Equatable, Sendable, Codable {
     public var approachModifier: String?
     public var approachClub: String?
     public var approachDistance: Int?
+    /// Yards from the pin where the approach finished (par 4/5) or
+    /// where the tee shot finished (par 3). Optional — when nil, the
+    /// SG calculator falls back to a lie-based default.
+    public var approachLandingDistance: Int?
+    /// One entry per around-the-green shot, ordered by stroke. Length
+    /// is expected to match the inferred ARG count. Optional — missing
+    /// entries fall back to lie-based defaults at SG time.
+    public var argShots: [ARGShotEntry]?
+    /// Par-5 only: lie where the layup landed, as the keypad raw
+    /// string (decoded into a typed `Lie` at `derivedStat` time).
+    public var layupLie: String?
+    public var layupLieModifier: String?
+    public var layupClub: String?
+    /// Par-5 only: yards remaining to the pin after the layup.
+    public var layupDistance: Int?
     public var pinPosition: String?
     public var penaltyStrokes: Int
     public var upAndDownOverride: Bool?
@@ -31,7 +46,7 @@ public struct HoleEntry: Equatable, Sendable, Codable {
 
     public init(
         strokes: Int? = nil,
-        putts: Int = 0,
+        putts: Int = 2,
         puttDistances: [Int?] = [],
         teeShot: String? = nil,
         teeShotModifier: String? = nil,
@@ -41,6 +56,12 @@ public struct HoleEntry: Equatable, Sendable, Codable {
         approachModifier: String? = nil,
         approachClub: String? = nil,
         approachDistance: Int? = nil,
+        approachLandingDistance: Int? = nil,
+        argShots: [ARGShotEntry]? = nil,
+        layupLie: String? = nil,
+        layupLieModifier: String? = nil,
+        layupClub: String? = nil,
+        layupDistance: Int? = nil,
         pinPosition: String? = nil,
         penaltyStrokes: Int = 0,
         upAndDownOverride: Bool? = nil,
@@ -57,10 +78,32 @@ public struct HoleEntry: Equatable, Sendable, Codable {
         self.approachModifier = approachModifier
         self.approachClub = approachClub
         self.approachDistance = approachDistance
+        self.approachLandingDistance = approachLandingDistance
+        self.argShots = argShots
+        self.layupLie = layupLie
+        self.layupLieModifier = layupLieModifier
+        self.layupClub = layupClub
+        self.layupDistance = layupDistance
         self.pinPosition = pinPosition
         self.penaltyStrokes = penaltyStrokes
         self.upAndDownOverride = upAndDownOverride
         self.sandSaveOverride = sandSaveOverride
+    }
+}
+
+/// Raw-string mirror of `ScorlyDomain.ARGShot` for the live-round
+/// editor. The lie string matches the `LieKeypad` vocabulary (e.g.
+/// "Miss Left", "Miss Long") with an optional "Bunker" / "Water"
+/// modifier, decoded into a typed `Lie` at `derivedStat` time.
+public struct ARGShotEntry: Equatable, Sendable, Codable {
+    public var lie: String?
+    public var lieModifier: String?
+    public var distanceYards: Int?
+
+    public init(lie: String? = nil, lieModifier: String? = nil, distanceYards: Int? = nil) {
+        self.lie = lie
+        self.lieModifier = lieModifier
+        self.distanceYards = distanceYards
     }
 }
 
@@ -88,7 +131,9 @@ public final class RoundPlayState {
     public enum OpenShot: Equatable {
         case none
         case tee
+        case layup
         case approach
+        case arg
         case putts
     }
 
@@ -167,6 +212,12 @@ public final class RoundPlayState {
         entry.approachModifier = nil
         entry.approachClub = nil
         entry.approachDistance = nil
+        entry.approachLandingDistance = nil
+        entry.argShots = nil
+        entry.layupLie = nil
+        entry.layupLieModifier = nil
+        entry.layupClub = nil
+        entry.layupDistance = nil
     }
 
     /// Mutates a tee-shot result while keeping its dependent approach state valid.
@@ -182,10 +233,98 @@ public final class RoundPlayState {
         }
     }
 
+    /// Mutates the approach result while clearing dependent chip
+    /// detail when the result no longer creates a playable missed-green
+    /// recovery.
+    public func setApproachResult(_ result: String?, at index: Int) {
+        guard entries.indices.contains(index) else { return }
+        if entries[index].approach == Self.holedShotRaw, result != Self.holedShotRaw {
+            restoreDefaultPutts(at: index)
+        }
+        entries[index].approach = result
+        if result == "Green" || result == "On In 2" || result == Self.holedShotRaw || result?.hasPrefix("OB ") == true {
+            entries[index].approachLandingDistance = nil
+            entries[index].argShots = nil
+        }
+        if result == "On In 2" {
+            entries[index].approachModifier = nil
+        }
+    }
+
     public func hasDrivenGreen(at index: Int) -> Bool {
         entries.indices.contains(index)
             && holes[index].par >= 4
             && entries[index].teeShot == "Green"
+    }
+
+    public func isApproachOnInTwo(at index: Int) -> Bool {
+        entries.indices.contains(index) && entries[index].approach == "On In 2"
+    }
+
+    public func shouldShowLayupTab(at index: Int) -> Bool {
+        guard entries.indices.contains(index), holes.indices.contains(index) else { return false }
+        return holes[index].par == 5
+            && !hasDrivenGreen(at: index)
+            && !isApproachOnInTwo(at: index)
+    }
+
+    public func shouldShowARGTab(at index: Int) -> Bool {
+        inferredARGCount(at: index) > 0 && approachResultImpliesARG(at: index)
+    }
+
+    public func markApproachIn(at index: Int) {
+        guard entries.indices.contains(index), holes.indices.contains(index) else { return }
+        if isApproachIn(at: index) {
+            entries[index].approach = nil
+            entries[index].approachModifier = nil
+            entries[index].approachLandingDistance = nil
+            restoreDefaultPutts(at: index)
+            entries[index].strokes = nil
+            return
+        }
+
+        entries[index].approach = Self.holedShotRaw
+        entries[index].approachModifier = nil
+        entries[index].approachLandingDistance = nil
+        entries[index].argShots = nil
+        entries[index].putts = 0
+        entries[index].puttDistances = []
+        entries[index].strokes = approachShotNumber(at: index)
+    }
+
+    public func isApproachIn(at index: Int) -> Bool {
+        guard entries.indices.contains(index) else { return false }
+        return entries[index].approach == Self.holedShotRaw
+    }
+
+    public func markARGIn(slot: Int, at index: Int) {
+        guard entries.indices.contains(index), holes.indices.contains(index), slot >= 0 else { return }
+        var current = entries[index].argShots ?? []
+        while current.count <= slot {
+            current.append(ARGShotEntry())
+        }
+
+        if current[slot].lie == Self.holedShotRaw {
+            current[slot].lie = nil
+            current[slot].lieModifier = nil
+            entries[index].argShots = current.isEmpty ? nil : current
+            restoreDefaultPutts(at: index)
+            entries[index].strokes = preARGShotCount(at: index) + slot + 1 + entries[index].putts
+            return
+        }
+
+        entries[index].putts = 0
+        entries[index].puttDistances = []
+        entries[index].strokes = preARGShotCount(at: index) + slot + 1
+        current[slot].lie = Self.holedShotRaw
+        current[slot].lieModifier = nil
+        entries[index].argShots = Array(current.prefix(slot + 1))
+    }
+
+    public func isARGIn(slot: Int, at index: Int) -> Bool {
+        guard entries.indices.contains(index), slot >= 0 else { return false }
+        guard let shots = entries[index].argShots, shots.indices.contains(slot) else { return false }
+        return shots[slot].lie == Self.holedShotRaw
     }
 
     public func updateSetup(_ form: RoundSetupForm) {
@@ -338,27 +477,35 @@ public final class RoundPlayState {
         let entry = entries[index]
         let hole = holes[index]
         let strokes = entry.strokes ?? hole.par
-        let teeDecoded = Self.decodeLie(entry.teeShot, modifier: entry.teeShotModifier, target: .fairway)
-        let approachDecoded = Self.decodeLie(entry.approach, modifier: entry.approachModifier, target: .green)
+        let teeDecoded = Self.decodeLie(
+            entry.teeShot,
+            modifier: entry.teeShotModifier,
+            target: .fairway,
+            phase: .tee
+        )
+        let approachDecoded = Self.decodeLie(
+            entry.approach,
+            modifier: entry.approachModifier,
+            target: .green,
+            phase: .approach
+        )
         // Par 3 is a single shot to the green. The Play UI surfaces it through
         // the approach editor (target = Green) so the user's pick lands on
         // `entry.approach`; HoleStat / WHS / v1 schema all expect that pick on
         // `teeShotLie`. Coalesce so the domain reads it correctly.
         let teeLie: Lie?
         let approachLie: Lie?
-        let obCount: Int
-        let hazardCount: Int
         if hole.par == 3 {
             teeLie = approachDecoded.lie ?? teeDecoded.lie
             approachLie = nil
-            obCount = approachDecoded.ob + teeDecoded.ob
-            hazardCount = approachDecoded.hazard + teeDecoded.hazard
         } else {
             teeLie = teeDecoded.lie
             approachLie = approachDecoded.lie
-            obCount = teeDecoded.ob + approachDecoded.ob
-            hazardCount = teeDecoded.hazard + approachDecoded.hazard
         }
+        // Penalty events come from the keypad outcomes (the lie strings
+        // "OB Left", "Miss Long" with the optional Water modifier).
+        // Tee and approach contributions concatenate in stroke order.
+        let penaltyEvents: [PenaltyEvent] = teeDecoded.penaltyEvents + approachDecoded.penaltyEvents
         // Collect only the entries the player actually logged. A nil
         // value in `puttDistances` means "this putt happened but no
         // distance was recorded"; the SG calculator wants a clean
@@ -367,6 +514,27 @@ public final class RoundPlayState {
         // putting sheet" (nil).
         let loggedPutts = entry.puttDistances.compactMap { $0 }
         let puttDistances: [Int]? = entry.puttDistances.isEmpty ? nil : loggedPutts
+
+        // Decode ARG entries. Each entry needs both a lie and a
+        // distance to contribute; partial rows are dropped (the SG
+        // calculator falls back to the lie-based default for that
+        // slot). Same for layup.
+        let argShots: [ARGShot]? = entry.argShots.flatMap { rawEntries in
+            let decoded: [ARGShot] = rawEntries.enumerated().compactMap { slot, raw in
+                guard let lieString = raw.lie,
+                      let distance = raw.distanceYards ?? (slot == 0 ? entry.approachLandingDistance : nil),
+                      distance > 0,
+                      let lie = Self.decodeLie(lieString, modifier: raw.lieModifier, target: .green).lie
+                else { return nil }
+                return ARGShot(lie: lie, distanceToPinYards: distance)
+            }
+            return decoded.isEmpty ? nil : decoded
+        }
+        let layupLie = entry.layupLie.flatMap {
+            Self.decodeLie($0, modifier: entry.layupLieModifier, target: .fairway).lie
+        }
+        let layupDistance = layupLie == nil ? nil : entry.layupDistance ?? entry.approachDistance
+
         return HoleStat(
             par: hole.par,
             strokes: strokes,
@@ -374,8 +542,7 @@ public final class RoundPlayState {
             teeShotLie: teeLie,
             approachLie: approachLie,
             penaltyStrokes: entry.penaltyStrokes,
-            outOfBoundsCount: obCount,
-            hazardCount: hazardCount,
+            penaltyEvents: penaltyEvents,
             upAndDownSuccess: entry.upAndDownOverride ?? false,
             sandSaveSuccess: entry.sandSaveOverride ?? false,
             teeShotDistance: entry.teeShotDistance,
@@ -383,48 +550,110 @@ public final class RoundPlayState {
             puttDistances: puttDistances,
             teeClub: entry.teeClub,
             approachClub: entry.approachClub,
-            pinPosition: entry.pinPosition
+            pinPosition: entry.pinPosition,
+            approachLandingDistance: entry.approachLandingDistance,
+            argShots: argShots,
+            layupLie: layupLie,
+            layupDistance: layupDistance
         )
+    }
+
+    /// Number of around-the-green shots implied by the current entry's
+    /// strokes / putts / par. Drives both the SG calculator chip-phase
+    /// count and the UI's conditional rendering of the ARG block.
+    /// Returns 0 when the math hasn't settled (no strokes logged yet,
+    /// or putts > strokes from a mid-edit state).
+    public func inferredARGCount(at index: Int) -> Int {
+        guard entries.indices.contains(index), holes.indices.contains(index) else { return 0 }
+        let entry = entries[index]
+        guard let strokes = entry.strokes, strokes > 0 else { return 0 }
+        return max(0, strokes - preARGShotCount(at: index) - entry.putts)
+    }
+
+    private func approachShotNumber(at index: Int) -> Int {
+        guard holes.indices.contains(index) else { return 2 }
+        return switch holes[index].par {
+        case 3: 1
+        case 5 where !isApproachOnInTwo(at: index): 3
+        default: 2
+        }
+    }
+
+    private func preARGShotCount(at index: Int) -> Int {
+        guard holes.indices.contains(index) else { return 2 }
+        // Par 3 with off-green tee: chip count = strokes - 1 (tee) - putts.
+        // Par 4: chip count = strokes - 2 (tee + approach) - putts.
+        // Par 5: chip count = strokes - 3 (tee + 2nd shot + approach) - putts.
+        return switch holes[index].par {
+        case 3: 1
+        case 5 where !isApproachOnInTwo(at: index): 3
+        default: 2
+        }
+    }
+
+    private func approachResultImpliesARG(at index: Int) -> Bool {
+        guard entries.indices.contains(index) else { return false }
+        guard let result = entries[index].approach else { return false }
+        if result == "Green" || result == "On In 2" || result == Self.holedShotRaw { return false }
+        if result.hasPrefix("OB ") { return false }
+        return true
+    }
+
+    private func restoreDefaultPutts(at index: Int) {
+        guard entries.indices.contains(index) else { return }
+        entries[index].putts = 2
+        entries[index].puttDistances = []
     }
 
     // MARK: - Lie decoding
 
     private struct DecodedLie {
         let lie: Lie?
-        let ob: Int
-        let hazard: Int
+        let penaltyEvents: [PenaltyEvent]
+
+        init(lie: Lie?, penaltyEvents: [PenaltyEvent] = []) {
+            self.lie = lie
+            self.penaltyEvents = penaltyEvents
+        }
     }
 
     /// Maps a `LieKeypad` raw direction + optional modifier into the
-    /// closest `Lie` enum + out-of-bounds / hazard counters. The keypad
-    /// emits direction strings ("Fairway", "Green", "Miss …", "OB …")
-    /// alongside an optional "Bunker" / "Water" modifier; this collapses
-    /// them into the `Lie` rawValues the domain expects, routing OB /
-    /// hazard outcomes to counters where they have no playable lie.
+    /// closest `Lie` enum plus any penalty event the outcome implies.
+    /// The keypad emits direction strings ("Fairway", "Green",
+    /// "Miss …", "OB …") alongside an optional "Bunker" / "Water"
+    /// modifier; this collapses them into the `Lie` rawValues the
+    /// domain expects, routing OB / hazard outcomes into typed
+    /// `PenaltyEvent`s with direction parsed from the suffix.
     private static func decodeLie(
         _ raw: String?,
         modifier: String?,
-        target: Lie
+        target: Lie,
+        phase: PenaltyPhase? = nil
     ) -> DecodedLie {
-        guard let raw else { return DecodedLie(lie: nil, ob: 0, hazard: 0) }
-        if raw == "Fairway" { return DecodedLie(lie: .fairway, ob: 0, hazard: 0) }
-        if raw == "Green" { return DecodedLie(lie: .green, ob: 0, hazard: 0) }
+        guard let raw else { return DecodedLie(lie: nil) }
+        if raw == "Fairway" { return DecodedLie(lie: .fairway) }
+        if raw == "Green" { return DecodedLie(lie: .green) }
+        if raw == Self.holedShotRaw { return DecodedLie(lie: .green) }
         // Par-5 "ON IN 2" shortcut — semantically identical to Green for
         // stats, but stored as a distinct value so the keypad's center
         // cell and the ON IN 2 button toggle independently.
-        if raw == "On In 2" { return DecodedLie(lie: .green, ob: 0, hazard: 0) }
+        if raw == "On In 2" { return DecodedLie(lie: .green) }
         // Legacy single-string entries (back-compat for any data that
         // pre-dated the modifier split).
-        if raw == "Bunker" { return DecodedLie(lie: .bunkerLeft, ob: 0, hazard: 0) }
-        if raw == "Water Hazard" { return DecodedLie(lie: nil, ob: 0, hazard: 1) }
+        if raw == "Bunker" { return DecodedLie(lie: .bunkerLeft) }
+        if raw == "Water Hazard" {
+            return DecodedLie(lie: nil, penaltyEvents: [PenaltyEvent(kind: .hazard, phase: phase)])
+        }
 
         if raw.hasPrefix("OB ") {
             // Water modifier on an OB direction reclassifies the outcome
             // as a hazard (the ball is findable in water, not lost OB).
-            if modifier == "Water" {
-                return DecodedLie(lie: nil, ob: 0, hazard: 1)
-            }
-            return DecodedLie(lie: nil, ob: 1, hazard: 0)
+            let direction = Self.penaltyDirection(from: String(raw.dropFirst(3)))
+            let kind: PenaltyKind = modifier == "Water" ? .hazard : .outOfBounds
+            return DecodedLie(
+                lie: nil,
+                penaltyEvents: [PenaltyEvent(kind: kind, direction: direction, phase: phase)]
+            )
         }
 
         if raw.hasPrefix("Miss ") {
@@ -439,7 +668,7 @@ public final class RoundPlayState {
                 case "Short": bunker = .bunkerShort
                 default: bunker = .bunkerLeft
                 }
-                return DecodedLie(lie: bunker, ob: 0, hazard: 0)
+                return DecodedLie(lie: bunker)
             }
             let lie: Lie
             switch (direction, isApproach) {
@@ -453,10 +682,26 @@ public final class RoundPlayState {
             case ("Short", true): lie = .recoveryShort
             default: lie = isApproach ? .recoveryLeft : .roughLeft
             }
-            return DecodedLie(lie: lie, ob: 0, hazard: 0)
+            return DecodedLie(lie: lie)
         }
-        return DecodedLie(lie: nil, ob: 0, hazard: 0)
+        return DecodedLie(lie: nil)
     }
+
+    /// Maps the keypad's direction suffix ("Left", "Right", "Long",
+    /// "Short") to a `PenaltyDirection`. Anything else (the keypad's
+    /// "Other" fallback or future labels) becomes nil — the event is
+    /// still recorded, just without a direction.
+    private static func penaltyDirection(from suffix: String) -> PenaltyDirection? {
+        switch suffix {
+        case "Left": .left
+        case "Right": .right
+        case "Long": .long
+        case "Short": .short
+        default: nil
+        }
+    }
+
+    private static let holedShotRaw = "In"
 }
 
 /// JSON codec for `[HoleEntry]` ↔ `Data`. The draft repo trades in

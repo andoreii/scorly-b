@@ -4,7 +4,7 @@ import ScorlyDomain
 import SwiftUI
 
 /// Round archive. Loads `[CompletedRound]` from the repository,
-/// renders top stats strip + FILTER button + ticket-style row list,
+/// renders FILTER button + score-trace card + ticket-style row list,
 /// with an inverse `LATEST` stamp pinned to the newest entry.
 public struct HistoryView: View {
     let roundsRepository: any RoundsRepository
@@ -41,9 +41,9 @@ public struct HistoryView: View {
             hero
                 .padding(.top, BrutalistSpacing.m)
             mono("INDEXED · SEARCHABLE · YOURS", color: BrutalistColor.muted)
-            statsStrip
-                .padding(.top, BrutalistSpacing.l)
             filterRow
+                .padding(.top, BrutalistSpacing.l)
+            scoreTraceCard
                 .padding(.top, BrutalistSpacing.m)
             roundList
                 .padding(.top, BrutalistSpacing.m)
@@ -91,25 +91,26 @@ public struct HistoryView: View {
     }
 
     private var hero: some View {
-        Text("Every\nscorecard.")
+        Text("History")
             .font(BrutalistType.sans(.bold, size: 44))
             .kerning(-1.8)
-            .lineSpacing(-4)
             .foregroundStyle(BrutalistColor.fg)
             .padding(.bottom, BrutalistSpacing.xs)
     }
 
-    private var statsStrip: some View {
-        ZStack(alignment: .topLeading) {
-            BrutalistColor.panel
-            CornerMarks(size: 6, inset: 4)
-            HStack(spacing: 0) {
-                BigStat(label: "Rounds", value: "\(filtered.count)")
-                BigStat(label: "Best v Par", value: bestVsPar, drawBorder: true)
-                BigStat(label: "Avg Score", value: avgScore, drawBorder: true)
-            }
+    @ViewBuilder
+    private var scoreTraceCard: some View {
+        if !filtered.isEmpty {
+            ScoreTraceHistoryCard(points: scoreTracePoints)
         }
-        .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+    }
+
+    /// Trace points are drawn oldest → newest. `filtered` is sorted
+    /// newest first for the row list, so we reverse for the chart.
+    private var scoreTracePoints: [ScoreTracePoint] {
+        filtered.reversed().map {
+            ScoreTracePoint(date: $0.datePlayed, score: $0.totalScore, par: $0.par)
+        }
     }
 
     private var filterRow: some View {
@@ -271,20 +272,6 @@ public struct HistoryView: View {
 
     var filtered: [CompletedRound] {
         rounds.eligible(for: filter)
-    }
-
-    private var bestVsPar: String {
-        let pool = filtered
-        guard !pool.isEmpty else { return "—" }
-        let best = pool.map(\.scoreVsPar).min() ?? 0
-        return best >= 0 ? "+\(best)" : "\(best)"
-    }
-
-    private var avgScore: String {
-        let pool = filtered
-        guard !pool.isEmpty else { return "—" }
-        let avg = Double(pool.reduce(0) { $0 + $1.totalScore }) / Double(pool.count)
-        return String(format: "%.1f", avg)
     }
 
     /// Live preview of how many rounds the in-progress sheet selection

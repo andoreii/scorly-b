@@ -1,4 +1,5 @@
 import ScorlyDesignSystem
+import ScorlyDomain
 import SwiftUI
 
 /// Brutalist settings page. One section today: course-archive
@@ -10,6 +11,7 @@ public struct SettingsView: View {
     let onSyncCourses: (() async -> Void)?
     let onFetchRounds: (() async throws -> Int)?
     let onSignOut: (() -> Void)?
+    @Binding private var sgComparisonReference: SGComparisonReference
     /// Optional one-shot upsert that re-pushes every local round's
     /// hole detail to Supabase, returning the number of hole rows
     /// pushed. nil hides the row.
@@ -27,13 +29,15 @@ public struct SettingsView: View {
         onSyncCourses: (() async -> Void)? = nil,
         onFetchRounds: (() async throws -> Int)? = nil,
         onSignOut: (() -> Void)? = nil,
-        onBackfillStats: (() async throws -> Int)? = nil
+        onBackfillStats: (() async throws -> Int)? = nil,
+        sgComparisonReference: Binding<SGComparisonReference> = .constant(.scratch)
     ) {
         self.onBack = onBack
         self.onSyncCourses = onSyncCourses
         self.onFetchRounds = onFetchRounds
         self.onSignOut = onSignOut
         self.onBackfillStats = onBackfillStats
+        _sgComparisonReference = sgComparisonReference
     }
 
     public var body: some View {
@@ -46,6 +50,9 @@ public struct SettingsView: View {
             hero
                 .padding(.top, BrutalistSpacing.m)
             tagline
+
+            SGComparisonReferenceSection(reference: $sgComparisonReference)
+                .padding(.top, BrutalistSpacing.xl)
 
             dataSection
                 .padding(.top, BrutalistSpacing.xl)
@@ -87,10 +94,9 @@ public struct SettingsView: View {
     }
 
     private var hero: some View {
-        Text("Tune\nthe rig.")
+        Text("Settings")
             .font(BrutalistType.sans(.bold, size: 44))
             .kerning(-1.8)
-            .lineSpacing(-4)
             .foregroundStyle(BrutalistColor.fg)
             .padding(.bottom, BrutalistSpacing.xs)
     }
@@ -234,7 +240,8 @@ public struct SettingsView: View {
             }
             .padding(.top, BrutalistSpacing.s)
             Text(
-                "Upserts every saved round's hole stats (distances, clubs, pin, derived flags) into Supabase. Idempotent — safe to run multiple times."
+                "Upserts every saved round's hole stats (distances, clubs, pin, derived flags) into Supabase. " +
+                    "Idempotent - safe to run multiple times."
             )
             .font(BrutalistType.inputBody)
             .foregroundStyle(BrutalistColor.muted)
@@ -321,6 +328,48 @@ public struct SettingsView: View {
                 .font(BrutalistType.monoMicro)
                 .kerning(0.8)
                 .foregroundStyle(BrutalistColor.dim)
+        }
+    }
+}
+
+private struct SGComparisonReferenceSection: View {
+    @Binding var reference: SGComparisonReference
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: BrutalistSpacing.s) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("STROKES GAINED")
+                    .font(BrutalistType.monoLabel)
+                    .kerning(1.0)
+                    .foregroundStyle(BrutalistColor.fg)
+                Spacer()
+                Text("COMPARISON REFERENCE")
+                    .font(BrutalistType.monoMicro)
+                    .kerning(0.6)
+                    .foregroundStyle(BrutalistColor.muted)
+            }
+            HBar(vMargin: 2)
+            ChipGrid(
+                options: SGComparisonReference.allCases.map(\.settingsLabel),
+                selection: Binding(
+                    get: { reference.settingsLabel },
+                    set: { label in
+                        guard let label,
+                              let nextReference = SGComparisonReference.allCases.first(where: {
+                                  $0.settingsLabel == label
+                              })
+                        else { return }
+                        reference = nextReference
+                    }
+                ),
+                columns: 2,
+                allowsDeselect: false
+            )
+            Text(
+                "Scratch uses the benchmark table. Personal avg compares against your latest 20 rounds with SG data."
+            )
+            .font(BrutalistType.inputBody)
+            .foregroundStyle(BrutalistColor.muted)
         }
     }
 }

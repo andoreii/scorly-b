@@ -13,6 +13,7 @@ public struct RoundDetailView: View {
     let round: CompletedRound
     let seasonRounds: [CompletedRound]
     let roundsRepository: any RoundsRepository
+    let comparisonReference: SGComparisonReference
     let onBack: () -> Void
     let onDeleted: () -> Void
 
@@ -24,18 +25,26 @@ public struct RoundDetailView: View {
         round: CompletedRound,
         seasonRounds: [CompletedRound],
         roundsRepository: any RoundsRepository,
+        comparisonReference: SGComparisonReference = .scratch,
         onBack: @escaping () -> Void,
         onDeleted: @escaping () -> Void
     ) {
         self.round = round
         self.seasonRounds = seasonRounds
         self.roundsRepository = roundsRepository
+        self.comparisonReference = comparisonReference
         self.onBack = onBack
         self.onDeleted = onDeleted
     }
 
     public var body: some View {
         let metrics = RoundDetailMetrics(round: round)
+        let sgProjection = SGReferenceProjection.project(
+            reference: comparisonReference,
+            totals: round.sgTotals,
+            holes: round.sgHoles,
+            baselineRounds: seasonRounds
+        )
         ScreenShell {
             TopBar(left: "ROUND DETAIL", right: "SCORLY/B  ®")
             backRow
@@ -55,9 +64,12 @@ public struct RoundDetailView: View {
                 .padding(.top, BrutalistSpacing.l)
             StrokesGainedCard(
                 meta: "ROUND \(refString(round.id)) · \(round.courseName?.uppercased() ?? "—")",
-                total: round.sgTotals.map(SGCardMapping.cardValues),
-                holes: round.sgHoles?.map(SGCardMapping.cardValues),
-                seasonAverages: sgSeasonAverages(excluding: round.id, from: seasonRounds).map(SGCardMapping.cardValues),
+                total: sgProjection.totals.map(SGCardMapping.cardValues),
+                holes: sgProjection.holes?.map(SGCardMapping.cardValues),
+                seasonAverages: sgProjection.activeReference == .scratch
+                    ? sgSeasonAverages(excluding: round.id, from: seasonRounds).map(SGCardMapping.cardValues)
+                    : nil,
+                referenceLabel: sgProjection.referenceLabel,
                 summaryStyle: .categoryExtremes,
                 breakdownDensity: .spacious
             )

@@ -304,9 +304,7 @@ public final class LocalHoleStat {
     public var approach: String?
     public var teeClub: String?
     public var approachClub: String?
-    public var outOfBoundsCount: Int
     public var penaltyStrokes: Int
-    public var hazardCount: Int
     public var greenInReg: Bool?
     public var threePutt: Bool?
     public var upAndDownSuccess: Bool?
@@ -316,17 +314,25 @@ public final class LocalHoleStat {
     public var approachDistance: Int?
     public var pinPosition: String?
 
-    // Directional hazard counts. SwiftData migrates these in by treating
-    // a missing column as 0 — the additive shape means existing rounds
-    // continue to load.
-    public var outOfBoundsLeft = 0
-    public var outOfBoundsRight = 0
-    public var outOfBoundsLong = 0
-    public var outOfBoundsShort = 0
-    public var hazardLeft = 0
-    public var hazardRight = 0
-    public var hazardLong = 0
-    public var hazardShort = 0
+    /// JSON array of `PenaltyEvent` objects (kind + optional
+    /// direction). Replaces the v1 / v2 pattern of ten separate
+    /// counter columns (`outOfBoundsLeft`, `hazardLong`, …). SwiftData
+    /// migrates existing rows by treating the dropped columns as
+    /// absent; a one-time backfill in `RoundsRepositoryLive` reads any
+    /// legacy fields the in-memory snapshot still has and folds them
+    /// into the JSON on next save.
+    public var penaltyEventsJSON: String?
+
+    /// SG chip-phase fields. All additive optionals so existing rounds
+    /// load through SwiftData migration with nil values (which the SG
+    /// calculator handles via lie-based defaults).
+    public var approachLandingDistance: Int?
+    /// `[ARGShot]` JSON-encoded so SwiftData can persist it as a
+    /// single attribute. The data layer encodes / decodes; the domain
+    /// type stays clean.
+    public var argShotsJSON: String?
+    public var layupLie: String?
+    public var layupDistance: Int?
 
     // swiftlint:disable:next function_default_parameter_at_end
     public init(
@@ -341,9 +347,7 @@ public final class LocalHoleStat {
         approach: String? = nil,
         teeClub: String? = nil,
         approachClub: String? = nil,
-        outOfBoundsCount: Int = 0,
         penaltyStrokes: Int = 0,
-        hazardCount: Int = 0,
         greenInReg: Bool? = nil,
         threePutt: Bool? = nil,
         upAndDownSuccess: Bool? = nil,
@@ -352,14 +356,11 @@ public final class LocalHoleStat {
         teeShotDistance: Int? = nil,
         approachDistance: Int? = nil,
         pinPosition: String? = nil,
-        outOfBoundsLeft: Int = 0,
-        outOfBoundsRight: Int = 0,
-        outOfBoundsLong: Int = 0,
-        outOfBoundsShort: Int = 0,
-        hazardLeft: Int = 0,
-        hazardRight: Int = 0,
-        hazardLong: Int = 0,
-        hazardShort: Int = 0
+        penaltyEventsJSON: String? = nil,
+        approachLandingDistance: Int? = nil,
+        argShotsJSON: String? = nil,
+        layupLie: String? = nil,
+        layupDistance: Int? = nil
     ) {
         self.serverId = serverId
         self.externalId = externalId
@@ -372,9 +373,7 @@ public final class LocalHoleStat {
         self.approach = approach
         self.teeClub = teeClub
         self.approachClub = approachClub
-        self.outOfBoundsCount = outOfBoundsCount
         self.penaltyStrokes = penaltyStrokes
-        self.hazardCount = hazardCount
         self.greenInReg = greenInReg
         self.threePutt = threePutt
         self.upAndDownSuccess = upAndDownSuccess
@@ -383,14 +382,11 @@ public final class LocalHoleStat {
         self.teeShotDistance = teeShotDistance
         self.approachDistance = approachDistance
         self.pinPosition = pinPosition
-        self.outOfBoundsLeft = outOfBoundsLeft
-        self.outOfBoundsRight = outOfBoundsRight
-        self.outOfBoundsLong = outOfBoundsLong
-        self.outOfBoundsShort = outOfBoundsShort
-        self.hazardLeft = hazardLeft
-        self.hazardRight = hazardRight
-        self.hazardLong = hazardLong
-        self.hazardShort = hazardShort
+        self.penaltyEventsJSON = penaltyEventsJSON
+        self.approachLandingDistance = approachLandingDistance
+        self.argShotsJSON = argShotsJSON
+        self.layupLie = layupLie
+        self.layupDistance = layupDistance
     }
 }
 

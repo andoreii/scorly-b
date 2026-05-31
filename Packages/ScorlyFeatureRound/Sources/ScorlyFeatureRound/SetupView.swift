@@ -89,21 +89,19 @@ public struct SetupView: View {
             }
 
             VStack(alignment: .leading, spacing: 0) {
+                Text("Round Setup")
+                    .font(BrutalistType.pageHero)
+                    .kerning(-1.8)
+                    .foregroundStyle(BrutalistColor.fg)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 if editingActiveRound {
-                    Text(
-                        "\(Text("Edit\n").font(BrutalistType.pageHero).kerning(-1.8).foregroundColor(BrutalistColor.fg))\(Text("the round.").font(BrutalistType.pageHero).kerning(-1.8).foregroundColor(BrutalistColor.fg))"
-                    )
-                    .lineLimit(3)
                     Text("HOLES · FORMAT · CONDITIONS · NOTES")
                         .font(BrutalistType.monoLabel)
                         .kerning(1.0)
                         .foregroundStyle(BrutalistColor.muted)
                         .padding(.top, BrutalistSpacing.xs)
                 } else {
-                    Text(
-                        "\(Text("Set up\n").font(BrutalistType.pageHero).kerning(-1.8).foregroundColor(BrutalistColor.fg))\(Text("the round.").font(BrutalistType.pageHero).kerning(-1.8).foregroundColor(BrutalistColor.fg))"
-                    )
-                    .lineLimit(3)
                     Text("COURSE · FORMAT · CONDITIONS · LOGISTICS")
                         .font(BrutalistType.monoLabel)
                         .kerning(1.0)

@@ -156,11 +156,27 @@ public actor InMemoryRemoteSyncAPI: RemoteSyncAPI {
     }
 }
 
+protocol HoleStatsRemoteAPI: Sendable {
+    func upsert(_ rows: [HoleStatInsert]) async throws
+}
+
+struct LiveHoleStatsRemoteAPI: HoleStatsRemoteAPI {
+    let supabase: SupabaseClient
+
+    func upsert(_ rows: [HoleStatInsert]) async throws {
+        guard !rows.isEmpty else { return }
+        try await supabase
+            .from("hole_stats")
+            .upsert(rows, onConflict: "round_id,hole_number", returning: .minimal)
+            .execute()
+    }
+}
+
 // MARK: - Live placeholder
 
 /// Live Supabase remote. Course pull hydrates local SwiftData from Supabase.
-/// Round push is wired: insert into `rounds`, capture the server-assigned
-/// `round_id`, then bulk-insert nested `hole_stats` rows under that id.
+/// Round push is wired: upsert into `rounds`, capture the server-assigned
+/// `round_id`, then bulk-upsert nested `hole_stats` rows under that id.
 /// Other aggregates (courses, users, goals, etc.) remain loud until their
 /// write UIs land.
 public struct LiveSupabaseRemoteSyncAPI: RemoteSyncAPI {
@@ -238,7 +254,11 @@ public struct LiveSupabaseRemoteSyncAPI: RemoteSyncAPI {
         do {
             inserted = try await supabase
                 .from("rounds")
-                .insert(insert, returning: .representation)
+                .upsert(
+                    insert,
+                    onConflict: "round_external_id",
+                    returning: .representation
+                )
                 .select()
                 .execute()
                 .value
@@ -261,9 +281,7 @@ public struct LiveSupabaseRemoteSyncAPI: RemoteSyncAPI {
                     approach: stat.approach,
                     teeClub: stat.teeClub,
                     approachClub: stat.approachClub,
-                    outOfBoundsCount: stat.outOfBoundsCount,
                     penaltyStrokes: stat.penaltyStrokes,
-                    hazardCount: stat.hazardCount,
                     greenInReg: stat.greenInReg,
                     threePutt: stat.threePutt,
                     girOpportunity: stat.girOpportunity,
@@ -275,21 +293,16 @@ public struct LiveSupabaseRemoteSyncAPI: RemoteSyncAPI {
                     approachDistance: stat.approachDistance,
                     pinPosition: stat.pinPosition,
                     holeStatExternalId: stat.holeStatExternalId,
-                    outOfBoundsLeft: stat.outOfBoundsLeft,
-                    outOfBoundsRight: stat.outOfBoundsRight,
-                    outOfBoundsLong: stat.outOfBoundsLong,
-                    outOfBoundsShort: stat.outOfBoundsShort,
-                    hazardLeft: stat.hazardLeft,
-                    hazardRight: stat.hazardRight,
-                    hazardLong: stat.hazardLong,
-                    hazardShort: stat.hazardShort
+                    penaltyEventsJson: stat.penaltyEventsJson,
+                    approachLandingDistance: stat.approachLandingDistance,
+                    argShotsJson: stat.argShotsJson,
+                    layupLie: stat.layupLie,
+                    layupDistance: stat.layupDistance
                 )
             }
             do {
-                try await supabase
-                    .from("hole_stats")
-                    .insert(holeStatInserts)
-                    .execute()
+                try await LiveHoleStatsRemoteAPI(supabase: supabase)
+                    .upsert(holeStatInserts)
             } catch {
                 throw classify(error)
             }

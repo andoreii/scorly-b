@@ -21,6 +21,7 @@ public struct LieKeypad: View {
     @Binding private var value: String?
     @Binding private var modifier: String?
     private let target: String
+    private let extraTopLeft: AuxButton?
     private let extraTopRight: AuxButton?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -29,11 +30,13 @@ public struct LieKeypad: View {
         value: Binding<String?>,
         modifier: Binding<String?>,
         target: String,
+        extraTopLeft: AuxButton? = nil,
         extraTopRight: AuxButton? = nil
     ) {
         _value = value
         _modifier = modifier
         self.target = target
+        self.extraTopLeft = extraTopLeft
         self.extraTopRight = extraTopRight
     }
 
@@ -49,7 +52,9 @@ public struct LieKeypad: View {
             ForEach(0..<5) { row in
                 HStack(spacing: 4) {
                     ForEach(0..<5) { col in
-                        if row == 0, col == 4, let aux = extraTopRight {
+                        if row == 0, col == 0, let aux = extraTopLeft {
+                            auxCell(aux)
+                        } else if row == 0, col == 4, let aux = extraTopRight {
                             auxCell(aux)
                         } else {
                             cell(layout[row][col])
@@ -164,6 +169,7 @@ public struct LieKeypad: View {
     public static let short: [String: String] = [
         "Fairway": "FW",
         "Green": "GRN",
+        "In": "IN",
         "Miss Left": "MISS L",
         "Miss Right": "MISS R",
         "Miss Long": "MISS Lg",

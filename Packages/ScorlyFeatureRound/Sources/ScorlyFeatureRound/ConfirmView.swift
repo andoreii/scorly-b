@@ -13,6 +13,8 @@ public struct ConfirmView: View {
     let state: RoundPlayState
     let authService: AuthService
     let roundsRepository: any RoundsRepository
+    let comparisonReference: SGComparisonReference
+    let baselineRounds: [CompletedRound]
     let onBack: () -> Void
     let onFinish: () -> Void
 
@@ -21,6 +23,7 @@ public struct ConfirmView: View {
     @State private var currentStroke: [CGPoint] = []
     @State private var signed = false
     @State private var isFiling = false
+    @State private var refineSheetOpen = false
     // Stable reference number for this scorecard session.
     @State private var ref = "PRG-\(Int.random(in: 1_000...9_999))"
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -29,12 +32,16 @@ public struct ConfirmView: View {
         state: RoundPlayState,
         authService: AuthService,
         roundsRepository: any RoundsRepository,
+        comparisonReference: SGComparisonReference = .scratch,
+        baselineRounds: [CompletedRound] = [],
         onBack: @escaping () -> Void,
         onFinish: @escaping () -> Void
     ) {
         self.state = state
         self.authService = authService
         self.roundsRepository = roundsRepository
+        self.comparisonReference = comparisonReference
+        self.baselineRounds = baselineRounds
         self.onBack = onBack
         self.onFinish = onFinish
         _notes = State(initialValue: state.setupForm.notes)
@@ -87,15 +94,8 @@ public struct ConfirmView: View {
             .padding(.top, BrutalistSpacing.m)
             RoundScorecardCard(groups: metrics.scorecardGroups)
                 .padding(.top, BrutalistSpacing.l)
-            StrokesGainedCard(
-                meta: "ROUND \(ref) · \(state.course.name.uppercased())",
-                total: sg.totals.map(SGCardMapping.cardValues),
-                holes: sg.holes?.map(SGCardMapping.cardValues),
-                seasonAverages: nil,
-                summaryStyle: .categoryExtremes,
-                breakdownDensity: .spacious
-            )
-            .padding(.top, BrutalistSpacing.l)
+            sgCardWithRefine(sg: sg)
+                .padding(.top, BrutalistSpacing.l)
             AccuracyRoseCard(kind: .fairway, values: metrics.fairwayRose)
                 .padding(.top, BrutalistSpacing.l)
             AccuracyRoseCard(kind: .green, values: metrics.greenRose)
@@ -119,9 +119,63 @@ public struct ConfirmView: View {
             fileButton
                 .padding(.bottom, BrutalistSpacing.xl)
         }
+        .sheet(isPresented: $refineSheetOpen) {
+            SGRefinementSheet(state: state)
+        }
     }
 
     // MARK: - Sub-views
+
+    /// Renders the SG card with an optional tappable header caption
+    /// when any hole has an estimated chip phase. Mono caption sits
+    /// just above the card border so the tap target is obvious without
+    /// breaking the existing card layout.
+    @ViewBuilder
+    private func sgCardWithRefine(
+        sg: (totals: SGTotals?, holes: [SGTotals]?)
+    ) -> some View {
+        let estimatedCount = estimatedHoleCount
+        let projection = SGReferenceProjection.project(
+            reference: comparisonReference,
+            totals: sg.totals,
+            holes: sg.holes,
+            baselineRounds: baselineRounds
+        )
+        VStack(alignment: .leading, spacing: 6) {
+            if estimatedCount > 0 {
+                Text("TAP TO REFINE · \(estimatedCount) HOLES ESTIMATED")
+                    .font(BrutalistType.monoMicro)
+                    .kerning(1.0)
+                    .foregroundStyle(BrutalistColor.muted)
+                    .brutalistTap {
+                        Haptics.soft()
+                        refineSheetOpen = true
+                    }
+            }
+            StrokesGainedCard(
+                meta: "ROUND \(ref) · \(state.course.name.uppercased())",
+                total: projection.totals.map(SGCardMapping.cardValues),
+                holes: projection.holes?.map(SGCardMapping.cardValues),
+                seasonAverages: nil,
+                referenceLabel: projection.referenceLabel,
+                summaryStyle: .categoryExtremes,
+                breakdownDensity: .spacious
+            )
+        }
+    }
+
+    /// Holes where the chip phase exists but the user hasn't fully
+    /// recorded the per-shot data. These show up as "ESTIMATED" in
+    /// the SG refinement sheet — the calculator falls back to lie-based
+    /// defaults for them.
+    private var estimatedHoleCount: Int {
+        state.holes.indices.reduce(0) { acc, index in
+            let inferred = state.inferredARGCount(at: index)
+            guard inferred > 0 else { return acc }
+            let recorded = state.recordedARGCount(at: index)
+            return acc + (recorded >= inferred ? 0 : 1)
+        }
+    }
 
     private var backRefRow: some View {
         HStack {

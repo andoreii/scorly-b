@@ -39,7 +39,20 @@ struct RootView: View {
     @State private var inProgressSummary: InProgressSummary?
     @State private var showMidRoundSetup = false
     @State private var midRoundSetupEdit = MidRoundSetupEditSession(editing: RoundSetupForm())
+    @AppStorage(SGComparisonReference.userDefaultsKey)
+    private var sgComparisonReferenceRaw = SGComparisonReference.scratch.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var sgComparisonReference: SGComparisonReference {
+        SGComparisonReference(rawValue: sgComparisonReferenceRaw) ?? .scratch
+    }
+
+    private var sgComparisonReferenceBinding: Binding<SGComparisonReference> {
+        Binding(
+            get: { sgComparisonReference },
+            set: { sgComparisonReferenceRaw = $0.rawValue }
+        )
+    }
 
     var body: some View {
         AuthGateView(
@@ -180,6 +193,8 @@ struct RootView: View {
                     state: state,
                     authService: authService,
                     roundsRepository: roundsRepository,
+                    comparisonReference: sgComparisonReference,
+                    baselineRounds: homeRounds,
                     onBack: { flow.back() },
                     onFinish: {
                         Task {
@@ -204,6 +219,7 @@ struct RootView: View {
                     round: round,
                     seasonRounds: season,
                     roundsRepository: roundsRepository,
+                    comparisonReference: sgComparisonReference,
                     onBack: { flow.back() },
                     onDeleted: { flow.back() }
                 )
@@ -211,6 +227,7 @@ struct RootView: View {
             case .stats:
                 TrendsView(
                     roundsRepository: roundsRepository,
+                    comparisonReference: sgComparisonReference,
                     onBack: { flow.resetTo(.home) }
                 )
                 .transition(transition)
@@ -220,7 +237,8 @@ struct RootView: View {
                     onSyncCourses: refreshCourses,
                     onFetchRounds: refreshRounds,
                     onSignOut: signOut,
-                    onBackfillStats: { try await roundsRepository.backfillHoleStatsToCloud() }
+                    onBackfillStats: { try await roundsRepository.backfillHoleStatsToCloud() },
+                    sgComparisonReference: sgComparisonReferenceBinding
                 )
                 .transition(transition)
             case .courses:

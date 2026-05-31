@@ -71,7 +71,7 @@ public protocol RoundsRepository: Sendable {
     /// `fairwayOpportunity` recently. Existing `hole_stats` rows in
     /// Supabase are NULL for those columns. This method upserts every
     /// local round's hole detail back to Supabase using the
-    /// `hole_stat_external_id` UNIQUE constraint as the conflict key —
+    /// `(round_id, hole_number)` UNIQUE constraint as the conflict key —
     /// idempotent, safe to run multiple times.
     ///
     /// Returns the number of hole rows pushed. Throws if the network

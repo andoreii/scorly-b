@@ -24,7 +24,11 @@ enum SGPreview {
                 approachLie: stat.approachLie,
                 approachDistance: stat.approachDistance,
                 puttDistancesFeet: stat.puttDistances,
-                strokes: stat.strokes
+                strokes: stat.strokes,
+                approachLandingDistance: stat.approachLandingDistance,
+                argShots: stat.argShots,
+                layupLie: stat.layupLie,
+                layupDistance: stat.layupDistance
             )
         }
         let result = SGCalculator.compute(holes: inputs)

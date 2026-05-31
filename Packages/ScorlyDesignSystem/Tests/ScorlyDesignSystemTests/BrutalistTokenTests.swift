@@ -91,3 +91,21 @@ struct ReviewChartValueTests {
         #expect(ScoringOutcome.outcome(forVsPar: 2) == .doublePlus)
     }
 }
+
+struct ScoreTraceTrendsSummaryTests {
+    @Test("Score trace summary labels and averages every round below the 20-round cap")
+    func summaryUsesAvailableRoundsBelowCap() {
+        let summary = ScoreTraceTrendsSummary(scores: [78, 80, 82])
+
+        #expect(summary.averageLabel == "LAST 3 AVG")
+        #expect(summary.average == 80)
+    }
+
+    @Test("Score trace summary caps its label and average at the latest 20 rounds")
+    func summaryCapsAtTwentyRounds() {
+        let summary = ScoreTraceTrendsSummary(scores: Array(1...25))
+
+        #expect(summary.averageLabel == "LAST 20 AVG")
+        #expect(summary.average == 15.5)
+    }
+}

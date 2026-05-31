@@ -7,7 +7,9 @@ import SwiftUI
 struct ShotSheetView: View {
     enum Kind {
         case tee
+        case layup
         case approach
+        case arg
     }
 
     @Bindable var state: RoundPlayState
@@ -75,31 +77,137 @@ struct ShotSheetView: View {
     private var editor: some View {
         switch kind {
         case .tee:
-            ShotEditor(
-                target: "Fairway",
-                clubs: BrutalistClubs,
-                clubDistanceDefaults: BrutalistClubDistances,
-                clearsDistanceWhenOB: true,
-                extraTopRight: drivenGreen,
-                lie: obAwareTeeBinding,
-                lieModifier: lieBinding(\.teeShotModifier),
-                club: clubBinding(\.teeClub),
-                distance: distanceBinding(\.teeShotDistance)
-            )
+            VStack(alignment: .leading, spacing: 0) {
+                ShotEditor(
+                    target: "Fairway",
+                    clubs: BrutalistClubs,
+                    clubDistanceDefaults: BrutalistClubDistances,
+                    clearsDistanceWhenOB: true,
+                    extraTopRight: drivenGreen,
+                    lie: obAwareTeeBinding,
+                    lieModifier: lieBinding(\.teeShotModifier),
+                    club: clubBinding(\.teeClub),
+                    distance: distanceBinding(\.teeShotDistance)
+                )
+                // Par 3: the tee shot is the approach. When it misses
+                // the green, capture LANDED AT so the chip phase has a
+                // real start distance.
+                if state.currentHole.par == 3 {
+                    landedAtSection
+                }
+            }
+        case .layup:
+            layupSection
         case .approach:
-            ShotEditor(
-                target: "Green",
-                clubs: BrutalistClubs,
-                clubDistanceDefaults: BrutalistClubDistances,
-                distanceLabel: "Distance to Pin",
-                fieldOrder: .distanceFirst,
-                extraTopRight: par5OnInTwo,
-                lie: lieBinding(\.approach),
-                lieModifier: lieBinding(\.approachModifier),
-                club: clubBinding(\.approachClub),
-                distance: distanceBinding(\.approachDistance)
+            VStack(alignment: .leading, spacing: 0) {
+                pinPositionSection
+                ShotEditor(
+                    target: "Green",
+                    clubs: BrutalistClubs,
+                    clubDistanceDefaults: BrutalistClubDistances,
+                    distanceLabel: "Distance to Pin",
+                    fieldOrder: .distanceFirst,
+                    extraTopLeft: approachIn,
+                    extraTopRight: par5OnInTwo,
+                    lie: approachResultBinding,
+                    lieModifier: lieBinding(\.approachModifier),
+                    club: clubBinding(\.approachClub),
+                    distance: distanceBinding(\.approachDistance)
+                )
+                landedAtSection
+            }
+        case .arg:
+            ARGEditorSection(state: state, holeIndex: state.holeIdx)
+        }
+    }
+
+    // MARK: - PIN POSITION
+
+    private var pinPositionSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SubLabel("Pin Position")
+            PinSelect(value: Binding(
+                get: { state.entries[state.holeIdx].pinPosition },
+                set: { state.entries[state.holeIdx].pinPosition = $0 }
+            ))
+        }
+        .padding(.bottom, 14)
+    }
+
+    // MARK: - LANDED AT (approach landing distance)
+
+    /// Conditional row: appears only when the chosen result lie is
+    /// non-green, non-OB, non-nil — the cases that imply a chip phase.
+    @ViewBuilder
+    private var landedAtSection: some View {
+        let approachLie = approachLieForLandingPrompt
+        if shouldShowLandedAt(approachLie: approachLie) {
+            VStack(alignment: .leading, spacing: 6) {
+                SubLabel("Landed at (from pin)")
+                DistanceWheel(
+                    value: landingDistanceBinding,
+                    range: 1...150,
+                    step: 1,
+                    majorEvery: 10,
+                    unit: "YDS"
+                )
+            }
+            .padding(.top, 14)
+        }
+    }
+
+    private var approachLieForLandingPrompt: String? {
+        switch kind {
+        case .tee:
+            // Par-3 tee editor — the result lie binding is the same
+            // one ShotEditor writes for the keypad.
+            state.entries[state.holeIdx].teeShot
+        case .approach:
+            state.entries[state.holeIdx].approach
+        case .layup, .arg:
+            nil
+        }
+    }
+
+    private func shouldShowLandedAt(approachLie: String?) -> Bool {
+        guard let raw = approachLie else { return false }
+        if raw == "Green" || raw == "On In 2" || raw == "In" { return false }
+        if raw.hasPrefix("OB ") { return false }
+        return true
+    }
+
+    private var landingDistanceBinding: Binding<Int?> {
+        Binding(
+            get: { state.entries[state.holeIdx].approachLandingDistance },
+            set: { state.entries[state.holeIdx].approachLandingDistance = $0 }
+        )
+    }
+
+    // MARK: - 2ND SHOT (par-5 layup capture)
+
+    private var layupSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SubLabel("Result")
+            LieKeypad(
+                value: layupLieBinding,
+                modifier: layupModifierBinding,
+                target: "Fairway"
             )
         }
+    }
+
+    private var layupLieBinding: Binding<String?> {
+        Binding(
+            get: { state.entries[state.holeIdx].layupLie },
+            set: { state.entries[state.holeIdx].layupLie = $0 }
+        )
+    }
+
+    private var layupModifierBinding: Binding<String?> {
+        Binding(
+            get: { state.entries[state.holeIdx].layupLieModifier },
+            set: { state.entries[state.holeIdx].layupLieModifier = $0 }
+        )
     }
 
     /// Tee-shot binding enforces dependent state changes in `RoundPlayState`.
@@ -107,6 +215,13 @@ struct ShotSheetView: View {
         Binding(
             get: { state.entries[state.holeIdx].teeShot },
             set: { state.setTeeShotResult($0, at: state.holeIdx) }
+        )
+    }
+
+    private var approachResultBinding: Binding<String?> {
+        Binding(
+            get: { state.entries[state.holeIdx].approach },
+            set: { state.setApproachResult($0, at: state.holeIdx) }
         )
     }
 
@@ -131,16 +246,26 @@ struct ShotSheetView: View {
             label: "ON IN 2",
             isActive: active,
             action: {
-                state.entries[state.holeIdx].approach = active ? nil : "On In 2"
-                state.entries[state.holeIdx].approachModifier = nil
+                state.setApproachResult(active ? nil : "On In 2", at: state.holeIdx)
             }
+        )
+    }
+
+    private var approachIn: LieKeypad.AuxButton? {
+        guard kind == .approach else { return nil }
+        return LieKeypad.AuxButton(
+            label: "IN",
+            isActive: state.isApproachIn(at: state.holeIdx),
+            action: { state.markApproachIn(at: state.holeIdx) }
         )
     }
 
     private var kindLabel: String {
         switch kind {
         case .tee: "TEE SHOT"
+        case .layup: "2ND SHOT"
         case .approach: state.currentHole.par == 3 ? "TEE / APPROACH" : "APPROACH"
+        case .arg: "AROUND THE GREEN"
         }
     }
 

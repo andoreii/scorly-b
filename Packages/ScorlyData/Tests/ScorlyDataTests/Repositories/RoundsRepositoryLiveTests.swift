@@ -313,9 +313,7 @@ struct RoundsRepositoryLiveTests {
             putts: 2,
             teeShot: nil,
             approach: "Green",
-            outOfBoundsCount: 0,
-            penaltyStrokes: 0,
-            hazardCount: 0
+            penaltyStrokes: 0
         )
         context.insert(stat)
         try context.save()
@@ -540,7 +538,7 @@ struct RoundsRepositoryLiveTests {
             engine = SyncEngine.make(
                 modelContainer: container,
                 remote: InMemoryRemoteSyncAPI(),
-                network: MockNetworkMonitor(initiallyOnline: true),
+                network: MockNetworkMonitor(initiallyOnline: false),
                 configuration: .fast
             )
             repository = RoundsRepositoryLive.make(

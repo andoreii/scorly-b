@@ -9,6 +9,7 @@ import SwiftUI
 /// `TrendsModel`. Read-only.
 public struct TrendsView: View {
     let roundsRepository: any RoundsRepository
+    let comparisonReference: SGComparisonReference
     let onBack: () -> Void
 
     @State private var allRounds: [CompletedRound] = []
@@ -21,9 +22,11 @@ public struct TrendsView: View {
 
     public init(
         roundsRepository: any RoundsRepository,
+        comparisonReference: SGComparisonReference = .scratch,
         onBack: @escaping () -> Void
     ) {
         self.roundsRepository = roundsRepository
+        self.comparisonReference = comparisonReference
         self.onBack = onBack
     }
 
@@ -116,10 +119,9 @@ public struct TrendsView: View {
     }
 
     private var hero: some View {
-        Text("Read\nthe game.")
+        Text("Trends")
             .font(BrutalistType.sans(.bold, size: 44))
             .kerning(-1.8)
-            .lineSpacing(-4)
             .foregroundStyle(BrutalistColor.fg)
             .padding(.bottom, BrutalistSpacing.xs)
     }
@@ -145,14 +147,6 @@ public struct TrendsView: View {
                     Haptics.light()
                     sheetState = TrendsFilterEditState(filter: filter, window: window)
                 }
-            Text(window.label)
-                .font(BrutalistType.monoCaption)
-                .kerning(0.8)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(BrutalistColor.panel)
-                .foregroundStyle(BrutalistColor.muted)
-                .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
         }
     }
 
@@ -193,11 +187,9 @@ public struct TrendsView: View {
         carousel: TrendCarouselAggregates,
         eligible: [CompletedRound]
     ) -> some View {
-        ScoreSummaryHeader(
-            avgScore: model.avgScore,
-            bestVsPar: model.bestVsPar,
-            worstVsPar: model.worstVsPar,
-            scorePoints: model.timeline.map { ScoreLinePoint(date: $0.date, score: $0.totalScore) }
+        ScoreTraceTrendsCard(
+            points: scoreTracePoints(from: model),
+            courseCount: distinctCourseCount(in: eligible)
         )
 
         // Each carousel sets its own minHeight so the page lays out
@@ -215,8 +207,8 @@ public struct TrendsView: View {
 
         TrendCarousel(
             title: "ACCURACY",
-            slides: accuracySlides(model: model, carousel: carousel),
-            minHeight: 460
+            slides: accuracySlides(model: model, carousel: carousel, eligible: eligible),
+            minHeight: 700
         ) { slide in
             slide.view
         }
@@ -268,22 +260,33 @@ public struct TrendsView: View {
     ) -> [CarouselSlide] {
         [
             .init(id: 0, view: AnyView(SkillsRadarCard(axes: model.radarAxes))),
-            .init(id: 1, view: AnyView(MultiRoundSGCard(rounds: eligible))),
+            .init(
+                id: 1,
+                view: AnyView(MultiRoundSGCard(
+                    rounds: eligible,
+                    baselineRounds: allRounds,
+                    comparisonReference: comparisonReference
+                ))
+            ),
         ]
     }
 
     private func accuracySlides(
         model: TrendsModel,
-        carousel: TrendCarouselAggregates
+        carousel: TrendCarouselAggregates,
+        eligible: [CompletedRound]
     ) -> [CarouselSlide] {
-        [
+        let courseCount = distinctCourseCount(in: eligible)
+        return [
             .init(
                 id: 0,
                 view: AnyView(
                     AccuracyCard(
                         kind: .fairway,
                         data: carousel.fairwayRose,
-                        series: model.firSeries
+                        series: model.firSeries,
+                        dates: model.accuracyDates,
+                        courseCount: courseCount
                     )
                 )
             ),
@@ -293,7 +296,9 @@ public struct TrendsView: View {
                     AccuracyCard(
                         kind: .green,
                         data: carousel.greenRose,
-                        series: model.girSeries
+                        series: model.girSeries,
+                        dates: model.accuracyDates,
+                        courseCount: courseCount
                     )
                 )
             ),
@@ -344,6 +349,26 @@ public struct TrendsView: View {
                 )
             ),
         ]
+    }
+
+    // MARK: - Score trace inputs
+
+    private func scoreTracePoints(from model: TrendsModel) -> [ScoreTracePoint] {
+        model.timeline.map { point in
+            ScoreTracePoint(
+                date: point.date,
+                score: point.totalScore,
+                par: point.totalScore - point.scoreVsPar
+            )
+        }
+    }
+
+    private func distinctCourseCount(in rounds: [CompletedRound]) -> Int {
+        let names = rounds.compactMap { $0.courseName }
+        if !names.isEmpty {
+            return Set(names).count
+        }
+        return rounds.count
     }
 
     // MARK: - Empty + footer

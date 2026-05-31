@@ -3,7 +3,7 @@ import ScorlyDomain
 import SwiftUI
 
 /// Live round play screen. Progress dots, hole hero, strokes
-/// stepper, three collapsible shot blocks, pin / penalty, derived
+/// stepper, shot-entry blocks, pin / penalty, derived
 /// stats, and bottom-row nav. Owns nothing — drives the
 /// `RoundPlayState` it's handed.
 public struct PlayView: View {
@@ -48,11 +48,11 @@ public struct PlayView: View {
             VStack(alignment: .leading, spacing: 0) {
                 shotBlocks
                 puttingBlock
+                argBlock
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
             Spacer(minLength: 0)
 
-            pinSection
             HBar(vMargin: BrutalistSpacing.m)
             navRow
         }
@@ -68,8 +68,14 @@ public struct PlayView: View {
         .sheet(isPresented: shotSheetBinding(.tee)) {
             ShotSheetView(state: state, kind: .tee)
         }
+        .sheet(isPresented: shotSheetBinding(.layup)) {
+            ShotSheetView(state: state, kind: .layup)
+        }
         .sheet(isPresented: shotSheetBinding(.approach)) {
             ShotSheetView(state: state, kind: .approach)
+        }
+        .sheet(isPresented: shotSheetBinding(.arg)) {
+            ShotSheetView(state: state, kind: .arg)
         }
         .sheet(isPresented: shotSheetBinding(.putts)) {
             PuttingSheetView(state: state)
@@ -291,9 +297,17 @@ public struct PlayView: View {
                     onTap: { state.openShot = .tee }
                 )
             }
+            if state.shouldShowLayupTab(at: state.holeIdx) {
+                ShotBlock(
+                    badge: "02",
+                    title: "2nd Shot",
+                    summary: layupBlockSummary,
+                    onTap: { state.openShot = .layup }
+                )
+            }
             if isPar3 || !drivenGreen {
                 ShotBlock(
-                    badge: isPar3 ? "01" : "02",
+                    badge: approachBadge(isPar3: isPar3),
                     title: isPar3 ? "Tee / Approach" : "Approach",
                     lie: lieBinding(\.approach),
                     lieModifier: lieBinding(\.approachModifier),
@@ -306,10 +320,28 @@ public struct PlayView: View {
         .padding(.top, BrutalistSpacing.m)
     }
 
+    private var layupBlockSummary: String {
+        var parts: [String] = []
+        if let lie = state.currentEntry.layupLie {
+            if let modifier = state.currentEntry.layupLieModifier {
+                parts.append("\(lie.uppercased()) · \(modifier.uppercased())")
+            } else {
+                parts.append(lie.uppercased())
+            }
+        } else {
+            parts.append("—")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func approachBadge(isPar3: Bool) -> String {
+        if isPar3 { return "01" }
+        return state.currentHole.par == 5 ? "03" : "02"
+    }
+
     private var puttingBlock: some View {
-        let isPar3 = state.currentHole.par == 3
-        return PuttingBlock(
-            badge: isPar3 ? "02" : "03",
+        PuttingBlock(
+            badge: puttingBadge,
             putts: state.currentEntry.putts,
             distances: state.currentEntry.puttDistances,
             onTap: { state.openShot = .putts }
@@ -317,17 +349,43 @@ public struct PlayView: View {
         .padding(.top, BrutalistSpacing.s)
     }
 
-    // MARK: - Pin
-
-    private var pinSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SubLabel("Pin Position")
-            PinSelect(value: Binding(
-                get: { state.currentEntry.pinPosition },
-                set: { state.entries[state.holeIdx].pinPosition = $0 }
-            ))
+    private var puttingBadge: String {
+        switch state.currentHole.par {
+        case 3: "02"
+        case 5: "04"
+        default: "03"
         }
-        .padding(.top, BrutalistSpacing.m)
+    }
+
+    @ViewBuilder
+    private var argBlock: some View {
+        if state.shouldShowARGTab(at: state.holeIdx) {
+            ShotBlock(
+                badge: argBadge,
+                title: "Around the Green",
+                summary: argBlockSummary,
+                onTap: { state.openShot = .arg }
+            )
+            .padding(.top, BrutalistSpacing.s)
+        }
+    }
+
+    private var argBadge: String {
+        switch state.currentHole.par {
+        case 3: "03"
+        case 5: "05"
+        default: "04"
+        }
+    }
+
+    private var argBlockSummary: String {
+        let count = state.inferredARGCount(at: state.holeIdx)
+        let head = count == 1 ? "1 SHOT" : "\(count) SHOTS"
+        let firstShot = state.currentEntry.argShots?.first
+        if let lie = firstShot?.lie, let yards = state.argStartDistance(slot: 0, at: state.holeIdx) {
+            return "\(head) · \(lie.uppercased()) → \(yards) YD"
+        }
+        return head
     }
 
     // MARK: - Metrics row (above STROKES divider)

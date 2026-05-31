@@ -17,6 +17,7 @@ public actor RoundsRepositoryLive: RoundsRepository {
     nonisolated let modelContainer: ModelContainer
     private let modelContext: ModelContext
     private let supabase: SupabaseClient?
+    private let holeStatsRemote: (any HoleStatsRemoteAPI)?
 
     public static func make(
         modelContainer: ModelContainer,
@@ -28,7 +29,23 @@ public actor RoundsRepositoryLive: RoundsRepository {
             modelContainer: modelContainer,
             userId: userId,
             syncEngine: syncEngine,
-            supabase: supabase
+            supabase: supabase,
+            holeStatsRemote: supabase.map { LiveHoleStatsRemoteAPI(supabase: $0) }
+        )
+    }
+
+    static func make(
+        modelContainer: ModelContainer,
+        userId: UUID,
+        syncEngine: SyncEngine,
+        holeStatsRemote: any HoleStatsRemoteAPI
+    ) -> RoundsRepositoryLive {
+        RoundsRepositoryLive(
+            modelContainer: modelContainer,
+            userId: userId,
+            syncEngine: syncEngine,
+            supabase: nil,
+            holeStatsRemote: holeStatsRemote
         )
     }
 
@@ -36,13 +53,15 @@ public actor RoundsRepositoryLive: RoundsRepository {
         modelContainer: ModelContainer,
         userId: UUID,
         syncEngine: SyncEngine,
-        supabase: SupabaseClient? = nil
+        supabase: SupabaseClient?,
+        holeStatsRemote: (any HoleStatsRemoteAPI)?
     ) {
         self.modelContainer = modelContainer
         modelContext = ModelContext(modelContainer)
         self.userId = userId
         self.syncEngine = syncEngine
         self.supabase = supabase
+        self.holeStatsRemote = holeStatsRemote
     }
 
     public func fetchAllCompleted() async throws -> [CompletedRound] {
@@ -202,6 +221,8 @@ public actor RoundsRepositoryLive: RoundsRepository {
         pendingHoleStats.reserveCapacity(round.holeStats.count)
         for (index, stat) in round.holeStats.enumerated() {
             let externalId = UUID()
+            let penaltyJson = Self.encodePenaltyEvents(stat.penaltyEvents)
+            let storage = HoleStatStorageProjection(stat)
             let statLocal = LocalHoleStat(
                 externalId: externalId,
                 roundExternalId: round.id,
@@ -209,13 +230,11 @@ public actor RoundsRepositoryLive: RoundsRepository {
                 par: stat.par,
                 strokes: stat.strokes,
                 putts: stat.putts,
-                teeShot: Mappings.v1ShotLocation(for: stat.teeShotLie),
-                approach: Mappings.v1ShotLocation(for: stat.approachLie),
-                teeClub: stat.teeClub,
-                approachClub: stat.approachClub,
-                outOfBoundsCount: stat.outOfBoundsCount,
-                penaltyStrokes: stat.penaltyStrokes,
-                hazardCount: stat.hazardCount,
+                teeShot: storage.teeShot,
+                approach: storage.approach,
+                teeClub: storage.teeClub,
+                approachClub: storage.approachClub,
+                penaltyStrokes: storage.penaltyStrokes,
                 greenInReg: stat.greenInRegulation,
                 threePutt: stat.threePutt,
                 upAndDownSuccess: stat.upAndDownSuccess,
@@ -224,14 +243,11 @@ public actor RoundsRepositoryLive: RoundsRepository {
                 teeShotDistance: stat.teeShotDistance,
                 approachDistance: stat.approachDistance,
                 pinPosition: stat.pinPosition,
-                outOfBoundsLeft: stat.outOfBoundsLeft,
-                outOfBoundsRight: stat.outOfBoundsRight,
-                outOfBoundsLong: stat.outOfBoundsLong,
-                outOfBoundsShort: stat.outOfBoundsShort,
-                hazardLeft: stat.hazardLeft,
-                hazardRight: stat.hazardRight,
-                hazardLong: stat.hazardLong,
-                hazardShort: stat.hazardShort
+                penaltyEventsJSON: penaltyJson,
+                approachLandingDistance: stat.approachLandingDistance,
+                argShotsJSON: Self.encodeARGShots(stat.argShots),
+                layupLie: Mappings.v1ShotLocation(for: stat.layupLie),
+                layupDistance: stat.layupDistance
             )
             modelContext.insert(statLocal)
             pendingHoleStats.append(
@@ -240,13 +256,11 @@ public actor RoundsRepositoryLive: RoundsRepository {
                     holeNumber: index + 1,
                     strokes: stat.strokes,
                     putts: stat.putts,
-                    teeShot: Mappings.v1ShotLocation(for: stat.teeShotLie),
-                    approach: Mappings.v1ShotLocation(for: stat.approachLie),
-                    teeClub: stat.teeClub,
-                    approachClub: stat.approachClub,
-                    outOfBoundsCount: stat.outOfBoundsCount,
-                    penaltyStrokes: stat.penaltyStrokes,
-                    hazardCount: stat.hazardCount,
+                    teeShot: storage.teeShot,
+                    approach: storage.approach,
+                    teeClub: storage.teeClub,
+                    approachClub: storage.approachClub,
+                    penaltyStrokes: storage.penaltyStrokes,
                     greenInReg: stat.greenInRegulation,
                     threePutt: stat.threePutt,
                     girOpportunity: true,
@@ -257,14 +271,11 @@ public actor RoundsRepositoryLive: RoundsRepository {
                     teeShotDistance: stat.teeShotDistance,
                     approachDistance: stat.approachDistance,
                     pinPosition: stat.pinPosition,
-                    outOfBoundsLeft: stat.outOfBoundsLeft,
-                    outOfBoundsRight: stat.outOfBoundsRight,
-                    outOfBoundsLong: stat.outOfBoundsLong,
-                    outOfBoundsShort: stat.outOfBoundsShort,
-                    hazardLeft: stat.hazardLeft,
-                    hazardRight: stat.hazardRight,
-                    hazardLong: stat.hazardLong,
-                    hazardShort: stat.hazardShort
+                    penaltyEventsJson: penaltyJson,
+                    approachLandingDistance: stat.approachLandingDistance,
+                    argShotsJson: Self.encodeARGShots(stat.argShots),
+                    layupLie: Mappings.v1ShotLocation(for: stat.layupLie),
+                    layupDistance: stat.layupDistance
                 )
             )
         }
@@ -387,7 +398,7 @@ public actor RoundsRepositoryLive: RoundsRepository {
     }
 
     public func backfillHoleStatsToCloud() async throws -> Int {
-        guard let supabase else {
+        guard let holeStatsRemote else {
             throw RoundsRepositoryError.remoteUnavailable
         }
         // Only rounds that already landed in Supabase (serverId != nil)
@@ -398,59 +409,24 @@ public actor RoundsRepositoryLive: RoundsRepository {
         )
         let locals = try modelContext.fetch(descriptor)
 
-        // Collect (external id, patch) pairs across every round + hole.
-        // The schema's UNIQUE index on `hole_stat_external_id` is
-        // partial (`WHERE hole_stat_external_id IS NOT NULL`), so
-        // Postgres rejects it as an `ON CONFLICT` target — we PATCH
-        // each row by external id instead of upserting.
-        var patches: [(externalId: String, patch: HoleStatPatch)] = []
-        for local in locals where local.serverId != nil {
+        // Upsert complete rows on the non-partial `(round_id, hole_number)`
+        // constraint. That updates existing detail and recreates rows when
+        // a previous parent-round insert succeeded before its child batch
+        // failed.
+        var inserts: [HoleStatInsert] = []
+        for local in locals {
+            guard let roundId = local.serverId else { continue }
             for stat in fetchHoleStats(for: local.externalId) {
-                patches.append((
-                    externalId: stat.externalId.uuidString,
-                    patch: HoleStatPatch(
-                        teeShot: stat.teeShot,
-                        approach: stat.approach,
-                        teeClub: stat.teeClub,
-                        approachClub: stat.approachClub,
-                        outOfBoundsCount: stat.outOfBoundsCount,
-                        penaltyStrokes: stat.penaltyStrokes,
-                        hazardCount: stat.hazardCount,
-                        greenInReg: stat.greenInReg,
-                        threePutt: stat.threePutt,
-                        girOpportunity: true,
-                        fairwayOpportunity: stat.par >= 4,
-                        upAndDownSuccess: stat.upAndDownSuccess,
-                        sandSaveSuccess: stat.sandSaveSuccess,
-                        puttDistances: stat.puttDistances,
-                        teeShotDistance: stat.teeShotDistance,
-                        approachDistance: stat.approachDistance,
-                        pinPosition: stat.pinPosition,
-                        outOfBoundsLeft: stat.outOfBoundsLeft,
-                        outOfBoundsRight: stat.outOfBoundsRight,
-                        outOfBoundsLong: stat.outOfBoundsLong,
-                        outOfBoundsShort: stat.outOfBoundsShort,
-                        hazardLeft: stat.hazardLeft,
-                        hazardRight: stat.hazardRight,
-                        hazardLong: stat.hazardLong,
-                        hazardShort: stat.hazardShort
-                    )
-                ))
+                inserts.append(HoleStatInsert(roundId: roundId, local: stat))
             }
         }
-        guard !patches.isEmpty else { return 0 }
-        for entry in patches {
-            do {
-                try await supabase
-                    .from("hole_stats")
-                    .update(entry.patch, returning: .minimal)
-                    .eq("hole_stat_external_id", value: entry.externalId)
-                    .execute()
-            } catch {
-                throw RoundsRepositoryError.backfillFailed(error.localizedDescription)
-            }
+        guard !inserts.isEmpty else { return 0 }
+        do {
+            try await holeStatsRemote.upsert(inserts)
+        } catch {
+            throw RoundsRepositoryError.backfillFailed(error.localizedDescription)
         }
-        return patches.count
+        return inserts.count
     }
 }
 
@@ -557,8 +533,7 @@ private extension RoundsRepositoryLive {
                 teeShotLie: resolvedTee,
                 approachLie: resolvedApproach,
                 penaltyStrokes: stat.penaltyStrokes,
-                outOfBoundsCount: stat.outOfBoundsCount,
-                hazardCount: stat.hazardCount,
+                penaltyEvents: Self.decodePenaltyEvents(stat.penaltyEventsJSON),
                 upAndDownSuccess: stat.upAndDownSuccess ?? false,
                 sandSaveSuccess: stat.sandSaveSuccess ?? false,
                 teeShotDistance: stat.teeShotDistance,
@@ -567,14 +542,10 @@ private extension RoundsRepositoryLive {
                 teeClub: stat.teeClub,
                 approachClub: stat.approachClub,
                 pinPosition: stat.pinPosition,
-                outOfBoundsLeft: stat.outOfBoundsLeft,
-                outOfBoundsRight: stat.outOfBoundsRight,
-                outOfBoundsLong: stat.outOfBoundsLong,
-                outOfBoundsShort: stat.outOfBoundsShort,
-                hazardLeft: stat.hazardLeft,
-                hazardRight: stat.hazardRight,
-                hazardLong: stat.hazardLong,
-                hazardShort: stat.hazardShort
+                approachLandingDistance: stat.approachLandingDistance,
+                argShots: Self.decodeARGShots(stat.argShotsJSON),
+                layupLie: stat.layupLie.flatMap(Mappings.lie(fromV1ShotLocation:)),
+                layupDistance: stat.layupDistance
             )
         }
         let par = stats.reduce(0) { $0 + $1.par }
@@ -641,7 +612,11 @@ private extension RoundsRepositoryLive {
                 approachLie: domainStat.approachLie,
                 approachDistance: localStat.approachDistance,
                 puttDistancesFeet: localStat.puttDistances,
-                strokes: domainStat.strokes
+                strokes: domainStat.strokes,
+                approachLandingDistance: domainStat.approachLandingDistance,
+                argShots: domainStat.argShots,
+                layupLie: domainStat.layupLie,
+                layupDistance: domainStat.layupDistance
             )
         }
         let result = SGCalculator.compute(holes: inputs)
@@ -698,6 +673,46 @@ private extension RoundsRepositoryLive {
     }
 
     static let encoder = SupabaseConfig.encoder
+
+    // MARK: - ARG shots JSON codec
+
+    /// Encode `[ARGShot]` to a compact JSON string for SwiftData /
+    /// Supabase storage. Returns nil for nil / empty input so the
+    /// stored column stays NULL rather than `"[]"`, keeping the
+    /// "absent" semantics clean.
+    static func encodeARGShots(_ shots: [ARGShot]?) -> String? {
+        guard let shots, !shots.isEmpty else { return nil }
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        guard let data = try? encoder.encode(shots) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func decodeARGShots(_ json: String?) -> [ARGShot]? {
+        guard let json,
+              let data = json.data(using: .utf8)
+        else { return nil }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let shots = try? decoder.decode([ARGShot].self, from: data),
+              !shots.isEmpty
+        else { return nil }
+        return shots
+    }
+
+    // MARK: - PenaltyEvent JSON codec
+
+    /// Encode `[PenaltyEvent]` to a compact JSON string for SwiftData
+    /// / Supabase storage. Returns nil for nil / empty input so the
+    /// stored column stays NULL rather than `"[]"`, keeping the
+    /// "no penalties" case distinct from "no data".
+    static func encodePenaltyEvents(_ events: [PenaltyEvent]) -> String? {
+        PenaltyEventJSONCodec.encode(events)
+    }
+
+    static func decodePenaltyEvents(_ json: String?) -> [PenaltyEvent] {
+        PenaltyEventJSONCodec.decode(json)
+    }
 }
 
 public enum RoundsRepositoryError: Error, LocalizedError, Sendable, Equatable {

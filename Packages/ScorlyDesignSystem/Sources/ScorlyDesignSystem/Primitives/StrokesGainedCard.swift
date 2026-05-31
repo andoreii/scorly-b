@@ -39,6 +39,7 @@ public struct StrokesGainedCard: View {
     private let total: SGCardValues?
     private let holes: [SGCardValues]?
     private let seasonAverages: SGCardValues?
+    private let referenceLabel: String
     private let timelineTitle: String
     private let timelineUnitSingular: String
     private let timelineUnitPlural: String
@@ -62,6 +63,7 @@ public struct StrokesGainedCard: View {
         total: SGCardValues?,
         holes: [SGCardValues]? = nil,
         seasonAverages: SGCardValues? = nil,
+        referenceLabel: String = "VS SCRATCH",
         timelineTitle: String = "HOLE-BY-HOLE SG · CUMULATIVE",
         timelineUnitSingular: String = "HOLE",
         timelineUnitPlural: String = "HOLES",
@@ -74,6 +76,7 @@ public struct StrokesGainedCard: View {
         self.total = total
         self.holes = holes
         self.seasonAverages = seasonAverages
+        self.referenceLabel = referenceLabel
         self.timelineTitle = timelineTitle
         self.timelineUnitSingular = timelineUnitSingular
         self.timelineUnitPlural = timelineUnitPlural
@@ -93,9 +96,7 @@ public struct StrokesGainedCard: View {
                     .frame(height: 1)
                     .padding(.top, 14)
                     .padding(.bottom, 6)
-                if summaryStyle.showsScratchMetaRow {
-                    metaRow
-                }
+                referenceRow
                 if let total {
                     if summaryStyle == .categoryExtremes {
                         Spacer(minLength: BrutalistSpacing.s)
@@ -167,14 +168,14 @@ public struct StrokesGainedCard: View {
         }
     }
 
-    private var metaRow: some View {
+    private var referenceRow: some View {
         HStack {
-            Text("VS SCRATCH · 4 CATEGORIES")
+            Text("\(referenceLabel) · 4 CATEGORIES")
                 .font(BrutalistType.monoMicro)
                 .kerning(0.8)
                 .foregroundStyle(BrutalistColor.muted)
             Spacer()
-            Text("0.00 = SCRATCH")
+            Text("0.00 = \(referenceLabel.replacingOccurrences(of: "VS ", with: ""))")
                 .font(BrutalistType.monoMicro)
                 .kerning(0.8)
                 .foregroundStyle(BrutalistColor.muted)
@@ -251,7 +252,8 @@ public struct StrokesGainedCard: View {
     private func summaryStrip(total: SGCardValues) -> some View {
         HStack(spacing: 0) {
             ForEach(
-                Array(SGSummaryItem.items(for: total, style: summaryStyle).enumerated()),
+                Array(SGSummaryItem.items(for: total, style: summaryStyle, referenceLabel: referenceLabel)
+                    .enumerated()),
                 id: \.offset
             ) { index, item in
                 SGSummaryCell(
@@ -282,10 +284,6 @@ public struct StrokesGainedCard: View {
 public enum SGSummaryStyle: Sendable {
     case full
     case categoryExtremes
-
-    var showsScratchMetaRow: Bool {
-        self == .full
-    }
 }
 
 public struct SGBreakdownDensity: Sendable {
@@ -357,7 +355,7 @@ struct SGSummaryItem {
     let value: Double
     let short: String?
 
-    static func items(for total: SGCardValues, style: SGSummaryStyle) -> [Self] {
+    static func items(for total: SGCardValues, style: SGSummaryStyle, referenceLabel: String) -> [Self] {
         let ranked = sgCategories.map { ($0, sgDecimalToDouble(total[keyPath: $0.totalsKeyPath])) }
         let sorted = ranked.sorted { $0.1 > $1.1 }
         let best = sorted.first ?? ranked[0]
@@ -369,7 +367,7 @@ struct SGSummaryItem {
         if style == .full {
             items.append(
                 Self(
-                    label: "NET VS SCRATCH",
+                    label: "NET \(referenceLabel)",
                     title: "ALL CATEGORIES",
                     value: sgDecimalToDouble(total.total),
                     short: nil

@@ -217,15 +217,17 @@ struct HoleStatTests {
         upAndDown: Bool = false,
         sandSave: Bool = false
     ) -> HoleStat {
-        HoleStat(
+        let events: [PenaltyEvent] =
+            Array(repeating: PenaltyEvent(kind: .outOfBounds), count: ob)
+            + Array(repeating: PenaltyEvent(kind: .hazard), count: hazard)
+        return HoleStat(
             par: par,
             strokes: strokes,
             putts: putts,
             teeShotLie: tee,
             approachLie: approach,
             penaltyStrokes: penalty,
-            outOfBoundsCount: ob,
-            hazardCount: hazard,
+            penaltyEvents: events,
             upAndDownSuccess: upAndDown,
             sandSaveSuccess: sandSave
         )

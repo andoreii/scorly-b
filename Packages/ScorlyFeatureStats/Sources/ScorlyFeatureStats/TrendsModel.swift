@@ -45,18 +45,6 @@ public struct TrendsTimelinePoint: Sendable, Equatable, Identifiable {
     }
 }
 
-/// Bundled inputs for the new score-line chart. Carries date + score
-/// per round so the chart can render month-zone labels and per-point
-/// score callouts in one pass without rederiving the timeline.
-public struct ScoreLinePoint: Sendable, Equatable, Hashable {
-    public let date: Date
-    public let score: Int
-    public init(date: Date, score: Int) {
-        self.date = date
-        self.score = score
-    }
-}
-
 /// Score-distribution buckets, in scorecard order (lowest to highest
 /// relative to par). Names match the in-app pip notation vocabulary.
 public enum ScoreBucket: String, CaseIterable, Sendable {
@@ -170,6 +158,10 @@ public struct TrendsModel: Sendable, Equatable {
     public let girSeries: [Double]
     public let puttsSeries: [Double]
     public let threePuttSeries: [Double]
+    /// Dates that parallel `firSeries` / `girSeries`. Rounds without
+    /// hole stats are skipped from both, so the count may be smaller
+    /// than `timeline.count`.
+    public let accuracyDates: [Date]
 
     // Penalty heatmap
     public let penalties: [Int]
@@ -203,6 +195,7 @@ public struct TrendsModel: Sendable, Equatable {
         girSeries: [Double],
         puttsSeries: [Double],
         threePuttSeries: [Double],
+        accuracyDates: [Date] = [],
         penalties: [Int],
         penaltyMax: Int,
         radarAxes: [RadarAxis] = []
@@ -229,6 +222,7 @@ public struct TrendsModel: Sendable, Equatable {
         self.girSeries = girSeries
         self.puttsSeries = puttsSeries
         self.threePuttSeries = threePuttSeries
+        self.accuracyDates = accuracyDates
         self.penalties = penalties
         self.penaltyMax = penaltyMax
         self.radarAxes = radarAxes
@@ -350,6 +344,7 @@ public struct TrendsModel: Sendable, Equatable {
         var girSeries: [Double] = []
         var puttsSeries: [Double] = []
         var threePuttSeries: [Double] = []
+        var accuracyDates: [Date] = []
         var firNumerator = 0
         var firDenominator = 0
         var girNumerator = 0
@@ -372,6 +367,7 @@ public struct TrendsModel: Sendable, Equatable {
             girSeries.append(Double(round.girCount) / Double(girHoles))
             puttsSeries.append(Double(round.totalPutts) / Double(girHoles) * 18.0)
             threePuttSeries.append(Double(round.threePuttCount) / Double(girHoles))
+            accuracyDates.append(round.datePlayed)
 
             firNumerator += round.firCount
             firDenominator += firOpps
@@ -431,6 +427,7 @@ public struct TrendsModel: Sendable, Equatable {
             girSeries: girSeries,
             puttsSeries: puttsSeries,
             threePuttSeries: threePuttSeries,
+            accuracyDates: accuracyDates,
             penalties: penalties,
             penaltyMax: penaltyMax,
             radarAxes: radarAxes

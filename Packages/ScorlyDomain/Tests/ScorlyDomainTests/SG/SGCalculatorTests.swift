@@ -156,7 +156,7 @@ struct SGCalculatorTests {
 
     // MARK: - Reconstruction: par 5 — chip-in (ARG holed without putts)
 
-    @Test("Par 5 chip-in (3 strokes, no putts): OTT/APP/ARG with final ARG holed")
+    @Test("Par 5 chip-in (3 strokes, no putts): chip computed from default chip-start")
     func par5ChipInNoPutts() {
         let input = HoleSGInput(
             par: 5,
@@ -171,14 +171,19 @@ struct SGCalculatorTests {
         let result = SGCalculator.computeHole(input)
         // Categories: OTT, APP, ARG (holed)
         #expect(result.shots.map(\.category) == [.ott, .app, .arg])
-        // The single ARG shot is the chip-in: no recoverable start
-        // distance, so SG is nil.
-        #expect(result.shots[2].strokesGained == nil)
-        // ARG total = 0 (only-nil shots aggregate to 0).
-        #expect(result.totals.arg == 0)
+        // OTT: E(tee, 540)=4.65 − E(fairway, 260)=3.58 − 1 = 0.07
+        #expect(result.shots[0].strokesGained == dec("0.07"))
+        // APP: no landing distance recorded → defaults to (rough, 20yd).
+        //   E(fairway, 260)=3.58 − E(rough, 20)=2.59 − 1 = -0.01
+        #expect(result.shots[1].strokesGained == dec("-0.01"))
+        // ARG (holed chip): E(rough, 20)=2.59 − 0 − 1 = 1.59
+        #expect(result.shots[2].strokesGained == dec("1.59"))
+        #expect(result.totals.arg == dec("1.59"))
+        // Total telescopes to E(tee, 540) − strokes = 1.65
+        #expect(result.totals.total == dec("1.65"))
     }
 
-    @Test("Par 5 in 4 with no putts: OTT/APP/ARG/ARG (last holed, both nil)")
+    @Test("Par 5 in 4 with no putts: intermediate ARG uses chained defaults")
     func par5FourStrokesNoPutts() {
         let input = HoleSGInput(
             par: 5,
@@ -191,10 +196,20 @@ struct SGCalculatorTests {
             strokes: 4
         )
         let result = SGCalculator.computeHole(input)
-        // 2 ARG shots: one intermediate (unknown end), one holed.
+        // 2 ARG shots — intermediate uses the 10yd intermediate default,
+        // last is holed. Every shot is bounded; no nils.
         #expect(result.shots.map(\.category) == [.ott, .app, .arg, .arg])
-        #expect(result.shots[2].strokesGained == nil)
-        #expect(result.shots[3].strokesGained == nil)
+        // OTT = 0.07, APP = -0.01 (same chain entry as par5ChipInNoPutts)
+        #expect(result.shots[0].strokesGained == dec("0.07"))
+        #expect(result.shots[1].strokesGained == dec("-0.01"))
+        // ARG[0]: E(rough, 20)=2.59 − E(rough, 10)=2.34 − 1 = -0.75
+        #expect(result.shots[2].strokesGained == dec("-0.75"))
+        // ARG[1]: E(rough, 10)=2.34 − 0 − 1 = 1.34
+        #expect(result.shots[3].strokesGained == dec("1.34"))
+        // ARG total = -0.75 + 1.34 = 0.59
+        #expect(result.totals.arg == dec("0.59"))
+        // Total telescopes to E(tee, 540) − 4 = 0.65
+        #expect(result.totals.total == dec("0.65"))
     }
 
     // MARK: - Reconstruction: par 4 — missed green, chip + 2 putts (ARG with intermediate)
@@ -213,11 +228,95 @@ struct SGCalculatorTests {
         )
         let result = SGCalculator.computeHole(input)
         #expect(result.shots.map(\.category) == [.ott, .app, .arg, .putt, .putt])
-        // The ARG shot starts at unknown distance (only the lie is
-        // known) → SG is nil. Putts compute normally.
-        #expect(result.shots[2].strokesGained == nil)
-        #expect(result.shots[3].strokesGained != nil)
-        #expect(result.shots[4].strokesGained != nil)
+        // OTT: E(tee, 380)=3.96 − E(fairway, 140)=2.91 − 1 = 0.05
+        #expect(result.shots[0].strokesGained == dec("0.05"))
+        // APP: no landing distance → bunker default = 12yd from pin.
+        //   E(sand, 12) = 2.43 + 0.2 × (2.53 − 2.43) = 2.45
+        //   APP = E(fairway, 140)=2.91 − 2.45 − 1 = -0.54
+        #expect(result.shots[1].strokesGained == dec("-0.54"))
+        // ARG (chip onto green): E(sand, 12)=2.45 − E(green, 10)=1.61 − 1 = -0.16
+        #expect(result.shots[2].strokesGained == dec("-0.16"))
+        // PUTT1: E(green, 10)=1.61 − E(green, 2 clamps to 1.04) − 1 = -0.43
+        #expect(result.shots[3].strokesGained == dec("-0.43"))
+        // PUTT2: E(green, 2 → 1.04) − 0 − 1 = 0.04
+        #expect(result.shots[4].strokesGained == dec("0.04"))
+        #expect(result.totals.arg == dec("-0.16"))
+        // Total telescopes to E(tee, 380) − 5 = -1.04
+        #expect(result.totals.total == dec("-1.04"))
+    }
+
+    // MARK: - Explicit user data overrides defaults
+
+    @Test("Par 4 with explicit argShots: chip start uses user data, not default")
+    func par4ExplicitARGShot() {
+        let input = HoleSGInput(
+            par: 4,
+            yardage: 380,
+            teeShotLie: .fairway,
+            teeShotDistance: 240,
+            approachLie: .roughLeft,
+            approachDistance: 140,
+            puttDistancesFeet: [6, 2],
+            strokes: 5,
+            approachLandingDistance: 25, // 25yd from pin in the rough
+            argShots: [ARGShot(lie: .roughLeft, distanceToPinYards: 25)]
+        )
+        let result = SGCalculator.computeHole(input)
+        // APP end at rough, 25yd: E(rough, 25) = 2.59 + 0.5 × (2.70 − 2.59) = 2.645
+        //   APP = E(fairway, 140)=2.91 − 2.645 − 1 = -0.735
+        #expect(result.shots[1].strokesGained == dec("-0.735"))
+        // ARG uses the user-recorded distance (25yd rough).
+        //   ARG = E(rough, 25)=2.645 − E(green, 6)=1.34 − 1 = 0.305
+        #expect(result.shots[2].strokesGained == dec("0.305"))
+        // Total still telescopes to E(tee, 380) − 5 = -1.04
+        #expect(result.totals.total == dec("-1.04"))
+    }
+
+    @Test("Par 5 with layup: layup shot inserted between tee and approach")
+    func par5WithLayup() {
+        let input = HoleSGInput(
+            par: 5,
+            yardage: 540,
+            teeShotLie: .fairway,
+            teeShotDistance: 260, // tee end = (fairway, 280)
+            approachLie: .green,
+            approachDistance: 100, // entered for the approach
+            puttDistancesFeet: [15, 3],
+            strokes: 5,
+            layupLie: .fairway,
+            layupDistance: 100
+        )
+        let result = SGCalculator.computeHole(input)
+        // Categories: OTT, APP (layup), APP (approach), PUTT, PUTT
+        #expect(result.shots.map(\.category) == [.ott, .app, .app, .putt, .putt])
+        // OTT: E(tee, 540)=4.65 − E(fairway, 280)=3.69 − 1 = -0.04
+        #expect(result.shots[0].strokesGained == dec("-0.04"))
+        // Layup: E(fairway, 280)=3.69 − E(fairway, 100)=2.80 − 1 = -0.11
+        #expect(result.shots[1].strokesGained == dec("-0.11"))
+        // Approach (onto green at 15ft): E(fairway, 100)=2.80 − E(green, 15)=1.78 − 1 = 0.02
+        #expect(result.shots[2].strokesGained == dec("0.02"))
+        // Total = E(tee, 540) − 5 = -0.35
+        #expect(result.totals.total == dec("-0.35"))
+    }
+
+    @Test("Par 5 with layup and holed approach ends approach shot as holed")
+    func par5LayupHoledApproach() {
+        let input = HoleSGInput(
+            par: 5,
+            yardage: 540,
+            teeShotLie: .fairway,
+            teeShotDistance: 280,
+            approachLie: .green,
+            approachDistance: 100,
+            puttDistancesFeet: [],
+            strokes: 3,
+            layupLie: .fairway,
+            layupDistance: 100
+        )
+        let reconstructed = SGCalculator.reconstruct(input)
+
+        #expect(reconstructed.map(\.category) == [.ott, .app, .app])
+        #expect(reconstructed[2].end == .holed)
     }
 
     // MARK: - Reconstruction: missing data → nil per shot

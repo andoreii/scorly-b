@@ -76,6 +76,14 @@ struct RoundPlayStateTests {
         #expect(state.derivedStat(for: 0).strokes == 5)
     }
 
+    @Test("Fresh live-round holes default to two putts")
+    func freshHolesDefaultToTwoPutts() {
+        let state = RoundPlayState(course: Self.makeCourse(), teeId: nil, holesPlayed: .eighteen)
+
+        #expect(state.entries.allSatisfy { $0.putts == 2 })
+        #expect(state.derivedStat(for: 0).putts == 2)
+    }
+
     @Test("OB lie pushes the count, not the Lie field")
     func lieDecodingOB() {
         let course = Self.makeCourse()
@@ -85,6 +93,9 @@ struct RoundPlayStateTests {
         let stat = state.derivedStat(for: 0)
         #expect(stat.teeShotLie == nil)
         #expect(stat.outOfBoundsCount == 1)
+        #expect(stat.penaltyEvents == [
+            PenaltyEvent(kind: .outOfBounds, direction: .right, phase: .tee),
+        ])
     }
 
     @Test("Water Hazard pushes the hazard count")
@@ -95,6 +106,9 @@ struct RoundPlayStateTests {
         state.entries[0].approach = "Water Hazard"
         let stat = state.derivedStat(for: 0)
         #expect(stat.hazardCount == 1)
+        #expect(stat.penaltyEvents == [
+            PenaltyEvent(kind: .hazard, phase: .approach),
+        ])
     }
 
     @Test("Fairway tee + green approach scores a GIR with two putts on a par-4")
@@ -181,6 +195,192 @@ struct RoundPlayStateTests {
         #expect(stat.approachLie == .green)
     }
 
+    @Test("Par 5 2nd shot tab hides only for driven green or ON IN 2")
+    func par5SecondShotTabVisibility() {
+        let state = RoundPlayState(course: Self.makeCourse(), teeId: nil, holesPlayed: .eighteen)
+
+        #expect(state.shouldShowLayupTab(at: 1))
+
+        state.entries[1].approach = "On In 2"
+        #expect(!state.shouldShowLayupTab(at: 1))
+
+        state.entries[1].approach = nil
+        state.setTeeShotResult("Green", at: 1)
+        #expect(!state.shouldShowLayupTab(at: 1))
+    }
+
+    @Test("Around the green tab requires a missed approach and inferred chip")
+    func aroundGreenTabVisibilityRequiresMissAndChipMath() {
+        let state = RoundPlayState(course: Self.makeCourse(), teeId: nil, holesPlayed: .eighteen)
+
+        state.entries[0].strokes = 4
+        state.entries[0].putts = 2
+        state.entries[0].approach = "Miss Right"
+        #expect(!state.shouldShowARGTab(at: 0))
+
+        state.entries[0].strokes = 5
+        #expect(state.shouldShowARGTab(at: 0))
+
+        state.entries[0].approach = "Green"
+        #expect(!state.shouldShowARGTab(at: 0))
+
+        state.entries[0].approach = "OB Right"
+        #expect(!state.shouldShowARGTab(at: 0))
+    }
+
+    @Test("Par 5 inferred ARG count treats 2nd shot as a separate pre-green shot")
+    func par5ARGCountIncludesSecondShot() {
+        let state = RoundPlayState(course: Self.makeCourse(), teeId: nil, holesPlayed: .eighteen)
+
+        state.entries[1].strokes = 6
+        state.entries[1].putts = 2
+        state.entries[1].approach = "Miss Right"
+
+        #expect(state.inferredARGCount(at: 1) == 1)
+        #expect(state.shouldShowARGTab(at: 1))
+    }
+
+    @Test("Par 5 layup uses approach distance as remaining distance")
+    func par5LayupUsesApproachDistance() {
+        let state = RoundPlayState(course: Self.makeCourse(), teeId: nil, holesPlayed: .eighteen)
+
+        state.entries[1].strokes = 5
+        state.entries[1].teeShot = "Fairway"
+        state.entries[1].layupLie = "Fairway"
+        state.entries[1].approachDistance = 105
+        state.entries[1].approach = "Green"
+
+        let stat = state.derivedStat(for: 1)
+        #expect(stat.layupLie == .fairway)
+        #expect(stat.layupDistance == 105)
+    }
+
+    @Test("Approach IN marks the approach as holed")
+    func approachInMarksHoledShot() {
+        let state = RoundPlayState(course: Self.makeCourse(), teeId: nil, holesPlayed: .eighteen)
+
+        state.entries[0].strokes = 4
+        state.entries[0].putts = 2
+        state.entries[0].puttDistances = [20, 3]
+        state.markApproachIn(at: 0)
+
+        #expect(state.entries[0].approach == "In")
+        #expect(state.entries[0].strokes == 2)
+        #expect(state.entries[0].putts == 0)
+        #expect(state.entries[0].puttDistances.isEmpty)
+        #expect(state.isApproachIn(at: 0))
+    }
+
+    @Test("Approach IN toggles independently from GRN")
+    func approachInTogglesIndependentlyFromGreen() {
+        let state = RoundPlayState(course: Self.makeCourse(), teeId: nil, holesPlayed: .eighteen)
+
+        state.markApproachIn(at: 0)
+
+        #expect(state.isApproachIn(at: 0))
+        #expect(state.entries[0].approach != "Green")
+
+        state.markApproachIn(at: 0)
+
+        #expect(!state.isApproachIn(at: 0))
+        #expect(state.entries[0].approach == nil)
+        #expect(state.entries[0].putts == 2)
+
+        state.setApproachResult("Green", at: 0)
+
+        #expect(state.entries[0].approach == "Green")
+        #expect(!state.isApproachIn(at: 0))
+    }
+
+    @Test("Around the green IN marks the selected chip as holed")
+    func argInMarksSelectedChipHoled() {
+        let state = RoundPlayState(course: Self.makeCourse(), teeId: nil, holesPlayed: .eighteen)
+
+        state.entries[0].strokes = 5
+        state.entries[0].putts = 2
+        state.entries[0].approach = "Miss Right"
+        state.entries[0].argShots = [
+            ARGShotEntry(lie: "Miss Right", distanceYards: 15),
+            ARGShotEntry(lie: "Miss Left", distanceYards: 5),
+        ]
+        state.markARGIn(slot: 0, at: 0)
+
+        #expect(state.entries[0].strokes == 3)
+        #expect(state.entries[0].putts == 0)
+        #expect(state.entries[0].puttDistances.isEmpty)
+        #expect(state.entries[0].argShots?.count == 1)
+        #expect(state.isARGIn(slot: 0, at: 0))
+    }
+
+    @Test("Around the green IN toggles off")
+    func argInTogglesOff() {
+        let state = RoundPlayState(course: Self.makeCourse(), teeId: nil, holesPlayed: .eighteen)
+
+        state.entries[0].strokes = 5
+        state.entries[0].putts = 2
+        state.entries[0].approach = "Miss Right"
+
+        state.markARGIn(slot: 0, at: 0)
+
+        #expect(state.isARGIn(slot: 0, at: 0))
+
+        state.markARGIn(slot: 0, at: 0)
+
+        #expect(!state.isARGIn(slot: 0, at: 0))
+        #expect(state.entries[0].putts == 2)
+        #expect(state.inferredARGCount(at: 0) == 1)
+    }
+
+    @Test("Single ARG shot reuses approach landing distance without duplicate entry")
+    func singleARGShotUsesApproachLandingDistance() {
+        let state = RoundPlayState(course: Self.makeCourse(), teeId: nil, holesPlayed: .eighteen)
+        state.entries[0].strokes = 5
+        state.entries[0].putts = 2
+        state.entries[0].approach = "Miss Right"
+        state.entries[0].approachLandingDistance = 17
+        state.entries[0].argShots = [
+            ARGShotEntry(lie: "Miss Right"),
+        ]
+
+        let stat = state.derivedStat(for: 0)
+
+        #expect(stat.argShots == [
+            ARGShot(lie: .recoveryRight, distanceToPinYards: 17),
+        ])
+        #expect(state.argStartDistance(slot: 0, at: 0) == 17)
+        #expect(state.recordedARGCount(at: 0) == 1)
+    }
+
+    @Test("Intermediate ARG landing distance becomes next shot start")
+    func intermediateARGLandingBecomesNextStart() {
+        let state = RoundPlayState(course: Self.makeCourse(), teeId: nil, holesPlayed: .eighteen)
+        state.entries[0].strokes = 6
+        state.entries[0].putts = 2
+        state.entries[0].approach = "Miss Right"
+        state.entries[0].approachLandingDistance = 28
+        state.entries[0].argShots = [
+            ARGShotEntry(lie: "Miss Right"),
+            ARGShotEntry(lie: "Miss Left"),
+        ]
+
+        state.setARGTransitionDistance(9, after: 0, at: 0)
+
+        let stat = state.derivedStat(for: 0)
+        #expect(state.argStartDistance(slot: 1, at: 0) == 9)
+        #expect(stat.argShots == [
+            ARGShot(lie: .recoveryRight, distanceToPinYards: 28),
+            ARGShot(lie: .recoveryLeft, distanceToPinYards: 9),
+        ])
+        #expect(state.recordedARGCount(at: 0) == 2)
+    }
+
+    @Test("ARG distance wheel appears only between shots")
+    func argDistanceWheelVisibility() {
+        #expect(!ARGEditorSection.showsTransitionDistance(after: 0, count: 1))
+        #expect(ARGEditorSection.showsTransitionDistance(after: 0, count: 2))
+        #expect(!ARGEditorSection.showsTransitionDistance(after: 1, count: 2))
+    }
+
     @Test("Par 4 driven green clears approach data and scores GIR")
     func par4DrivenGreen() {
         let state = RoundPlayState(course: Self.makeCourse(), teeId: nil, holesPlayed: .eighteen)
@@ -190,6 +390,10 @@ struct RoundPlayStateTests {
         state.entries[0].approachModifier = "Bunker"
         state.entries[0].approachClub = "PW"
         state.entries[0].approachDistance = 100
+        state.entries[0].approachLandingDistance = 15
+        state.entries[0].argShots = [ARGShotEntry(lie: "Miss Right", distanceYards: 10)]
+        state.entries[0].layupLie = "Fairway"
+        state.entries[0].layupDistance = 100
 
         state.setTeeShotResult("Green", at: 0)
 
@@ -199,6 +403,10 @@ struct RoundPlayStateTests {
         #expect(state.entries[0].approachModifier == nil)
         #expect(state.entries[0].approachClub == nil)
         #expect(state.entries[0].approachDistance == nil)
+        #expect(state.entries[0].approachLandingDistance == nil)
+        #expect(state.entries[0].argShots == nil)
+        #expect(state.entries[0].layupLie == nil)
+        #expect(state.entries[0].layupDistance == nil)
         #expect(stat.teeShotLie == .green)
         #expect(stat.greenInRegulation)
         #expect(!stat.fairwayInRegulation)

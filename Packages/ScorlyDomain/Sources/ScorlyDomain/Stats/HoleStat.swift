@@ -11,11 +11,18 @@ import Foundation
 ///    the same field encoded both lies (`"Fairway"`, `"Bunker Left"`) and
 ///    ball-result markers (`"Out Left"`, `"Left water"`). v2 splits those
 ///    concerns: `teeShotLie` / `approachLie` are typed `Lie?` (only valid
-///    *playable* lies), and OB / hazard outcomes get their own integer
-///    counts (`outOfBoundsCount`, `hazardCount`).
+///    *playable* lies), and OB / hazard outcomes flow into the
+///    `penaltyEvents` list.
 ///
 /// 2. v1 derived `bunkerCount` from string prefixes; v2 derives it from
 ///    the `Lie` enum via `Lie.isBunker`. Same semantics, type-safe.
+///
+/// 3. v2 collapses the original ten OB / hazard counter columns
+///    (`outOfBoundsLeft`, `hazardLong`, etc.) into a single
+///    `penaltyEvents: [PenaltyEvent]` list. Per-direction and total
+///    counts are exposed as computed properties so existing
+///    derivations (GIR, sand save, effective penalty strokes) keep
+///    working without churn at every call site.
 ///
 /// All derivations are pure computed properties so a HoleStat is fully
 /// described by its stored fields — no caching, no view-layer state.
@@ -38,30 +45,10 @@ public struct HoleStat: Sendable, Equatable, Codable {
     /// Manually-entered penalty strokes (player ticks "+1" for an
     /// unplayable, lateral drop, etc.).
     public let penaltyStrokes: Int
-    /// Per-hole count of shots that finished out-of-bounds. v1 capped
-    /// this at 2 (tee + approach). v2 keeps it as an open count so a hole
-    /// can record more than two OBs if needed.
-    public let outOfBoundsCount: Int
-    /// Per-hole count of shots that finished in a water hazard / penalty
-    /// area. Same shape rationale as `outOfBoundsCount`.
-    public let hazardCount: Int
-
-    /// OB shots that finished left of the target line.
-    public let outOfBoundsLeft: Int
-    /// OB shots that finished right of the target line.
-    public let outOfBoundsRight: Int
-    /// OB shots that finished long (past the green / fairway target).
-    public let outOfBoundsLong: Int
-    /// OB shots that finished short (well short of the target).
-    public let outOfBoundsShort: Int
-    /// Water / penalty shots that finished left of the target line.
-    public let hazardLeft: Int
-    /// Water / penalty shots that finished right of the target line.
-    public let hazardRight: Int
-    /// Water / penalty shots that finished long.
-    public let hazardLong: Int
-    /// Water / penalty shots that finished short.
-    public let hazardShort: Int
+    /// Every stroke that finished in trouble, ordered by stroke. One
+    /// entry per OB / hazard event; direction is optional (nil = the
+    /// user didn't pick one, as in legacy rounds).
+    public let penaltyEvents: [PenaltyEvent]
     /// Manual override flag. If the player ticked "I scrambled here" but
     /// the auto-derivation (missed GIR + 1 putt + ≤ par) doesn't fire
     /// (e.g. they two-putted from the fringe), this lets `upAndDown`
@@ -88,6 +75,20 @@ public struct HoleStat: Sendable, Equatable, Codable {
     public let approachClub: String?
     /// Pin position string (e.g. "Front", "Middle", "Back"). Optional.
     public let pinPosition: String?
+    /// Distance the approach finished from the pin, in yards. Only set
+    /// when `approachLie` is non-green (it's how we anchor the chip's
+    /// start). Nil = SG calculator falls back to a lie-based default.
+    public let approachLandingDistance: Int?
+    /// One entry per around-the-green shot, ordered by stroke. Length
+    /// should match the inferred ARG count (`strokes − putts − 2` on
+    /// par 4/5; `strokes − putts − 1` on par 3 off-green). Nil = SG
+    /// calculator uses lie-based defaults for every chip on this hole.
+    public let argShots: [ARGShot]?
+    /// Par-5 only: lie where the layup landed. Presence flips the
+    /// SG reconstruction to a three-shot pre-green chain.
+    public let layupLie: Lie?
+    /// Par-5 only: distance from pin after the layup, in yards.
+    public let layupDistance: Int?
 
     public init(
         par: Int,
@@ -96,8 +97,7 @@ public struct HoleStat: Sendable, Equatable, Codable {
         teeShotLie: Lie? = nil,
         approachLie: Lie? = nil,
         penaltyStrokes: Int = 0,
-        outOfBoundsCount: Int = 0,
-        hazardCount: Int = 0,
+        penaltyEvents: [PenaltyEvent] = [],
         upAndDownSuccess: Bool = false,
         sandSaveSuccess: Bool = false,
         teeShotDistance: Int? = nil,
@@ -106,14 +106,10 @@ public struct HoleStat: Sendable, Equatable, Codable {
         teeClub: String? = nil,
         approachClub: String? = nil,
         pinPosition: String? = nil,
-        outOfBoundsLeft: Int = 0,
-        outOfBoundsRight: Int = 0,
-        outOfBoundsLong: Int = 0,
-        outOfBoundsShort: Int = 0,
-        hazardLeft: Int = 0,
-        hazardRight: Int = 0,
-        hazardLong: Int = 0,
-        hazardShort: Int = 0
+        approachLandingDistance: Int? = nil,
+        argShots: [ARGShot]? = nil,
+        layupLie: Lie? = nil,
+        layupDistance: Int? = nil
     ) {
         self.par = par
         self.strokes = strokes
@@ -121,8 +117,7 @@ public struct HoleStat: Sendable, Equatable, Codable {
         self.teeShotLie = teeShotLie
         self.approachLie = approachLie
         self.penaltyStrokes = penaltyStrokes
-        self.outOfBoundsCount = outOfBoundsCount
-        self.hazardCount = hazardCount
+        self.penaltyEvents = penaltyEvents
         self.upAndDownSuccess = upAndDownSuccess
         self.sandSaveSuccess = sandSaveSuccess
         self.teeShotDistance = teeShotDistance
@@ -131,28 +126,29 @@ public struct HoleStat: Sendable, Equatable, Codable {
         self.teeClub = teeClub
         self.approachClub = approachClub
         self.pinPosition = pinPosition
-        self.outOfBoundsLeft = outOfBoundsLeft
-        self.outOfBoundsRight = outOfBoundsRight
-        self.outOfBoundsLong = outOfBoundsLong
-        self.outOfBoundsShort = outOfBoundsShort
-        self.hazardLeft = hazardLeft
-        self.hazardRight = hazardRight
-        self.hazardLong = hazardLong
-        self.hazardShort = hazardShort
+        self.approachLandingDistance = approachLandingDistance
+        self.argShots = argShots
+        self.layupLie = layupLie
+        self.layupDistance = layupDistance
     }
 
     // MARK: - Codable
 
-    // Forwards-compat decode: the eight directional hazard fields were
-    // added after launch. Older serialized HoleStat blobs (test fixtures,
-    // any in-memory snapshots) won't include them; decodeIfPresent
-    // defaults each to 0 so old payloads continue to round-trip.
+    // Forwards-compat decode: older serialized blobs (test fixtures, any
+    // in-memory snapshots) carry the v1 counter columns
+    // (`outOfBoundsCount`, `outOfBoundsLeft`, etc.) instead of the
+    // `penaltyEvents` list. The decoder reads either shape and folds
+    // the legacy counters into the events list at load time.
 
     enum CodingKeys: String, CodingKey {
         case par, strokes, putts, teeShotLie, approachLie, penaltyStrokes,
-             outOfBoundsCount, hazardCount, upAndDownSuccess, sandSaveSuccess,
+             penaltyEvents,
+             upAndDownSuccess, sandSaveSuccess,
              teeShotDistance, approachDistance, puttDistances, teeClub,
              approachClub, pinPosition,
+             approachLandingDistance, argShots, layupLie, layupDistance,
+             // Legacy decode-only keys — never written by new encoders.
+             outOfBoundsCount, hazardCount,
              outOfBoundsLeft, outOfBoundsRight, outOfBoundsLong, outOfBoundsShort,
              hazardLeft, hazardRight, hazardLong, hazardShort
     }
@@ -165,8 +161,6 @@ public struct HoleStat: Sendable, Equatable, Codable {
         teeShotLie = try container.decodeIfPresent(Lie.self, forKey: .teeShotLie)
         approachLie = try container.decodeIfPresent(Lie.self, forKey: .approachLie)
         penaltyStrokes = try container.decode(Int.self, forKey: .penaltyStrokes)
-        outOfBoundsCount = try container.decode(Int.self, forKey: .outOfBoundsCount)
-        hazardCount = try container.decode(Int.self, forKey: .hazardCount)
         upAndDownSuccess = try container.decode(Bool.self, forKey: .upAndDownSuccess)
         sandSaveSuccess = try container.decode(Bool.self, forKey: .sandSaveSuccess)
         teeShotDistance = try container.decodeIfPresent(Int.self, forKey: .teeShotDistance)
@@ -175,14 +169,42 @@ public struct HoleStat: Sendable, Equatable, Codable {
         teeClub = try container.decodeIfPresent(String.self, forKey: .teeClub)
         approachClub = try container.decodeIfPresent(String.self, forKey: .approachClub)
         pinPosition = try container.decodeIfPresent(String.self, forKey: .pinPosition)
-        outOfBoundsLeft = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsLeft) ?? 0
-        outOfBoundsRight = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsRight) ?? 0
-        outOfBoundsLong = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsLong) ?? 0
-        outOfBoundsShort = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsShort) ?? 0
-        hazardLeft = try container.decodeIfPresent(Int.self, forKey: .hazardLeft) ?? 0
-        hazardRight = try container.decodeIfPresent(Int.self, forKey: .hazardRight) ?? 0
-        hazardLong = try container.decodeIfPresent(Int.self, forKey: .hazardLong) ?? 0
-        hazardShort = try container.decodeIfPresent(Int.self, forKey: .hazardShort) ?? 0
+        approachLandingDistance = try container.decodeIfPresent(Int.self, forKey: .approachLandingDistance)
+        argShots = try container.decodeIfPresent([ARGShot].self, forKey: .argShots)
+        layupLie = try container.decodeIfPresent(Lie.self, forKey: .layupLie)
+        layupDistance = try container.decodeIfPresent(Int.self, forKey: .layupDistance)
+
+        if let events = try container.decodeIfPresent([PenaltyEvent].self, forKey: .penaltyEvents) {
+            penaltyEvents = events
+        } else {
+            // Legacy: build events from the old counter columns. The
+            // directional counts produce events with `direction` set;
+            // any residual count beyond the sum of directions yields
+            // direction-nil events (the v1 "OB recorded but not
+            // localized" case).
+            let obLeft = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsLeft) ?? 0
+            let obRight = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsRight) ?? 0
+            let obLong = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsLong) ?? 0
+            let obShort = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsShort) ?? 0
+            let obTotal = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsCount) ?? 0
+            let hzLeft = try container.decodeIfPresent(Int.self, forKey: .hazardLeft) ?? 0
+            let hzRight = try container.decodeIfPresent(Int.self, forKey: .hazardRight) ?? 0
+            let hzLong = try container.decodeIfPresent(Int.self, forKey: .hazardLong) ?? 0
+            let hzShort = try container.decodeIfPresent(Int.self, forKey: .hazardShort) ?? 0
+            let hzTotal = try container.decodeIfPresent(Int.self, forKey: .hazardCount) ?? 0
+            penaltyEvents = Self.eventsFromLegacy(
+                obTotal: obTotal,
+                obLeft: obLeft,
+                obRight: obRight,
+                obLong: obLong,
+                obShort: obShort,
+                hzTotal: hzTotal,
+                hzLeft: hzLeft,
+                hzRight: hzRight,
+                hzLong: hzLong,
+                hzShort: hzShort
+            )
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -193,8 +215,7 @@ public struct HoleStat: Sendable, Equatable, Codable {
         try container.encodeIfPresent(teeShotLie, forKey: .teeShotLie)
         try container.encodeIfPresent(approachLie, forKey: .approachLie)
         try container.encode(penaltyStrokes, forKey: .penaltyStrokes)
-        try container.encode(outOfBoundsCount, forKey: .outOfBoundsCount)
-        try container.encode(hazardCount, forKey: .hazardCount)
+        try container.encode(penaltyEvents, forKey: .penaltyEvents)
         try container.encode(upAndDownSuccess, forKey: .upAndDownSuccess)
         try container.encode(sandSaveSuccess, forKey: .sandSaveSuccess)
         try container.encodeIfPresent(teeShotDistance, forKey: .teeShotDistance)
@@ -203,14 +224,109 @@ public struct HoleStat: Sendable, Equatable, Codable {
         try container.encodeIfPresent(teeClub, forKey: .teeClub)
         try container.encodeIfPresent(approachClub, forKey: .approachClub)
         try container.encodeIfPresent(pinPosition, forKey: .pinPosition)
-        try container.encode(outOfBoundsLeft, forKey: .outOfBoundsLeft)
-        try container.encode(outOfBoundsRight, forKey: .outOfBoundsRight)
-        try container.encode(outOfBoundsLong, forKey: .outOfBoundsLong)
-        try container.encode(outOfBoundsShort, forKey: .outOfBoundsShort)
-        try container.encode(hazardLeft, forKey: .hazardLeft)
-        try container.encode(hazardRight, forKey: .hazardRight)
-        try container.encode(hazardLong, forKey: .hazardLong)
-        try container.encode(hazardShort, forKey: .hazardShort)
+        try container.encodeIfPresent(approachLandingDistance, forKey: .approachLandingDistance)
+        try container.encodeIfPresent(argShots, forKey: .argShots)
+        try container.encodeIfPresent(layupLie, forKey: .layupLie)
+        try container.encodeIfPresent(layupDistance, forKey: .layupDistance)
+    }
+
+    /// Folds the legacy 10-column counter shape into a `[PenaltyEvent]`
+    /// list. Public so the data layer's SQL/SwiftData migration can use
+    /// the same backfill logic the in-memory decoder applies.
+    public static func eventsFromLegacy( // swiftlint:disable:this function_parameter_count
+
+        obTotal: Int,
+        obLeft: Int,
+        obRight: Int,
+        obLong: Int,
+        obShort: Int,
+        hzTotal: Int,
+        hzLeft: Int,
+        hzRight: Int,
+        hzLong: Int,
+        hzShort: Int
+    ) -> [PenaltyEvent] {
+        var events: [PenaltyEvent] = []
+        events.reserveCapacity(max(obTotal, obLeft + obRight + obLong + obShort)
+            + max(hzTotal, hzLeft + hzRight + hzLong + hzShort))
+
+        func append(kind: PenaltyKind, direction: PenaltyDirection, count: Int) {
+            for _ in 0..<max(0, count) {
+                events.append(PenaltyEvent(kind: kind, direction: direction))
+            }
+        }
+        append(kind: .outOfBounds, direction: .left, count: obLeft)
+        append(kind: .outOfBounds, direction: .right, count: obRight)
+        append(kind: .outOfBounds, direction: .long, count: obLong)
+        append(kind: .outOfBounds, direction: .short, count: obShort)
+        let obDirectionalSum = obLeft + obRight + obLong + obShort
+        if obTotal > obDirectionalSum {
+            for _ in 0..<(obTotal - obDirectionalSum) {
+                events.append(PenaltyEvent(kind: .outOfBounds, direction: nil))
+            }
+        }
+        append(kind: .hazard, direction: .left, count: hzLeft)
+        append(kind: .hazard, direction: .right, count: hzRight)
+        append(kind: .hazard, direction: .long, count: hzLong)
+        append(kind: .hazard, direction: .short, count: hzShort)
+        let hzDirectionalSum = hzLeft + hzRight + hzLong + hzShort
+        if hzTotal > hzDirectionalSum {
+            for _ in 0..<(hzTotal - hzDirectionalSum) {
+                events.append(PenaltyEvent(kind: .hazard, direction: nil))
+            }
+        }
+        return events
+    }
+
+    // MARK: - Penalty accessors
+
+    /// Count of out-of-bounds events. Sums the events list; replaces
+    /// the old stored `outOfBoundsCount` column.
+    public var outOfBoundsCount: Int {
+        penaltyEvents.lazy.filter { $0.kind == .outOfBounds }.count
+    }
+
+    /// Count of water / penalty-area events.
+    public var hazardCount: Int {
+        penaltyEvents.lazy.filter { $0.kind == .hazard }.count
+    }
+
+    /// Per-direction OB counts. Backwards-compat accessors for code
+    /// that previously read the dedicated columns.
+    public var outOfBoundsLeft: Int {
+        count(kind: .outOfBounds, direction: .left)
+    }
+
+    public var outOfBoundsRight: Int {
+        count(kind: .outOfBounds, direction: .right)
+    }
+
+    public var outOfBoundsLong: Int {
+        count(kind: .outOfBounds, direction: .long)
+    }
+
+    public var outOfBoundsShort: Int {
+        count(kind: .outOfBounds, direction: .short)
+    }
+
+    public var hazardLeft: Int {
+        count(kind: .hazard, direction: .left)
+    }
+
+    public var hazardRight: Int {
+        count(kind: .hazard, direction: .right)
+    }
+
+    public var hazardLong: Int {
+        count(kind: .hazard, direction: .long)
+    }
+
+    public var hazardShort: Int {
+        count(kind: .hazard, direction: .short)
+    }
+
+    private func count(kind: PenaltyKind, direction: PenaltyDirection) -> Int {
+        penaltyEvents.lazy.filter { $0.kind == kind && $0.direction == direction }.count
     }
 
     // MARK: - Derived

@@ -16,6 +16,7 @@ public struct ShotBlock: View {
     @Binding private var lieModifier: String?
     @Binding private var club: String?
     @Binding private var distance: Int?
+    private let summaryOverride: String?
     private let onTap: () -> Void
 
     public init(
@@ -33,6 +34,27 @@ public struct ShotBlock: View {
         _lieModifier = lieModifier
         _club = club
         _distance = distance
+        summaryOverride = nil
+        self.onTap = onTap
+    }
+
+    /// Summary-string variant for shots that don't fit the
+    /// (lie, club, distance) shape — e.g. an ARG block summarizing a
+    /// list of chip shots. Same chrome, the caller supplies the
+    /// summary text (mono uppercase rendered by the body).
+    public init(
+        badge: String,
+        title: String,
+        summary: String,
+        onTap: @escaping () -> Void
+    ) {
+        self.badge = badge
+        self.title = title
+        _lie = .constant(nil)
+        _lieModifier = .constant(nil)
+        _club = .constant(nil)
+        _distance = .constant(nil)
+        summaryOverride = summary
         self.onTap = onTap
     }
 
@@ -54,6 +76,9 @@ public struct ShotBlock: View {
                     .kerning(0.6)
                     .opacity(0.85)
                     .lineLimit(1)
+                    .transaction { transaction in
+                        transaction.animation = nil
+                    }
                 Text("→")
                     .font(BrutalistType.monoCaption)
             }
@@ -69,6 +94,7 @@ public struct ShotBlock: View {
     }
 
     private var summary: String {
+        if let summaryOverride { return summaryOverride }
         var parts: [String] = []
         if let lie {
             if let lieModifier {
@@ -96,6 +122,7 @@ public struct ShotEditor: View {
     private let distanceLabel: String
     private let fieldOrder: ShotBlock.FieldOrder
     private let clearsDistanceWhenOB: Bool
+    private let extraTopLeft: LieKeypad.AuxButton?
     private let extraTopRight: LieKeypad.AuxButton?
     @Binding private var lie: String?
     @Binding private var lieModifier: String?
@@ -110,6 +137,7 @@ public struct ShotEditor: View {
         distanceLabel: String = "Distance",
         fieldOrder: ShotBlock.FieldOrder = .resultFirst,
         clearsDistanceWhenOB: Bool = false,
+        extraTopLeft: LieKeypad.AuxButton? = nil,
         extraTopRight: LieKeypad.AuxButton? = nil,
         lie: Binding<String?>,
         lieModifier: Binding<String?>,
@@ -123,6 +151,7 @@ public struct ShotEditor: View {
         self.distanceLabel = distanceLabel
         self.fieldOrder = fieldOrder
         self.clearsDistanceWhenOB = clearsDistanceWhenOB
+        self.extraTopLeft = extraTopLeft
         self.extraTopRight = extraTopRight
         _lie = lie
         _lieModifier = lieModifier
@@ -148,7 +177,13 @@ public struct ShotEditor: View {
     private var resultSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             SubLabel("Result")
-            LieKeypad(value: $lie, modifier: $lieModifier, target: target, extraTopRight: extraTopRight)
+            LieKeypad(
+                value: $lie,
+                modifier: $lieModifier,
+                target: target,
+                extraTopLeft: extraTopLeft,
+                extraTopRight: extraTopRight
+            )
         }
     }
 

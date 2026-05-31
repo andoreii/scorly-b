@@ -8,12 +8,14 @@ let package = Package(
         .library(name: "ScorlyFeatureSettings", targets: ["ScorlyFeatureSettings"]),
     ],
     dependencies: [
+        .package(path: "../ScorlyDomain"),
         .package(path: "../ScorlyDesignSystem"),
     ],
     targets: [
         .target(
             name: "ScorlyFeatureSettings",
             dependencies: [
+                .product(name: "ScorlyDomain", package: "ScorlyDomain"),
                 .product(name: "ScorlyDesignSystem", package: "ScorlyDesignSystem"),
             ],
             swiftSettings: [

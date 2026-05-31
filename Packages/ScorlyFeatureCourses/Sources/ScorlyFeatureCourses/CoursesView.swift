@@ -78,10 +78,9 @@ public struct CoursesView: View {
     }
 
     private var hero: some View {
-        Text("Every\nlayout.")
+        Text("Courses")
             .font(BrutalistType.sans(.bold, size: 44))
             .kerning(-1.8)
-            .lineSpacing(-4)
             .foregroundStyle(BrutalistColor.fg)
             .padding(.bottom, BrutalistSpacing.xs)
     }
