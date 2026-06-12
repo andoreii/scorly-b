@@ -52,7 +52,7 @@ jobs:
           set -e
           brew install chargepoint/xcparse/xcparse
           mkdir -p extracted
-          xcparse screenshots --test ScreenshotUITests Screenshots.xcresult extracted
+          xcparse screenshots Screenshots.xcresult extracted
 
           mkdir -p docs/screenshots
           find extracted -name '*.png' | while read -r f; do
