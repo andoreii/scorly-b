@@ -2,17 +2,9 @@ import Foundation
 
 /// A user-set golf-improvement goal.
 ///
-/// `id` is a client-generated UUID — also the `goal_external_id`
-/// idempotency key on the Supabase write path (Phase C5).
-///
-/// `kind` carries the actual measurement target via an enum-with-
-/// associated-values; this keeps everything that defines a goal type
-/// (target value, comparison direction, evaluation rules) co-located in
-/// `GoalKind` and `GoalEvaluator`.
-///
-/// `archivedAt` is a soft-delete marker. Callers can present an
-/// "archived" view; the evaluator doesn't care — feed it any subset of
-/// goals you want progress for.
+/// `id` doubles as the `goal_external_id` idempotency key on the Supabase
+/// write path. `archivedAt` is a soft-delete marker; the evaluator doesn't
+/// care, callers filter before passing goals in.
 public struct Goal: Sendable, Equatable, Codable, Identifiable {
     public let id: UUID
     public let title: String
@@ -38,17 +30,10 @@ public struct Goal: Sendable, Equatable, Codable, Identifiable {
     }
 }
 
-/// What a `Goal` measures and how. The associated value on each case is
-/// the **target threshold** the player wants to reach.
-///
-/// Direction (≤ vs ≥) is encoded in the case name so it's impossible to
-/// confuse "GIR rate at least 0.5" with "GIR rate at most 0.5":
-/// - `*AtLeast` / `*OrEqual` (where "OrEqual" implies the natural direction)
-///   → goal is achieved when current value ≥ target.
-/// - `*AtMost` / `BelowOrEqual` → goal is achieved when current value ≤ target.
-///
-/// All Decimal targets are rates in `0...1` for `*Rate*` cases (e.g.
-/// `girRateAtLeast(target: 0.6)` = 60% GIR), and SG values for SG cases.
+/// What a `Goal` measures and how. The associated value is the target
+/// threshold. Direction is encoded in the case name (`AtLeast`/`OrEqual`
+/// = achieved when current >= target; `AtMost`/`BelowOrEqual` = <= target).
+/// Decimal targets are rates in `0...1` for `*Rate*` cases, SG values otherwise.
 public enum GoalKind: Sendable, Equatable, Codable {
     /// Best round score achieves at-or-below `target`.
     case scoreUnderOrEqual(target: Int)
@@ -66,14 +51,9 @@ public enum GoalKind: Sendable, Equatable, Codable {
     case roundsPlayed(target: Int)
 }
 
-/// Snapshot of how close a goal is to being achieved.
-///
-/// `current` and `target` use the same units as the underlying metric (an
-/// Int score, a 0...1 rate, a Decimal SG value). `fraction` is normalized
-/// to `0...1` for UI progress bars: 0 = no progress, 1 = achieved.
-///
-/// For `*AtMost` / `*BelowOrEqual` goals the fraction inverts: as
-/// `current` shrinks toward 0, `fraction` grows toward 1.
+/// Snapshot of how close a goal is to being achieved. `fraction` is
+/// normalized to `0...1` for progress bars (for `*AtMost` goals it
+/// inverts: shrinking `current` grows `fraction` toward 1).
 public struct GoalProgress: Sendable, Equatable {
     public let current: Decimal
     public let target: Decimal

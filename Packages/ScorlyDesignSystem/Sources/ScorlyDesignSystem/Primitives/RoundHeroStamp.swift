@@ -1,14 +1,7 @@
 import SwiftUI
 
-/// Inverse dark stamp summarising one round: top row of mono metadata,
-/// hairline divider, course name + caption on the left, big score +
-/// par delta on the right. Used as the hero on Round Detail (and,
-/// later, on Sign & File once that screen is unified).
-///
-/// Accepts pre-formatted strings only — no domain types — so the same
-/// view can be driven by either a `CompletedRound` (Round Detail) or
-/// the live `RoundPlayState` (Sign & File) without either feature
-/// importing the other.
+/// Inverse dark stamp summarising one round: metadata row, divider, course/caption left, score/par right.
+/// Pre-formatted strings only (no domain types) so it can be driven by either Round Detail or Sign & File.
 public struct RoundHeroStamp: View {
     private let dateLabel: String
     private let refLabel: String

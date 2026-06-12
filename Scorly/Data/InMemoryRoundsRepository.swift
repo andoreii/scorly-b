@@ -1,10 +1,8 @@
 import Foundation
 import ScorlyDomain
 
-/// Empty in-memory placeholder. Phase 6 swaps this for the real
-/// `RoundsRepositoryLive` once Supabase migrations are applied and the
-/// sync engine is wired into `ScorlyApp.init`. Until then the Home /
-/// History screens render their "no rounds yet" empty states.
+/// Empty placeholder until the live repository is wired in; renders
+/// "no rounds yet" empty states.
 final class InMemoryRoundsRepository: RoundsRepository, @unchecked Sendable {
     private let rounds: [CompletedRound]
     private var draft: InProgressRoundDraft?

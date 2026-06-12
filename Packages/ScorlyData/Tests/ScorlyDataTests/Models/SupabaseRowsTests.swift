@@ -2,10 +2,7 @@ import Foundation
 import Testing
 @testable import ScorlyData
 
-/// JSON round-trip tests pin the wire format of every Row type so any
-/// accidental property rename or coding-key drift breaks loudly. Encoder
-/// + decoder are `SupabaseConfig.encoder` / `decoder` so the tests double
-/// as a check that snake-case bridging works for camelCase properties.
+/// JSON round-trip tests pin the wire format of every Row type, including snake-case bridging.
 struct SupabaseRowsTests {
     private let encoder = SupabaseConfig.encoder
     private let decoder = SupabaseConfig.decoder

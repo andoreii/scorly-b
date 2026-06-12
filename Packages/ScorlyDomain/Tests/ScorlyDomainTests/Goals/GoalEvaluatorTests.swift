@@ -13,7 +13,6 @@ struct GoalEvaluatorTests {
         #expect(progress.current == 88)
         #expect(progress.target == 85)
         #expect(!progress.isAchieved)
-        // 85 / 88 ≈ 0.9659…
         #expect(progress.fraction > dec("0.96") && progress.fraction < dec("0.97"))
     }
 
@@ -41,9 +40,7 @@ struct GoalEvaluatorTests {
 
     @Test("Handicap goal evaluates from differentials and treats no-data as zero")
     func handicapEvaluation() {
-        // 5 rounds, all eligible: WHS short-history rule → lowest 1 of 5
-        // with NO adjustment (the -1.0 / -2.0 adjustments only apply at
-        // 4 and 3 rounds respectively).
+        // 5 rounds: WHS short-history rule uses lowest 1 of 5 with no adjustment.
         let rounds = (0..<5).map { offset in
             round(
                 score: 90 + offset,
@@ -52,7 +49,6 @@ struct GoalEvaluatorTests {
                 holesPlayed: .eighteen
             )
         }
-        // Differentials: 18.0, 19.0, 20.0, 21.0, 22.0 → lowest 1 = 18.0
         let achieved = GoalEvaluator.evaluate(
             goal: goal(.handicapBelowOrEqual(target: dec("18.0"))),
             against: rounds
@@ -60,7 +56,6 @@ struct GoalEvaluatorTests {
         #expect(achieved.current == dec("18.0"))
         #expect(achieved.isAchieved)
 
-        // Same rounds, target 10 → not achieved, fraction = 10/18 ≈ 0.5555
         let unmet = GoalEvaluator.evaluate(
             goal: goal(.handicapBelowOrEqual(target: dec("10.0"))),
             against: rounds
@@ -69,7 +64,7 @@ struct GoalEvaluatorTests {
         #expect(!unmet.isAchieved)
         #expect(unmet.fraction > dec("0.55") && unmet.fraction < dec("0.56"))
 
-        // Fewer than 3 eligible diffs → handicap nil → zero progress.
+        // Fewer than 3 eligible diffs means handicap is nil, so zero progress.
         let sparse = GoalEvaluator.evaluate(
             goal: goal(.handicapBelowOrEqual(target: dec("18.0"))),
             against: [rounds[0], rounds[1]]
@@ -82,8 +77,6 @@ struct GoalEvaluatorTests {
 
     @Test("GIR rate aggregates greens / holes across the round set")
     func girRateAggregation() {
-        // Round 1: 4 holes, 2 GIR. Round 2: 4 holes, 1 GIR.
-        // → 3/8 = 0.375
         let firstRound = round(score: 18, holeStats: [
             HoleStat(par: 3, strokes: 3, putts: 2, teeShotLie: .green), // GIR
             HoleStat(par: 3, strokes: 3, putts: 2, teeShotLie: .green), // GIR
@@ -102,13 +95,11 @@ struct GoalEvaluatorTests {
         )
         #expect(progress.current == dec("0.375"))
         #expect(!progress.isAchieved)
-        // 0.375 / 0.5 = 0.75
         #expect(progress.fraction == dec("0.75"))
     }
 
     @Test("FIR rate uses par-4+ holes as denominator (par-3 holes excluded)")
     func firRateDenominator() {
-        // 3 par-4s (2 fairway), 1 par-3 (fairway irrelevant)
         let theRound = round(score: 18, holeStats: [
             HoleStat(par: 4, strokes: 4, putts: 2, teeShotLie: .fairway), // FIR
             HoleStat(par: 4, strokes: 4, putts: 2, teeShotLie: .fairway), // FIR
@@ -119,14 +110,12 @@ struct GoalEvaluatorTests {
             goal: goal(.firRateAtLeast(target: dec("0.5"))),
             against: [theRound]
         )
-        // 2/3 ≈ 0.6666… ≥ 0.5 → achieved
         #expect(progress.isAchieved)
         #expect(progress.fraction == 1)
     }
 
     @Test("3-putt rate uses ≤ comparison and inverts fraction")
     func threePuttRateAtMost() {
-        // 4 holes, 1 three-putt → 0.25
         let theRound = round(score: 18, holeStats: [
             HoleStat(par: 4, strokes: 6, putts: 3),
             HoleStat(par: 4, strokes: 4, putts: 2),
@@ -139,7 +128,6 @@ struct GoalEvaluatorTests {
         )
         #expect(progress.current == dec("0.25"))
         #expect(!progress.isAchieved)
-        // 0.10 / 0.25 = 0.4
         #expect(progress.fraction == dec("0.4"))
     }
 
@@ -167,12 +155,11 @@ struct GoalEvaluatorTests {
             roundWithSG(putt: dec("1.0")),
             roundWithSG(putt: dec("0.0")),
         ]
-        let noSG = round(score: 80) // sgTotals nil → ignored
+        let noSG = round(score: 80) // sgTotals nil, should be ignored
         let progress = GoalEvaluator.evaluate(
             goal: goal(.sgCategoryAtLeast(category: .putt, target: dec("0.4"))),
             against: withSG + [noSG]
         )
-        // (0.5 + 1.0 + 0.0) / 3 = 0.5
         #expect(progress.current == dec("0.5"))
         #expect(progress.isAchieved)
         #expect(progress.fraction == 1)

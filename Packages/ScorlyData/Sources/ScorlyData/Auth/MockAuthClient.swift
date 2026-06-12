@@ -5,10 +5,7 @@ import Foundation
 /// and observe the event stream as `signIn` / `signUp` / `signOut` flips
 /// the internal state.
 ///
-/// Why an actor: the v1 `AuthService` was `@MainActor`-isolated and the v2
-/// service stays `@MainActor`. Putting the mock on its own actor keeps the
-/// "client lives off the main actor" boundary realistic — the live SDK
-/// runs its callbacks off-main, so tests should too.
+/// An actor so it lives off the main actor, like the live SDK.
 public actor MockAuthClient: AuthClient {
     public private(set) var session: AuthSession?
 
@@ -36,8 +33,7 @@ public actor MockAuthClient: AuthClient {
         let initial = session
         return AsyncStream { continuation in
             let id = UUID()
-            // Mirror the live SDK: emit an initial event reflecting the
-            // persisted session before subscribers see any deltas.
+            // Mirror the live SDK: emit the persisted session first.
             if let initial {
                 continuation.yield(.signedIn(initial))
             } else {
@@ -58,9 +54,6 @@ public actor MockAuthClient: AuthClient {
         let new = AuthSession(userId: UUID(), email: email)
         session = new
         broadcast(.signedIn(new))
-        // v1 calls signIn explicitly after signUp. Mirror that — the live
-        // SDK observation already covers it because both paths go through
-        // the same `signIn` code path on the server side.
         _ = password // unused in the mock; signature parity with the real client.
         return new
     }
@@ -102,23 +95,18 @@ public actor MockAuthClient: AuthClient {
         nextSignOutError = error
     }
 
-    /// Stage the error the next `currentSession` call should raise
-    /// (one-shot). Lets a test exercise the "session restore failed →
-    /// drop to signedOut" path without modeling Supabase internals.
+    /// Stage the error the next `currentSession` call should raise (one-shot).
     public func setNextRestoreError(_ error: Error) {
         nextRestoreError = error
     }
 
-    /// Push a `tokenRefreshed` event without going through sign-in. The
-    /// live SDK fires this when the access token rotates; the v2 service
-    /// treats it as "session is still good, update bookkeeping".
+    /// Push a `tokenRefreshed` event without going through sign-in.
     public func emitTokenRefresh(session refreshed: AuthSession) {
         session = refreshed
         broadcast(.tokenRefreshed(refreshed))
     }
 
-    /// Externally trigger a `signedOut` event. Models the case where the
-    /// server invalidates the session out from under us.
+    /// Externally trigger a `signedOut` event (e.g. server invalidates session).
     public func emitExternalSignOut() {
         session = nil
         broadcast(.signedOut)

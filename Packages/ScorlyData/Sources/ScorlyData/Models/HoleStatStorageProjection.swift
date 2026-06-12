@@ -1,9 +1,6 @@
 import ScorlyDomain
 
-/// Database-facing projection for a completed hole stat. The domain
-/// keeps playable lies separate from penalty events; Supabase retains
-/// the legacy shot-location columns, so writes fold those values back
-/// together at this boundary.
+/// Folds domain lies + penalty events back into Supabase's legacy shot-location columns.
 struct HoleStatStorageProjection {
     let teeShot: String?
     let approach: String?

@@ -1,14 +1,8 @@
 import Foundation
 import SwiftData
 
-/// Operation queued for the SyncEngine to push to Supabase. Every
-/// repository write enqueues one of these inside the same SwiftData
-/// transaction as the local insert/update — so either both land or neither
-/// does, and a crash mid-write is recoverable on next launch.
-///
-/// Idempotency: `externalId` is the same UUID stored on the local record.
-/// The server-side UNIQUE constraint on `*_external_id` lets us safely
-/// retry without duplicates.
+/// Operation queued for the SyncEngine to push to Supabase. Enqueued in the
+/// same transaction as the local write so a crash mid-write is recoverable.
 @Model
 public final class OutboxEntry {
     @Attribute(.unique)
@@ -19,9 +13,7 @@ public final class OutboxEntry {
     public var op: String
     /// Domain external ID of the affected record.
     public var externalId: UUID
-    /// JSON-encoded payload. Shape depends on (aggregate, op):
-    /// inserts carry the `*Insert`, updates carry the `*Update`, deletes
-    /// carry just the externalId (so the payload is empty `{}`).
+    /// JSON-encoded payload; shape depends on (aggregate, op).
     public var payload: Data
     /// Number of failed push attempts. Drives exponential backoff.
     public var attempts: Int
@@ -79,7 +71,6 @@ public enum OutboxOperation: String, Sendable, CaseIterable, Codable {
     case insert
     case update
     case delete
-    /// Soft-delete: stamp `archived_at` on the row. Distinct from `delete`
-    /// because hard deletes cascade in Postgres; archives don't.
+    /// Soft-delete (stamps `archived_at`); hard deletes cascade in Postgres, archives don't.
     case archive
 }

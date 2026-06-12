@@ -1,9 +1,7 @@
 import SwiftUI
 
-/// Tappable summary row for a single shot. Renders badge + title on
-/// the left, a chip summary (lie · club · distance) on the right, and
-/// invokes `onTap` when pressed. The caller is expected to present an
-/// editor (bottom sheet) — this primitive no longer expands inline.
+/// Tappable summary row for a single shot: badge + title left, chip summary right.
+/// Caller presents an editor (bottom sheet) on tap; this no longer expands inline.
 public struct ShotBlock: View {
     public enum FieldOrder {
         case resultFirst
@@ -38,10 +36,7 @@ public struct ShotBlock: View {
         self.onTap = onTap
     }
 
-    /// Summary-string variant for shots that don't fit the
-    /// (lie, club, distance) shape — e.g. an ARG block summarizing a
-    /// list of chip shots. Same chrome, the caller supplies the
-    /// summary text (mono uppercase rendered by the body).
+    /// Summary-string variant for shots that don't fit (lie, club, distance), e.g. ARG chip lists.
     public init(
         badge: String,
         title: String,
@@ -111,9 +106,8 @@ public struct ShotBlock: View {
     }
 }
 
-/// Editor body for a shot — lie keypad + club grid + distance wheel,
-/// ordered by `fieldOrder`. Intended to live inside a bottom sheet
-/// presented from a `ShotBlock` summary row.
+/// Editor body for a shot: lie keypad + club grid + distance wheel, ordered by `fieldOrder`.
+/// Lives inside a bottom sheet presented from a `ShotBlock` summary row.
 public struct ShotEditor: View {
     private let target: String
     private let clubs: [String]

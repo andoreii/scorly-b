@@ -21,11 +21,8 @@ public enum SGComparisonReference: String, Codable, CaseIterable, Sendable {
     }
 }
 
-/// Presentation-ready SG values for the selected reference point.
-///
-/// When personal history is unavailable, the projection falls back
-/// to scratch so cards never claim a personal comparison they cannot
-/// calculate.
+/// Presentation-ready SG values for the selected reference point. Falls
+/// back to scratch when personal history is unavailable.
 public struct SGReferenceProjection: Sendable, Equatable {
     public let activeReference: SGComparisonReference
     public let totals: SGTotals?

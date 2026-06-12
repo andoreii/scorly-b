@@ -1,8 +1,6 @@
 import SwiftUI
 
-/// 18-hole SG timeline: per-hole bars + cumulative trace. Internal to
-/// the design system; used by `StrokesGainedCard`. Coordinate math
-/// mirrors `Scorly B Strokes Gained.html`'s `SGHoleTimeline`.
+/// 18-hole SG timeline: per-hole bars + cumulative trace. Used by `StrokesGainedCard`.
 struct SGHoleTimeline: View {
     let holes: [SGCardValues]
     /// X-axis title. Defaults to "HOLE"; multi-round usages pass

@@ -2,26 +2,9 @@ import Foundation
 import ScorlyDomain
 import SwiftData
 
-/// Owns the outbox lifecycle.
-///
-/// **Push side.** Repositories enqueue an `OutboxEntry` immediately after
-/// every local write (in the same `ModelContext` transaction, so a crash
-/// never strands a row mid-sync). The engine drains the outbox FIFO when:
-///
-/// 1. `drain()` is called explicitly (after a write, on app foreground).
-/// 2. The `NetworkMonitor` flips from offline → online.
-/// 3. The BGAppRefreshTask fires (Phase H wiring).
-///
-/// Each entry's `attempts` counter drives exponential backoff:
-/// `delay = base * 2^(attempts-1)`, capped at 60s, and entries with
-/// `nextAttemptAt > now` are skipped on this drain (picked up by the next).
-/// After `maxAttempts` retries the entry stays in the outbox with
-/// `lastError` set — a future "dead-letter UI" can surface them.
-///
-/// **Pull side.** `pullAndReconcile()` pulls everything changed since the
-/// engine's `lastPullDate` and merges into local SwiftData. Conflict
-/// resolution is last-write-wins by `createdAt` (the only timestamp v1's
-/// rows carry — `updated_at` would be a future schema add).
+/// Owns the outbox lifecycle: drains queued writes to Supabase (on explicit
+/// drain, network reconnect, or BG refresh) with exponential backoff, and
+/// pulls + merges remote changes using last-write-wins by `createdAt`.
 public actor SyncEngine {
     nonisolated let remote: RemoteSyncAPI
     nonisolated let network: NetworkMonitor
@@ -32,9 +15,7 @@ public actor SyncEngine {
     private var lastPullDate: Date?
     private var watcherTask: Task<Void, Never>?
 
-    /// Designated initializer used by tests + production. We build a
-    /// dedicated `ModelContext` per engine so the actor's serial executor
-    /// owns it (no cross-actor SwiftData hops).
+    /// Builds a dedicated `ModelContext` so the actor's serial executor owns it.
     public static func make(
         modelContainer: ModelContainer,
         remote: RemoteSyncAPI,
@@ -68,9 +49,7 @@ public actor SyncEngine {
 
     // MARK: - Public API
 
-    /// Queue a payload. Repositories call this directly — they pre-built
-    /// the JSON body in their write path so the engine doesn't have to
-    /// know aggregate-specific shapes.
+    /// Queue a payload; callers pre-build the JSON body so the engine stays agnostic of aggregate shapes.
     public func enqueue(_ entry: PendingOutbox) throws {
         let outbox = OutboxEntry(
             aggregate: entry.aggregate,
@@ -83,10 +62,8 @@ public actor SyncEngine {
         try modelContext.save()
     }
 
-    /// Drain ready entries. "Ready" = `nextAttemptAt` is nil or in the
-    /// past, sorted by `createdAt`. Stops at the first `permanent` error
-    /// for an entry (marks it failed and moves on); transient errors
-    /// schedule a retry and stop the drain (next call will resume).
+    /// Drains ready entries (nextAttemptAt nil or past, FIFO by createdAt).
+    /// Permanent errors dead-letter the entry; transient errors reschedule with backoff.
     @discardableResult
     public func drain() async -> SyncDrainResult {
         guard await network.isOnline() else {
@@ -123,8 +100,7 @@ public actor SyncEngine {
                         try? modelContext.save()
                         deadLettered += 1
                     } else {
-                        // Treat unexpected permanent errors as one-shot dead-lettering;
-                        // keeping them in the outbox preserves visibility.
+                        // Dead-letter but keep in outbox for visibility.
                         entry.lastError = "permanent: \(message)"
                         entry.attempts += 1
                         try? modelContext.save()
@@ -143,8 +119,7 @@ public actor SyncEngine {
         )
     }
 
-    /// Start watching `network.updates()`. On every offline → online flip,
-    /// drain the outbox. Idempotent — calling twice does nothing.
+    /// Drains the outbox on every offline → online flip. Idempotent.
     public func startWatchingNetwork() async {
         guard watcherTask == nil else { return }
         let stream = await network.updates()
@@ -163,9 +138,7 @@ public actor SyncEngine {
         watcherTask = nil
     }
 
-    /// Pull from remote and reconcile into local SwiftData. Last-write-wins
-    /// by `createdAt`: the engine only overwrites a local row if the
-    /// pulled row is strictly newer. Returns counts for diagnostics.
+    /// Pulls from remote and merges into local SwiftData, last-write-wins by `createdAt`.
     @discardableResult
     public func pullAndReconcile(
         forceNetworkAttempt: Bool = false,
@@ -189,8 +162,7 @@ public actor SyncEngine {
         )
     }
 
-    /// Reconcile a caller-selected window of remote rounds using the same
-    /// parent/child merge path as a full pull.
+    /// Reconciles a caller-selected window of remote rounds via the same merge path as a full pull.
     @discardableResult
     func reconcileRounds(_ rows: [RoundRow], localUserId: UUID? = nil) throws -> Int {
         let rounds = mergeRounds(rows, localUserId: localUserId)
@@ -250,8 +222,7 @@ public struct SyncConfiguration: Sendable {
         maxBackoff: 60
     )
 
-    /// Tests use this to keep waits tractable — `0.001s` base, capped at
-    /// `0.01s`. Same backoff curve, just compressed.
+    /// Compressed backoff curve for tests.
     public static let fast = Self(
         maxAttempts: 5,
         baseBackoff: 0.001,
@@ -307,8 +278,7 @@ public struct SyncPullCounts: Sendable, Equatable {
     public static let empty = Self(users: 0, courses: 0, rounds: 0, goals: 0)
 }
 
-/// Indirection over `Date()` so tests can advance time deterministically
-/// without sleeping.
+/// Indirection over `Date()` so tests can advance time deterministically.
 public struct SyncClock: Sendable {
     public let now: @Sendable () -> Date
 

@@ -2,11 +2,10 @@ import ScorlyDesignSystem
 import SwiftUI
 
 /// Horizontal segmented bar showing the share of holes in each score
-/// bucket (eagle+ / birdie / par / bogey / dbl+). Segments are
-/// proportional, with hairlines between, and a mono caption row below
-/// listing each bucket's exact count. No color: weight contrast does
-/// the work — par sits at a soft ink fill, the further-from-par
-/// buckets darken.
+/// bucket (eagle+ / birdie / par / bogey / dbl+), with a mono caption
+/// row below listing each bucket's exact count. No color — weight
+/// contrast does the work, with par at a soft fill and further-from-par
+/// buckets darkening.
 struct DistributionBar: View {
     let total: Int
     let counts: [ScoreBucket: Int]
@@ -75,9 +74,8 @@ struct DistributionBar: View {
         }
     }
 
-    /// Weight ladder: par sits at the lightest fill; eagles and
-    /// double-bogeys+ push to opposite ink extremes so the silhouette
-    /// shows the player's bias at a glance.
+    /// Par sits at the lightest fill; eagles and double-bogeys+ push to
+    /// opposite ink extremes.
     private func fill(for bucket: ScoreBucket) -> Color {
         switch bucket {
         case .eagleOrBetter: BrutalistColor.fg

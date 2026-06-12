@@ -13,20 +13,16 @@ struct ScorlyApp: App {
     private let supabase: SupabaseClient
 
     init() {
-        // Bundled brutalist fonts. Must happen before the first scene
-        // materialises so `Font.custom("Geist-…")` resolves correctly.
+        // Must happen before the first scene so Font.custom(...) resolves.
         ScorlyDesignSystem.registerFonts()
 
-        // Disk-backed SwiftData container shared by all features and the
-        // SyncEngine. One container, one store.
         do {
             modelContainer = try LocalSchema.makeContainer()
         } catch {
             fatalError("Failed to construct ModelContainer: \(error)")
         }
 
-        // Single shared Supabase client — auth session, sync API, and
-        // direct Supabase calls all share the same keychain-backed session.
+        // Shared client so auth, sync, and direct calls reuse one session.
         supabase = SupabaseClientFactory.make()
         authService = AuthService(client: LiveSupabaseAuthClient(supabase: supabase))
     }

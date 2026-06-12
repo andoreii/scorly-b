@@ -1,9 +1,7 @@
 import ScorlyDomain
 
-/// Sign-and-File-time SG computation. Mirrors the gate enforced in
-/// `RoundsRepositoryLive.computeSG` so the user sees the same SG card
-/// (or placeholder) before and after the round is filed. Pure function
-/// so it's easy to unit-test the gate without touching SwiftUI.
+/// Sign-and-File-time SG computation. Mirrors the gate in
+/// `RoundsRepositoryLive.computeSG` so the SG card matches before and after filing.
 enum SGPreview {
     static func compute(
         holes: [Hole],

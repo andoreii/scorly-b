@@ -1,16 +1,9 @@
 import ScorlyDesignSystem
 import SwiftUI
 
-/// Pre-Sign-&-File pass that lets the user backfill missing chip-phase
-/// data. Lists every hole with an inferred ARG count, marks rows
-/// "ESTIMATED" when the per-shot data is incomplete, and lets the user
-/// expand a row to edit each lie plus the landing distance between
-/// consecutive recovery shots.
-///
-/// Reuses the same primitive vocabulary as `ARGEditorSection`:
-/// LieKeypad, DistanceWheel, SubLabel, HBar, so the refinement experience
-/// matches the in-round entry experience exactly. Edits mutate `RoundPlayState`
-/// directly; the parent ConfirmView recomputes SG on every redraw.
+/// Pre-Sign-&-File pass that lets the user backfill missing chip-phase data.
+/// Reuses `ARGEditorSection`'s primitives (LieKeypad, DistanceWheel, etc.) so this
+/// matches in-round entry; edits mutate `RoundPlayState` directly.
 struct SGRefinementSheet: View {
     @Bindable var state: RoundPlayState
 
@@ -52,10 +45,7 @@ struct SGRefinementSheet: View {
 
     // MARK: - Eligibility
 
-    /// Indices of holes that have a chip phase. Estimated rows are
-    /// always shown so the user can refine; fully-recorded rows are
-    /// also shown (read-only summary) so the list reflects the round
-    /// rather than just the "missing" holes.
+    /// Holes with a chip phase — includes fully-recorded ones for context, not just estimated rows.
     private var eligibleIndices: [Int] {
         state.holes.indices.filter { state.inferredARGCount(at: $0) > 0 }
     }

@@ -4,9 +4,8 @@ import ScorlyDomain
 import SwiftUI
 
 /// Trends — the brutalist statistical instrument. Loads completed
-/// rounds from the repository, lets the player pick a sample window
-/// (10 or 20), composes a ledger of charts on top of the resulting
-/// `TrendsModel`. Read-only.
+/// rounds, lets the player pick a sample window (10 or 20), and
+/// renders a ledger of charts from the resulting `TrendsModel`.
 public struct TrendsView: View {
     let roundsRepository: any RoundsRepository
     let comparisonReference: SGComparisonReference
@@ -35,8 +34,6 @@ public struct TrendsView: View {
         // samples from the filtered subset, not the raw archive.
         let eligible = allRounds.eligible(for: filter)
         let model = TrendsModel.build(rounds: eligible, window: window)
-        // Last-20 heat grid always samples the raw archive — staying
-        // filter-stable is the whole point of the grid.
         let carouselAggregates = TrendCarouselAggregates.build(
             eligible: eligible,
             allRounds: allRounds
@@ -192,10 +189,8 @@ public struct TrendsView: View {
             courseCount: distinctCourseCount(in: eligible)
         )
 
-        // Each carousel sets its own minHeight so the page lays out
-        // sensibly before the slide measurement preference arrives.
-        // Heights are *minimums* — the PreferenceKey in TrendCarousel
-        // grows the frame to fit a taller slide if needed.
+        // minHeight values are floors — TrendCarousel grows the frame
+        // to fit a taller slide once measured.
         TrendCarousel(
             title: "OVERALL GAME",
             slides: overallGameSlides(model: model, eligible: eligible),
@@ -235,12 +230,9 @@ public struct TrendsView: View {
 
     // MARK: - Carousel slide assembly
 
-    /// Lightweight identifiable wrapper. Each carousel slide is built
-    /// once per render; the stable integer id keeps the diff identity
-    /// even though the AnyView inside changes between renders. Equatable
-    /// + Hashable conformance compares ids only — the AnyView payload
-    /// is intentionally excluded so SwiftUI's scroll-position binding
-    /// has a stable identity across rerenders.
+    /// Identifiable wrapper around a slide's AnyView. Equatable/Hashable
+    /// compare ids only, so SwiftUI's scroll-position binding keeps a
+    /// stable identity across rerenders.
     struct CarouselSlide: Identifiable, Hashable {
         let id: Int
         let view: AnyView

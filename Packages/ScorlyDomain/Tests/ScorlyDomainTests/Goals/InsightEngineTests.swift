@@ -12,7 +12,6 @@ struct InsightEngineTests {
 
     @Test("Rounds older than 7 days from referenceDate are excluded")
     func windowFiltersOldRounds() {
-        // Single round 8 days old — should be filtered out → empty result.
         let old = roundWithSG(daysAgo: 8, putt: dec("-0.5"))
         #expect(InsightEngine.weeklyInsights(from: [old], referenceDate: now).isEmpty)
     }
@@ -25,9 +24,7 @@ struct InsightEngineTests {
 
     @Test("Returns top-3 weaknesses ordered most-negative first")
     func weaknessesOrderedByMagnitude() {
-        // Single round in window: ott=-1.0, app=-0.5, arg=-0.2, putt=+0.3.
-        // Weaknesses should be [ott, app, arg] (3 most-negative, putt
-        // excluded because positive). Strength is putt. Practice focus is ott.
+        // Weaknesses are the 3 most-negative categories (putt excluded, positive).
         let theRound = roundWithSG(
             daysAgo: 1,
             ott: dec("-1.0"),
@@ -36,7 +33,7 @@ struct InsightEngineTests {
             putt: dec("0.3")
         )
         let insights = InsightEngine.weeklyInsights(from: [theRound], referenceDate: now)
-        #expect(insights.count == 5) // 3 weaknesses + 1 strength + 1 practice focus
+        #expect(insights.count == 5)
 
         let weaknesses = insights.filter { $0.kind == .weakness }
         #expect(weaknesses.map(\.category) == [.ott, .app, .arg])
@@ -84,7 +81,6 @@ struct InsightEngineTests {
 
     @Test("Averages across multiple in-window rounds")
     func averagesAcrossRounds() {
-        // Two rounds: putt averages (0.4 + 0.0)/2 = 0.2; ott (-0.5 + -0.5)/2 = -0.5.
         let first = roundWithSG(daysAgo: 1, ott: dec("-0.5"), putt: dec("0.4"))
         let second = roundWithSG(daysAgo: 3, ott: dec("-0.5"), putt: dec("0.0"))
         let insights = InsightEngine.weeklyInsights(from: [first, second], referenceDate: now)

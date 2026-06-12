@@ -2,22 +2,13 @@ import ScorlyDesignSystem
 import SwiftUI
 
 /// 20-rounds × 18-holes heat grid. Each cell colors by score vs par
-/// using the shared 4-bucket vocabulary (birdie+, par, bogey, double+)
-/// + a quiet `panel` for missing-data cells. Row labels are mono date
-/// stamps; column header is the hole numbers with a soft rule between
-/// front-9 and back-9. Always pulls the last 20 completed rounds — it
-/// deliberately ignores the aggregate filter so the user has a stable
-/// "what does my notebook look like" reference even while filtering.
-///
-/// When fewer than 20 rounds have been filed, the grid pads the
-/// remainder with placeholder rows so the 20-row shape stays
-/// consistent. Placeholders show an em-dash in the date column and
-/// faint `panel` cells with no text — reads as "space reserved, not
-/// yet played."
+/// using the shared 4-bucket vocabulary (birdie+, par, bogey, double+),
+/// with a quiet `panel` fill for missing-data cells. Always pulls the
+/// last 20 completed rounds regardless of the aggregate filter, padding
+/// with placeholder rows when fewer rounds exist.
 struct HoleHeatGrid: View {
     let rows: [HoleHeatRow]
-    /// Total rows the grid should always show. Padded with
-    /// placeholders below the real data when fewer have been logged.
+    /// Total rows the grid always shows, padded with placeholders.
     private let rowCount = 20
 
     private static let dateFormatter: DateFormatter = {
@@ -129,8 +120,7 @@ struct HoleHeatGrid: View {
         .frame(width: 14, height: 14)
     }
 
-    /// Single-source-of-truth color mapping shared with the
-    /// distribution bars below.
+    /// Shared color mapping used by the distribution bars too.
     static func colors(for cell: HoleHeatRow.Cell?) -> (Color, Color) {
         guard let cell else { return (BrutalistColor.panel, BrutalistColor.muted) }
         switch HoleOutcome.outcome(forVsPar: cell.vsPar) {

@@ -23,9 +23,8 @@ struct BrutalistTokenTests {
 
     @Test("Safe-area constants — extras on top of system safe area")
     func safeAreaConstants() {
-        // SwiftUI inserts the iOS status bar / home indicator clearance
-        // automatically; ScreenShell adds nothing extra. The tokens
-        // remain in the API for surfaces that may want a small buffer.
+        // SwiftUI handles safe-area insets automatically; these tokens are 0
+        // but kept in the API for surfaces that may want extra buffer.
         #expect(BrutalistSpacing.safeTop == 0)
         #expect(BrutalistSpacing.safeBottom == 0)
         #expect(BrutalistSpacing.pageHorizontal == 18)

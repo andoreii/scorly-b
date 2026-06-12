@@ -57,10 +57,8 @@ struct TrendsModelTests {
 
     @Test("Eligibility filter applies before the window picks the sample")
     func eligibilityBeforeWindow() {
-        // Build 25 rounds: alternating eligible 18-hole Stroke and
-        // ineligible 18-hole Scramble. The default filter keeps every
-        // other one — so LAST 20 should sample the 12-ish eligible
-        // rounds available (not 20 from the raw archive).
+        // Alternating eligible/ineligible rounds; window should sample
+        // from the filtered set, not the raw archive.
         let rounds = (0..<25).map { i in
             makeRound(
                 daysAgo: i,
@@ -72,12 +70,9 @@ struct TrendsModelTests {
         }
         let eligible = rounds.eligible(for: .default)
         let model = TrendsModel.build(rounds: eligible, window: .twenty)
-        // 13 eligible rounds (i = 0, 2, …, 24).
         #expect(eligible.count == 13)
         #expect(model.sampleCount == 13)
-        // The first eligible round (i=0) becomes the most-recent in the
-        // sample. The sample's avgVsPar should match the mean of the
-        // eligible vs-par values — not the raw-archive mean.
+        // Sample average should match the eligible set's mean, not the raw archive's.
         let eligibleVsPar = eligible.map(\.scoreVsPar).reduce(0, +)
         let expectedAvg = Double(eligibleVsPar) / Double(eligible.count)
         #expect(model.avgVsPar == expectedAvg)
@@ -145,9 +140,7 @@ struct TrendsModelTests {
 
     @Test("Season score spans the whole eligible set, window only the prefix")
     func radarSeasonVsWindow() {
-        // 15 rounds total: 10 newest have 27 putts (top of band),
-        // 5 older have 39 putts (bottom of band). LAST 10 scores 100;
-        // season average = 31 putts / 18, which scores 67.
+        // 10 newest at top-of-band, 5 older at bottom-of-band putts.
         var rounds: [CompletedRound] = []
         for offset in 0..<10 {
             rounds.append(makePuttRound(daysAgo: offset, totalPutts: 27))

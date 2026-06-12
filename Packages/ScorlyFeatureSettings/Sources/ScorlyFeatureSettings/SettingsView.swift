@@ -2,19 +2,14 @@ import ScorlyDesignSystem
 import ScorlyDomain
 import SwiftUI
 
-/// Brutalist settings page. One section today: course-archive
-/// maintenance. The settings page acts as the home for anything that
-/// isn't routine play — sync, identity, diagnostics. Each row gets a
-/// section header and a single full-width action.
+/// Home for non-routine actions: sync, identity, diagnostics.
 public struct SettingsView: View {
     let onBack: () -> Void
     let onSyncCourses: (() async -> Void)?
     let onFetchRounds: (() async throws -> Int)?
     let onSignOut: (() -> Void)?
     @Binding private var sgComparisonReference: SGComparisonReference
-    /// Optional one-shot upsert that re-pushes every local round's
-    /// hole detail to Supabase, returning the number of hole rows
-    /// pushed. nil hides the row.
+    /// Re-pushes every local round's hole detail to Supabase; nil hides the row.
     let onBackfillStats: (() async throws -> Int)?
 
     @State private var isSyncing = false

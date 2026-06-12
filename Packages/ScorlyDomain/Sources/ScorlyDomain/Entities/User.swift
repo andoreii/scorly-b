@@ -1,9 +1,7 @@
 import Foundation
 
-/// Authenticated app user — mirrors the `users` table.
-///
-/// The `id` is the same UUID Supabase auth issues, so the data layer can
-/// look up an auth-bound user without an extra round trip.
+/// Authenticated app user, mirrors the `users` table. `id` matches the
+/// Supabase auth UUID.
 public struct User: Sendable, Equatable, Identifiable, Codable {
     public let id: UUID
     public let handicapIndex: Decimal?

@@ -1,10 +1,8 @@
 import ScorlyDesignSystem
 import SwiftUI
 
-/// Placeholder screen for flow destinations that haven't been built
-/// yet (Setup, Play, Confirm, History land in the next prs). Renders
-/// the brand chrome + a single mono notice + a back button so the
-/// flow transitions are visible end to end.
+/// Placeholder for flow destinations not yet built, so transitions
+/// remain visible end to end.
 struct FlowPlaceholder: View {
     let title: String
     let onBack: () -> Void

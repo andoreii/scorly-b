@@ -1,11 +1,8 @@
 import Foundation
 
-/// Splits a course's tees into Forward / Middle / Back buckets so the
-/// Rounds filter can group across course-specific tee names.
-///
-/// Primary signal is ascending `yardage` — ranks are split into thirds.
-/// When a tee has no yardage we fall back to a small set of name keywords
-/// so the bucket is still meaningful for hand-entered or legacy courses.
+/// Splits a course's tees into Forward / Middle / Back buckets so the Rounds filter
+/// can group across course-specific tee names. Ranks by ascending yardage into thirds;
+/// falls back to name keywords when yardage is missing.
 public enum TeeCategorization {
     public struct Tee: Sendable, Equatable {
         public let externalId: UUID
@@ -23,8 +20,7 @@ public enum TeeCategorization {
     public static func categorize(tees: [Tee]) -> [UUID: TeeCategory] {
         guard !tees.isEmpty else { return [:] }
 
-        // Single-tee or two-tee courses don't split cleanly into thirds;
-        // fall through to the name-keyword pass for those.
+        // 1-2 tees don't split cleanly into thirds; fall through to name keywords.
         if tees.count >= 3, tees.allSatisfy({ $0.yardage != nil }) {
             return byYardageRank(tees)
         }
@@ -33,14 +29,12 @@ public enum TeeCategorization {
             return byNameKeyword(tees)
         }
 
-        // 1–2 tees, yardage present: rank still works, but a 2-tee course
-        // becomes forward + back (skip middle).
+        // 1-2 tees with yardage: a 2-tee course becomes forward + back (skip middle).
         return byYardageRank(tees)
     }
 
     private static func byYardageRank(_ tees: [Tee]) -> [UUID: TeeCategory] {
-        // Sort ascending by yardage; break ties by name so the result is
-        // stable run-to-run.
+        // Break ties by name for a stable result run-to-run.
         let sorted = tees.sorted { lhs, rhs in
             let lyd = lhs.yardage ?? Int.max
             let ryd = rhs.yardage ?? Int.max
@@ -60,9 +54,7 @@ public enum TeeCategorization {
         case 1: return .middle
         case 2: return index == 0 ? .forward : .back
         default:
-            // Integer thirds with the remainder absorbed by middle, so
-            // mid-sized rosters (4, 5, 7…) feel intuitive: the two
-            // extremes stay tight while middle widens.
+            // Integer thirds, remainder absorbed by middle.
             let forwardCount = count / 3
             let backCount = count / 3
             if index < forwardCount { return .forward }

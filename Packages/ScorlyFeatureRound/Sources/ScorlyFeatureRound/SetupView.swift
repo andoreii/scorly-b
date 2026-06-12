@@ -30,9 +30,7 @@ public struct SetupView: View {
         self.originalHolesPlayed = originalHolesPlayed
     }
 
-    /// When the user has staged a holes-played change that will drop
-    /// holes the round was already tracking. Used to surface a warning
-    /// + restyle the SAVE button as destructive.
+    /// Holes that would be dropped by a staged holes-played change — drives the discard warning.
     private var discardingHoles: ClosedRange<Int>? {
         guard
             editingActiveRound,
@@ -51,12 +49,7 @@ public struct SetupView: View {
     public var body: some View {
         ScreenShell {
             if editingActiveRound {
-                // Sheet header: title left, dismiss right, on a single
-                // row. No SCORLY/B wordmark or LIVE ROUND chip — those
-                // live on the underlying PlayView and would be visual
-                // duplication inside the sheet. Extra top padding because
-                // the sheet has no status bar above it to provide the
-                // breathing room ScreenShell's safeTop normally implies.
+                // No wordmark/chip here — those live on PlayView underneath and would duplicate.
                 HStack {
                     Text("EDIT ROUND")
                         .font(BrutalistType.monoLabel)
@@ -113,11 +106,8 @@ public struct SetupView: View {
 
             HBar(vMargin: BrutalistSpacing.xl)
 
-            // Course + tee pickers are locked mid-round because the
-            // current round's hole geometry is baked into RoundPlayState
-            // at tee-off. Holes-played is editable — RoundPlayState
-            // migrates entries by hole number so any strokes on holes
-            // that survive the transition are preserved.
+            // Course/tee are locked mid-round (geometry is baked into RoundPlayState at tee-off);
+            // holes-played stays editable since RoundPlayState migrates entries by hole number.
             if !editingActiveRound {
                 coursePicker
                 teeSelector
@@ -397,8 +387,7 @@ public struct SetupView: View {
         }
     }
 
-    /// Tee color heuristic — derived from the tee name. The brutalist
-    /// design uses this as a data signal, not as an accent color.
+    /// Tee color derived from name — a data signal, not an accent color.
     private static func teeColor(for name: String) -> Color {
         switch name.lowercased() {
         case "black", "championship": Color(red: 0x0A / 255, green: 0x0A / 255, blue: 0x0A / 255)
@@ -464,9 +453,7 @@ public struct SetupView: View {
     }
 
     private var formatSection: some View {
-        // UI-only relabel: `.stroke` / `.match` render as "Strokeplay"
-        // / "Matchplay" but the underlying enum rawValue (and the DB
-        // write through `rounds.round_format`) is unchanged.
+        // UI-only relabel: `.stroke`/`.match` render as "Strokeplay"/"Matchplay"; rawValue unchanged.
         let labels = RoundFormat.allCases.map(Self.formatChipLabel)
         let labelToFormat = Dictionary(
             uniqueKeysWithValues: RoundFormat.allCases.map { (Self.formatChipLabel($0), $0) }
@@ -769,9 +756,7 @@ private struct PlayerRowView: View {
                     .font(BrutalistType.mono(.medium, size: 9))
                     .kerning(0.6)
                     .foregroundStyle(BrutalistColor.muted)
-                // "You" (the first row) shows the calculated WHS index and is
-                // not editable; guests have an editable text field that
-                // allows the value to be cleared back to nil.
+                // "You" shows the calculated WHS index (not editable); guests get an editable field.
                 if canDelete {
                     HCPField(handicap: $player.handicap)
                 } else {

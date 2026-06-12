@@ -3,22 +3,12 @@ import ScorlyDomain
 import Supabase
 import SwiftData
 
-/// The SyncEngine talks to the remote (Supabase) through this protocol.
-/// Production wires the live Supabase SDK here (Phase D, when AuthService
-/// also lights up); tests pass an in-memory fake.
-///
-/// The protocol is deliberately payload-agnostic — `push(_:)` takes a fully
-/// JSON-encoded blob plus the dispatch hints (`aggregate`, `op`) so the
-/// SyncEngine doesn't need to know the shape of every Insert/Update type.
+/// The SyncEngine talks to the remote (Supabase) through this protocol; tests pass an in-memory fake.
 public protocol RemoteSyncAPI: Sendable {
-    /// Push one outbox entry. Returns the server-assigned ID (when the op
-    /// inserts a new row), or nil for updates / deletes / archives.
-    /// Throws `RemoteSyncError` to drive backoff classification.
+    /// Pushes one outbox entry, returning the server-assigned ID for inserts (nil otherwise).
     func push(_ payload: PushPayload) async throws -> RemotePushResult
 
-    /// Pull every record changed since `since` (or all, if nil). Used on
-    /// app foreground to reconcile remote-side changes into the local
-    /// SwiftData cache. Last-write-wins per record by `updatedAt`.
+    /// Pulls every record changed since `since` (or all, if nil) for reconciliation.
     func pull(since: Date?) async throws -> RemotePullResult
 }
 
@@ -42,8 +32,7 @@ public struct PushPayload: Sendable, Equatable {
 }
 
 public struct RemotePushResult: Sendable, Equatable {
-    /// The server's serial ID for the row, when the op inserted one. Nil
-    /// for updates / deletes / archives.
+    /// The server's serial ID for the row, when the op inserted one.
     public let serverId: Int?
 
     public init(serverId: Int? = nil) {
@@ -73,13 +62,9 @@ public struct RemotePullResult: Sendable, Equatable {
     }
 }
 
-/// Errors the SyncEngine classifies into "retry" vs "give up". Retryable
-/// errors trigger exponential backoff; permanent errors dead-letter.
+/// Classifies errors into retry-with-backoff vs give-up-and-dead-letter.
 public enum RemoteSyncError: Error, Sendable, Equatable {
-    /// Network blip / 5xx / timeout. Engine retries with backoff.
     case transient(String)
-    /// Auth expired, payload malformed, server rejected with 4xx. Engine
-    /// gives up after one failure and surfaces via `lastError`.
     case permanent(String)
 }
 
@@ -110,10 +95,7 @@ enum CourseMockupColorTheme {
 
 // MARK: - In-memory fake (for tests + previews)
 
-/// Test fake. Every push gets recorded; the test asserts what landed.
-/// `injectPushFailure(times:_:)` lets a test simulate transient failures
-/// to exercise backoff. `setPullResult(_:)` stages what the next pull
-/// returns (LWW reconciliation).
+/// Test fake: records pushes for assertions, can simulate transient failures and stage pull results.
 public actor InMemoryRemoteSyncAPI: RemoteSyncAPI {
     public private(set) var pushes: [PushPayload] = []
     public private(set) var pullCount = 0
@@ -150,7 +132,6 @@ public actor InMemoryRemoteSyncAPI: RemoteSyncAPI {
         nextPullResult = result
     }
 
-    /// Filter recorded pushes by aggregate for cleaner test assertions.
     public func pushes(for aggregate: OutboxAggregate) -> [PushPayload] {
         pushes.filter { $0.aggregate == aggregate }
     }
@@ -174,18 +155,11 @@ struct LiveHoleStatsRemoteAPI: HoleStatsRemoteAPI {
 
 // MARK: - Live placeholder
 
-/// Live Supabase remote. Course pull hydrates local SwiftData from Supabase.
-/// Round push is wired: upsert into `rounds`, capture the server-assigned
-/// `round_id`, then bulk-upsert nested `hole_stats` rows under that id.
-/// Other aggregates (courses, users, goals, etc.) remain loud until their
-/// write UIs land.
+/// Live Supabase remote. Only round push + course/round pull are wired so far;
+/// other aggregates throw until their write UIs land.
 public struct LiveSupabaseRemoteSyncAPI: RemoteSyncAPI {
     private let supabase: SupabaseClient
-    /// Optional local cache used to resolve `course_external_id` /
-    /// `tee_external_id` UUIDs to the Supabase serial IDs the FK columns
-    /// require. Injected at runtime via `RootView` so the remote can read
-    /// `LocalCourse.serverId` / `LocalTee.serverId` at push time. If nil,
-    /// pushes fall back to an explicit error.
+    /// Resolves course/tee external IDs to Supabase serial IDs for FK columns; nil disables pushes.
     private let modelContainer: ModelContainer?
 
     public init(
@@ -221,8 +195,7 @@ public struct LiveSupabaseRemoteSyncAPI: RemoteSyncAPI {
         }
         let lookup = LocalIdResolver(container: modelContainer)
         guard let courseServerId = lookup.courseServerId(for: outboxBody.courseExternalId) else {
-            // Course hasn't been pulled (or the pulled row lacks serverId) —
-            // retry once the next pull populates the cache.
+            // Not yet pulled; retry once the next pull populates the cache.
             throw RemoteSyncError.transient(
                 "course \(outboxBody.courseExternalId) not yet synced"
             )
@@ -327,10 +300,7 @@ public struct LiveSupabaseRemoteSyncAPI: RemoteSyncAPI {
         do {
             return try await selectCourses(columns: Self.courseSelect)
         } catch {
-            // Some existing Supabase schemas have the course tables but do
-            // not expose the inferred relationship names PostgREST needs
-            // for nested selects. Keep this scalar fallback v1-compatible:
-            // legacy projects may not have the Phase C external-id columns.
+            // Fall back for schemas without the nested relationship names PostgREST needs.
             return try await selectCourses(columns: Self.scalarCourseSelect)
         }
     }
@@ -368,8 +338,7 @@ public struct LiveSupabaseRemoteSyncAPI: RemoteSyncAPI {
                     .eq("course_id", value: old.courseId)
                     .execute()
             } catch {
-                // Color persistence is a pull-side polish pass. Do not
-                // block the user from seeing courses if the patch fails.
+                // Best-effort: don't block course display if this patch fails.
             }
         }
     }
@@ -386,9 +355,7 @@ public struct LiveSupabaseRemoteSyncAPI: RemoteSyncAPI {
 
     private static let scalarCourseSelect = "*"
 
-    /// Synchronous cache lookup for course/tee server IDs. Builds a
-    /// transient `ModelContext` on the calling thread (the `SyncEngine`
-    /// actor) — fine because reads don't mutate.
+    /// Synchronous cache lookup for course/tee server IDs.
     private struct LocalIdResolver {
         let container: ModelContainer
 

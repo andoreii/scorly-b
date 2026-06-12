@@ -1,13 +1,7 @@
 import Foundation
 
-/// A round paused mid-play, stored locally so the player can resume from
-/// Home. `entriesPayload` is an opaque JSON blob (`[HoleEntry]` encoded
-/// by the feature layer) — Domain doesn't know the live-play shape, so
-/// this struct intentionally stays UI-agnostic.
-///
-/// Local-only by design: never enters the outbox, never pushed to
-/// Supabase. Filing the round (via `RoundsRepository.save`) is what makes
-/// it visible upstream.
+/// A round paused mid-play, stored locally so the player can resume from Home.
+/// `entriesPayload` is an opaque JSON blob owned by the feature layer.
 public struct InProgressRoundDraft: Sendable, Equatable {
     public let id: UUID
     public let userId: UUID

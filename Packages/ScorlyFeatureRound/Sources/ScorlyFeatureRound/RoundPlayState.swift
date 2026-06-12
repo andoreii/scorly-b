@@ -2,16 +2,10 @@ import Foundation
 import Observation
 import ScorlyDomain
 
-/// One hole's worth of in-progress input. Differs from `HoleStat`
-/// (the immutable, fully-typed completed-round shape in
-/// `ScorlyDomain`) in two ways:
-///
-/// 1. `strokes` is nullable — `nil` means "not logged yet" so the
-///    Play screen can render the par as a placeholder.
-/// 2. `teeShot` / `approach` are raw `LieKeypad` strings ("Fairway",
-///    "Miss Left", "OB Long"). The `teeShotModifier` / `approachModifier`
-///    fields hold an optional "Bunker" or "Water" companion. Both
-///    are decoded into a typed `HoleStat` only when derivation runs.
+/// One hole's worth of in-progress input. `strokes` is nullable so the
+/// Play screen can render par as a placeholder before logging. `teeShot` /
+/// `approach` are raw `LieKeypad` strings with an optional "Bunker"/"Water"
+/// modifier, decoded into a typed `HoleStat` only when derivation runs.
 public struct HoleEntry: Equatable, Sendable, Codable {
     public var strokes: Int?
     public var putts: Int
@@ -91,10 +85,8 @@ public struct HoleEntry: Equatable, Sendable, Codable {
     }
 }
 
-/// Raw-string mirror of `ScorlyDomain.ARGShot` for the live-round
-/// editor. The lie string matches the `LieKeypad` vocabulary (e.g.
-/// "Miss Left", "Miss Long") with an optional "Bunker" / "Water"
-/// modifier, decoded into a typed `Lie` at `derivedStat` time.
+/// Raw-string mirror of `ScorlyDomain.ARGShot` for the live-round editor,
+/// decoded into a typed `Lie` at `derivedStat` time.
 public struct ARGShotEntry: Equatable, Sendable, Codable {
     public var lie: String?
     public var lieModifier: String?
@@ -108,11 +100,8 @@ public struct ARGShotEntry: Equatable, Sendable, Codable {
 }
 
 /// Live-round state — owns the slice of holes being played, the
-/// per-hole entries, the cursor index, and which shot block is
-/// currently expanded.
-///
-/// One instance is created when the player taps "Tee off" in
-/// SetupView and discarded on exit from the round flow.
+/// per-hole entries, the cursor index, and which shot block is expanded.
+/// Created when the player taps "Tee off" and discarded on exit.
 @MainActor
 @Observable
 public final class RoundPlayState {
@@ -332,13 +321,9 @@ public final class RoundPlayState {
         setupForm.holesPlayed = holesPlayed
     }
 
-    /// Reslice the round to a different holes-played mode mid-play.
-    /// Existing entries are remapped by hole number so any strokes the
-    /// player already logged on holes that survive the transition are
-    /// preserved. Holes that drop out of the new slice (e.g. switching
-    /// from 18 → FRONT 9 erases holes 10–18) lose their entries. The
-    /// cursor stays on the same hole when possible; otherwise it
-    /// clamps to the first hole of the new slice.
+    /// Reslice the round to a different holes-played mode mid-play, remapping
+    /// existing entries by hole number. Holes dropped from the new slice lose
+    /// their entries; the cursor stays on the same hole when possible.
     public func changeHolesPlayed(to newValue: HolesPlayed) {
         guard newValue != holesPlayed else { return }
         let newSlice = Self.sliceHoles(course: course, holesPlayed: newValue)
@@ -374,26 +359,23 @@ public final class RoundPlayState {
         }
     }
 
-    /// HoleStat snapshots for every hole the user has actually logged
-    /// (`entry.strokes != nil`). Reuses `derivedStat(for:)` so live and
-    /// sign-and-file values agree exactly (including the par-3 GIR seam).
+    /// HoleStat snapshots for every logged hole, via `derivedStat(for:)` so
+    /// live and sign-and-file values agree exactly.
     public var loggedHoleStats: [HoleStat] {
         entries.indices.compactMap { idx in
             entries[idx].strokes != nil ? derivedStat(for: idx) : nil
         }
     }
 
-    /// Greens-in-regulation among logged holes. Both `made` and `of`
-    /// come from the same logged-only pool so unplayed holes never
-    /// dilute the percentage.
+    /// Greens-in-regulation among logged holes only, so unplayed holes
+    /// never dilute the percentage.
     public var liveGIR: (made: Int, of: Int) {
         let logged = loggedHoleStats
         return (logged.filter(\.greenInRegulation).count, logged.count)
     }
 
-    /// Fairways-in-regulation among logged par-4 / par-5 holes. Returns
-    /// `nil` when no eligible holes have been logged — render that as
-    /// `-` rather than `0/0` per the brief.
+    /// Fairways-in-regulation among logged par-4 / par-5 holes. Returns nil
+    /// when no eligible holes are logged — render as `-`, not `0/0`.
     public var liveFIR: (made: Int, of: Int)? {
         let eligible = loggedHoleStats.filter { $0.par >= 4 }
         guard !eligible.isEmpty else { return nil }
@@ -415,8 +397,7 @@ public final class RoundPlayState {
         entries.reduce(0) { $0 + ($1.strokes ?? 0) }
     }
 
-    /// Par summed across logged holes only (matches the design's
-    /// "+ vs PAR" running tally — un-logged holes don't count).
+    /// Par summed across logged holes only (matches the "+ vs PAR" tally).
     public var playedPar: Int {
         zip(holes, entries).reduce(0) { acc, pair in
             pair.1.strokes != nil ? acc + pair.0.par : acc
@@ -453,10 +434,8 @@ public final class RoundPlayState {
         openShot = .none
     }
 
-    /// If the hole at `index` was never logged, treat it as a par. Used
-    /// when the player advances past a hole or taps FINISH so the
-    /// totals, the `+vs PAR` counter, and the Supabase payload all
-    /// reflect "untouched == par" instead of zero.
+    /// If the hole at `index` was never logged, treat it as par, so totals
+    /// and the payload reflect "untouched == par" instead of zero.
     public func commitParIfNil(at index: Int) {
         guard index >= 0, index < entries.count else { return }
         if entries[index].strokes == nil {
@@ -469,10 +448,9 @@ public final class RoundPlayState {
         openShot = .none
     }
 
-    /// Build a `HoleStat` snapshot of the current entry, used to
-    /// drive the FIR / GIR / 3-putt / etc. chips. Falls back to
-    /// `hole.par` when the stepper hasn't been touched so the metrics
-    /// can react to lie / putt changes even on a default-par hole.
+    /// Build a `HoleStat` snapshot of the current entry to drive the
+    /// FIR / GIR / 3-putt chips. Falls back to `hole.par` when strokes
+    /// haven't been logged yet.
     public func derivedStat(for index: Int) -> HoleStat {
         let entry = entries[index]
         let hole = holes[index]
@@ -489,10 +467,8 @@ public final class RoundPlayState {
             target: .green,
             phase: .approach
         )
-        // Par 3 is a single shot to the green. The Play UI surfaces it through
-        // the approach editor (target = Green) so the user's pick lands on
-        // `entry.approach`; HoleStat / WHS / v1 schema all expect that pick on
-        // `teeShotLie`. Coalesce so the domain reads it correctly.
+        // Par 3 is one shot to the green, surfaced via the approach editor,
+        // but HoleStat expects that pick on `teeShotLie` — coalesce here.
         let teeLie: Lie?
         let approachLie: Lie?
         if hole.par == 3 {
@@ -502,23 +478,14 @@ public final class RoundPlayState {
             teeLie = teeDecoded.lie
             approachLie = approachDecoded.lie
         }
-        // Penalty events come from the keypad outcomes (the lie strings
-        // "OB Left", "Miss Long" with the optional Water modifier).
-        // Tee and approach contributions concatenate in stroke order.
         let penaltyEvents: [PenaltyEvent] = teeDecoded.penaltyEvents + approachDecoded.penaltyEvents
-        // Collect only the entries the player actually logged. A nil
-        // value in `puttDistances` means "this putt happened but no
-        // distance was recorded"; the SG calculator wants a clean
-        // `[Int]` so we filter. A wholly empty list still passes
-        // through as an empty `[]` — distinct from "never opened the
-        // putting sheet" (nil).
+        // Filter nil distances (putt happened but wasn't measured); empty
+        // list stays `[]`, distinct from nil ("never opened putting sheet").
         let loggedPutts = entry.puttDistances.compactMap { $0 }
         let puttDistances: [Int]? = entry.puttDistances.isEmpty ? nil : loggedPutts
 
-        // Decode ARG entries. Each entry needs both a lie and a
-        // distance to contribute; partial rows are dropped (the SG
-        // calculator falls back to the lie-based default for that
-        // slot). Same for layup.
+        // Each ARG entry needs both a lie and distance to contribute;
+        // partial rows fall back to lie-based defaults at SG time.
         let argShots: [ARGShot]? = entry.argShots.flatMap { rawEntries in
             let decoded: [ARGShot] = rawEntries.enumerated().compactMap { slot, raw in
                 guard let lieString = raw.lie,
@@ -558,11 +525,9 @@ public final class RoundPlayState {
         )
     }
 
-    /// Number of around-the-green shots implied by the current entry's
-    /// strokes / putts / par. Drives both the SG calculator chip-phase
-    /// count and the UI's conditional rendering of the ARG block.
-    /// Returns 0 when the math hasn't settled (no strokes logged yet,
-    /// or putts > strokes from a mid-edit state).
+    /// Number of around-the-green shots implied by strokes / putts / par.
+    /// Returns 0 when the math hasn't settled yet (no strokes logged, or
+    /// putts > strokes mid-edit).
     public func inferredARGCount(at index: Int) -> Int {
         guard entries.indices.contains(index), holes.indices.contains(index) else { return 0 }
         let entry = entries[index]
@@ -581,9 +546,7 @@ public final class RoundPlayState {
 
     private func preARGShotCount(at index: Int) -> Int {
         guard holes.indices.contains(index) else { return 2 }
-        // Par 3 with off-green tee: chip count = strokes - 1 (tee) - putts.
-        // Par 4: chip count = strokes - 2 (tee + approach) - putts.
-        // Par 5: chip count = strokes - 3 (tee + 2nd shot + approach) - putts.
+        // Shots before any ARG chip: 1 for par 3, 2 for par 4, 3 for par 5 (unless on in 2).
         return switch holes[index].par {
         case 3: 1
         case 5 where !isApproachOnInTwo(at: index): 3
@@ -618,12 +581,7 @@ public final class RoundPlayState {
     }
 
     /// Maps a `LieKeypad` raw direction + optional modifier into the
-    /// closest `Lie` enum plus any penalty event the outcome implies.
-    /// The keypad emits direction strings ("Fairway", "Green",
-    /// "Miss …", "OB …") alongside an optional "Bunker" / "Water"
-    /// modifier; this collapses them into the `Lie` rawValues the
-    /// domain expects, routing OB / hazard outcomes into typed
-    /// `PenaltyEvent`s with direction parsed from the suffix.
+    /// closest `Lie` plus any implied `PenaltyEvent`s.
     private static func decodeLie(
         _ raw: String?,
         modifier: String?,
@@ -634,12 +592,10 @@ public final class RoundPlayState {
         if raw == "Fairway" { return DecodedLie(lie: .fairway) }
         if raw == "Green" { return DecodedLie(lie: .green) }
         if raw == Self.holedShotRaw { return DecodedLie(lie: .green) }
-        // Par-5 "ON IN 2" shortcut — semantically identical to Green for
-        // stats, but stored as a distinct value so the keypad's center
-        // cell and the ON IN 2 button toggle independently.
+        // "On In 2" is stats-equivalent to Green but kept distinct so the
+        // keypad's center cell and ON IN 2 button toggle independently.
         if raw == "On In 2" { return DecodedLie(lie: .green) }
-        // Legacy single-string entries (back-compat for any data that
-        // pre-dated the modifier split).
+        // Legacy single-string entry, pre-dates the modifier split.
         if raw == "Bunker" { return DecodedLie(lie: .bunkerLeft) }
         if raw == "Water Hazard" {
             return DecodedLie(lie: nil, penaltyEvents: [PenaltyEvent(kind: .hazard, phase: phase)])
@@ -687,10 +643,8 @@ public final class RoundPlayState {
         return DecodedLie(lie: nil)
     }
 
-    /// Maps the keypad's direction suffix ("Left", "Right", "Long",
-    /// "Short") to a `PenaltyDirection`. Anything else (the keypad's
-    /// "Other" fallback or future labels) becomes nil — the event is
-    /// still recorded, just without a direction.
+    /// Maps the keypad's direction suffix to a `PenaltyDirection`; unknown
+    /// suffixes record the event without a direction.
     private static func penaltyDirection(from suffix: String) -> PenaltyDirection? {
         switch suffix {
         case "Left": .left
@@ -704,10 +658,8 @@ public final class RoundPlayState {
     private static let holedShotRaw = "In"
 }
 
-/// JSON codec for `[HoleEntry]` ↔ `Data`. The draft repo trades in
-/// opaque `entriesPayload: Data` (so Domain stays UI-agnostic); the
-/// feature layer owns the schema and this helper centralises the codec
-/// so call sites don't reach for a `JSONEncoder` each time.
+/// JSON codec for `[HoleEntry]` ↔ `Data`, since the draft repo stores
+/// entries as opaque `Data` to keep Domain UI-agnostic.
 public enum HoleEntriesCodec {
     public static func encode(_ entries: [HoleEntry]) -> Data {
         (try? JSONEncoder().encode(entries)) ?? Data()

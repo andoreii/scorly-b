@@ -1,9 +1,7 @@
 import Foundation
 
 /// Whether the round covered the front nine, back nine, or full eighteen.
-///
-/// Persisted as a string in `rounds.holes_played`. The raw values match
-/// v1's DB-canonical labels exactly so historical rounds decode cleanly.
+/// Persisted as a string in `rounds.holes_played`.
 public enum HolesPlayed: String, Codable, CaseIterable, Hashable, Sendable {
     case front9 = "Front 9"
     case back9 = "Back 9"

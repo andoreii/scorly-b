@@ -2,10 +2,8 @@ import Foundation
 import ScorlyDomain
 import SwiftData
 
-/// SwiftData-backed `CoursesRepository`. A `Course` owns its tees and holes,
-/// so persisting one writes the whole graph and enqueues a single
-/// course-shaped outbox entry. The Supabase live impl will fan that out
-/// into nested inserts in Phase D.
+/// SwiftData-backed `CoursesRepository`. A `Course` owns its tees and holes, so persisting
+/// one writes the whole graph and enqueues a single course-shaped outbox entry.
 public actor CoursesRepositoryLive: CoursesRepository {
     nonisolated let userId: UUID
     nonisolated let syncEngine: SyncEngine
@@ -32,8 +30,7 @@ public actor CoursesRepositoryLive: CoursesRepository {
     }
 
     public func fetchAll() async throws -> [Course] {
-        // Network pull is best-effort: ignore errors so the app reads
-        // from the local SwiftData cache when offline.
+        // Best-effort pull; fall back to local cache when offline.
         _ = try? await syncEngine.pullAndReconcile(
             forceNetworkAttempt: true,
             localCourseUserId: userId
@@ -120,9 +117,7 @@ public actor CoursesRepositoryLive: CoursesRepository {
             throw CoursesRepositoryError.notFound(id)
         }
         modelContext.delete(local)
-        // Children cascade via the externalId references being orphaned —
-        // a future cleanup pass collects them on next pull. The DB's
-        // ON DELETE CASCADE handles the server side.
+        // Server side handles cascade via ON DELETE CASCADE.
         try modelContext.save()
         try await syncEngine.enqueue(
             PendingOutbox(

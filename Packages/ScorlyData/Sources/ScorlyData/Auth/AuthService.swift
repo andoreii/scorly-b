@@ -2,61 +2,43 @@ import Foundation
 import Observation
 import ScorlyDomain
 
-/// `AuthService` is the v2 port of v1's `AuthService.swift`. It owns the
-/// "is the user signed in?" question for the whole app and exposes its
-/// answer as an `@Observable` `state` property the SwiftUI layer (Phase J1)
-/// renders directly.
+/// Owns the "is the user signed in?" question for the whole app, exposed as
+/// an `@Observable` `state` property SwiftUI renders directly.
 ///
-/// Lifecycle:
-/// 1. `init` enqueues a restore + observe task that
-///    - reads `client.currentSession()` once to seed `state`,
-///    - then drains `client.events()` forever, applying each event.
-/// 2. `signUp` / `signIn` / `signOut` go through the same `client`; the
-///    event stream is what actually mutates `state`, not the call sites.
-///    That keeps the state machine single-sourced — there's exactly one
-///    place state changes, no matter who triggered the change.
-/// 3. After a successful `signIn` / `signUp`, `ensureProfile` is invoked
-///    so the `users` row exists. The closure is injected by the app target
-///    and typically calls `UsersRepository.upsertProfile` — keeping
-///    `AuthService` from depending on `UsersRepository` directly avoids a
-///    circular reference between the auth identity and the data it
-///    addresses.
-///
-/// The class is `@MainActor` because the v1 version was, and SwiftUI views
-/// observe it directly — every state read happens on the main thread.
+/// `state` is only ever mutated by the event stream (from `client.events()`),
+/// never directly by `signUp`/`signIn`/`signOut`, so there's one source of
+/// truth regardless of who triggered the change. `ensureProfile` runs after a
+/// successful sign-in/up to create the `users` row; it's injected so
+/// `AuthService` doesn't depend on `UsersRepository` directly.
 @MainActor
 @Observable
 public final class AuthService {
     public private(set) var state: AuthState = .loading
     public private(set) var lastError: AuthServiceError?
 
-    /// Convenience for SwiftUI: collapses the state enum into the boolean
-    /// the loading screen + tab bar gate on.
+    /// Collapses `state` into the boolean the loading screen + tab bar gate on.
     public var isSignedIn: Bool {
         if case .signedIn = state { return true }
         return false
     }
 
-    /// True until the first `currentSession` call returns. UI shows a
-    /// splash while `isLoading == true` to avoid the "signed-out flash"
-    /// before the persisted session restores.
+    /// True until the first `currentSession` call returns; avoids a
+    /// signed-out flash before the persisted session restores.
     public var isLoading: Bool {
         state == .loading
     }
 
-    /// The active user's id, if any. Conveniently nil while loading or
-    /// signed out, so view-models can guard with `if let userId`.
+    /// Active user's id, nil while loading or signed out.
     public var userId: UUID? {
         state.session?.userId
     }
 
-    /// The active user's email. Settings shows it; that's the only caller.
+    /// Active user's email, shown in settings.
     public var userEmail: String? {
         state.session?.email
     }
 
-    /// First letter of the email, uppercased. v1's avatar fallback. Falls
-    /// back to "?" so SwiftUI never has to render an empty string.
+    /// First letter of the email, uppercased, falling back to "?".
     public var userInitial: String {
         guard let email = userEmail, let first = email.first else { return "?" }
         return String(first).uppercased()
@@ -64,14 +46,10 @@ public final class AuthService {
 
     private let client: AuthClient
     private let ensureProfile: @Sendable (UUID) async -> Void
-    /// `nonisolated` box so `deinit` can cancel without hopping back to
-    /// the main actor. The box itself is `@unchecked Sendable` because it
-    /// only ever stores the bootstrap task, which is set once in `init`.
+    /// Nonisolated box so `deinit` can cancel the bootstrap task without
+    /// hopping back to the main actor.
     private let cancellation = TaskBox()
 
-    /// Default ensure-profile is a no-op. Apps that wire `UsersRepository`
-    /// pass a closure that calls `upsertProfile`. Tests that don't care
-    /// about the side effect rely on the no-op.
     public init(
         client: AuthClient,
         ensureProfile: @escaping @Sendable (UUID) async -> Void = { _ in }
@@ -87,16 +65,10 @@ public final class AuthService {
         cancellation.cancel()
     }
 
-    // MARK: - Public API (mirrors v1)
+    // MARK: - Public API
 
-    /// Email-and-password sign-up. v1 explicitly signs in after sign-up
-    /// because Supabase doesn't always return an active session from
-    /// `signUp` alone (depends on the project's email-confirmation
-    /// setting). The live `AuthClient` keeps that behaviour; the mock
-    /// matches it for parity.
-    ///
-    /// On success the event stream emits `.signedIn`, which flips `state`.
-    /// `ensureProfile` then runs once the new userId is known.
+    /// On success the event stream emits `.signedIn`, flipping `state`, then
+    /// `ensureProfile` runs with the new userId.
     public func signUp(email: String, password: String) async throws {
         lastError = nil
         do {
@@ -129,18 +101,11 @@ public final class AuthService {
         }
     }
 
-    // MARK: - Future: Sign in with Apple
-
-    // Plan locks Apple Sign-In to v2.1 (paid-developer-account-gated).
-    // The slot lives here so the next iteration drops in alongside the
-    // existing email/password flow with no surrounding refactor.
-
     // MARK: - Lifecycle internals
 
     private func bootstrap() async {
-        // Phase 1: restore. A throw means the persisted session is gone or
-        // unreadable; fall back to .signedOut and continue to Phase 2 so
-        // a future `signIn` still flows through the same code path.
+        // A throw means the persisted session is gone/unreadable; fall back
+        // to signedOut so a future signIn still works.
         do {
             if let session = try await client.currentSession() {
                 state = .signedIn(session)
@@ -152,10 +117,8 @@ public final class AuthService {
             state = .signedOut
         }
 
-        // Phase 2: observe. The stream is hot; the first event the live
-        // SDK emits is the persisted session, so applying it is a no-op
-        // when state is already correct from Phase 1. The mock matches
-        // that contract.
+        // Stream is hot; its first event reflects the persisted session, so
+        // applying it is a no-op if state above is already correct.
         let stream = await client.events()
         for await event in stream {
             apply(event)
@@ -174,8 +137,7 @@ public final class AuthService {
 }
 
 /// Nonisolated holder for the bootstrap task so `deinit` can cancel it
-/// without bouncing through `@MainActor`. Set once in `init`, cancelled
-/// once in `deinit` — no concurrent mutation, hence `@unchecked Sendable`.
+/// without bouncing through `@MainActor`.
 private final class TaskBox: @unchecked Sendable {
     var task: Task<Void, Never>?
     func cancel() {
@@ -183,10 +145,7 @@ private final class TaskBox: @unchecked Sendable {
     }
 }
 
-/// State machine the rest of the app reads. `.loading` is the boot phase
-/// before `currentSession()` returns; `.signedOut` covers both "never
-/// signed in" and "signed out by the user / server"; `.signedIn` carries
-/// the active session.
+/// State machine the rest of the app reads.
 public enum AuthState: Sendable, Equatable {
     case loading
     case signedOut
@@ -198,10 +157,8 @@ public enum AuthState: Sendable, Equatable {
     }
 }
 
-/// Surfaced via `lastError` so the UI can show a banner without callers
-/// having to plumb thrown errors through view-model layers. Cases mirror
-/// the entry points; `.sessionRestoreFailed` covers the boot failure that
-/// has no caller to throw to.
+/// Surfaced via `lastError` so the UI can show a banner without plumbing
+/// thrown errors through view-models.
 public enum AuthServiceError: Error, Sendable, Equatable {
     case signInFailed(String)
     case signUpFailed(String)
@@ -221,15 +178,8 @@ public enum AuthServiceError: Error, Sendable, Equatable {
 
 // MARK: - User profile bridging
 
-/// Helper the app target uses when wiring `AuthService` to the live
-/// `UsersRepository`. The repository contract owns the upsert; this
-/// closure adapts it to the `(UUID) async -> Void` shape `AuthService`
-/// asks for.
-///
-/// Lives here (rather than in the repository) because it's a wiring
-/// helper, not part of the repository's contract — moving it would force
-/// `UsersRepository` to know about `AuthService`, which is the dependency
-/// direction the architecture explicitly forbids.
+/// Adapts `UsersRepository.upsertProfile` to the `(UUID) async -> Void`
+/// shape `AuthService` expects, without `UsersRepository` depending on `AuthService`.
 public enum AuthProfileBridge {
     public static func ensureProfile(
         repository: UsersRepository,
@@ -246,10 +196,7 @@ public enum AuthProfileBridge {
                     try await repository.upsertProfile(profile)
                 }
             } catch {
-                // Swallow — the next foreground sync pull will reconcile
-                // the row from the server if the local insert lost. The
-                // app target wires `ErrorReporter.capture(error)` here in
-                // Phase E.
+                // Swallow — next foreground sync will reconcile if this insert lost.
             }
         }
     }

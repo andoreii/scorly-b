@@ -3,10 +3,7 @@ import ScorlyDesignSystem
 import ScorlyDomain
 import SwiftUI
 
-/// Course archive. List of the user's courses rendered as
-/// hairline-bordered tickets (same family as History rows). Tap a row
-/// to edit; the "+ NEW COURSE" CTA at the top of the list routes to
-/// the editor with an empty draft.
+/// Course archive. Tap a row to edit; "+ NEW COURSE" opens an empty draft.
 public struct CoursesView: View {
     let coursesRepository: any CoursesRepository
     let roundsRepository: any RoundsRepository
@@ -240,10 +237,7 @@ public struct CoursesView: View {
     }
 
     private func bestScore(_ course: Course) -> String {
-        // Reads from the shared default aggregate filter (18-hole Stroke /
-        // Stableford / Match) so scrambles, 9-hole rounds, and historical
-        // missing-format rounds don't get crowned as the course best.
-        // Courses without an eligible round display the standard fallback.
+        // Uses the default aggregate filter so scrambles/9-hole rounds aren't crowned course best.
         eligibleBests[course.externalId].map(String.init) ?? "—"
     }
 

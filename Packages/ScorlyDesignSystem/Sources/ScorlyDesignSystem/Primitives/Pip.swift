@@ -1,10 +1,7 @@
 import SwiftUI
 
-/// Scorecard notation:
-/// - circle around number = under par (single ring = -1, double = -2+)
-/// - square around number = over par (single box = +1, double = +2+)
-/// - plain number         = par
-/// - centered middle dot  = no score yet
+/// Scorecard notation: circle = under par (double ring for -2+), square =
+/// over par (double box for +2+), plain number = par, dot = no score yet.
 public struct Pip: View {
     private let strokes: Int?
     private let par: Int

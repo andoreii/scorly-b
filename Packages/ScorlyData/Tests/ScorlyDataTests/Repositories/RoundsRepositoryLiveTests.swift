@@ -147,8 +147,7 @@ struct RoundsRepositoryLiveTests {
         // Drafts must not push to Supabase — outbox stays empty.
         #expect(await fixture.engine.pendingCount() == 0)
 
-        // Upsert overwrites in place: a second write with new holeIdx
-        // replaces (does not duplicate) the row.
+        // Upsert overwrites in place rather than duplicating.
         var updated = draft
         updated.holeIdx = 9
         updated.entriesPayload = Data("entries-blob-v2".utf8)
@@ -214,8 +213,7 @@ struct RoundsRepositoryLiveTests {
             holes: .eighteen,
             format: .scramble
         ))
-        // Course B: only a 9-hole round (ineligible) and a missing-format
-        // round (also ineligible). Expect no entry in the result.
+        // Course B: only ineligible rounds, so no entry expected.
         try await fixture.repository.save(makeDraft(
             userId: fixture.userId,
             courseId: courseB,
@@ -276,9 +274,8 @@ struct RoundsRepositoryLiveTests {
     @Test("Par-3 GIR is recovered when legacy v2 row stored on-green pick on approach")
     func par3GIRRecoveredFromApproachOnlyRow() async throws {
         let fixture = try Fixture()
-        // Simulate the pre-fix v2 layout: tee_shot empty, approach = "Green".
-        // (The bug path used to lose GIR; the data-layer coalesce now restores
-        // it on read so existing rows benefit without a migration.)
+        // Legacy rows store par-3 GIR on approach instead of tee_shot;
+        // the read-side coalesce should still recover it.
         let context = ModelContext(fixture.container)
         let externalId = UUID()
         let courseExternalId = UUID()
@@ -457,7 +454,6 @@ struct RoundsRepositoryLiveTests {
         // catches the case where every shot returned nil SG.
         let nonZeroHoles = holes.filter { decimalToDouble($0.total) != 0 }
         #expect(!nonZeroHoles.isEmpty)
-        // Total = sum of category contributions (the calc invariant).
         let summed = totals.ott + totals.app + totals.arg + totals.putt
         #expect(summed == totals.total)
     }
@@ -465,9 +461,7 @@ struct RoundsRepositoryLiveTests {
     @Test("fetchAllCompleted leaves sgTotals + sgHoles nil when yardages are missing")
     func fetchSkipsSGWithoutYardages() async throws {
         let fixture = try Fixture()
-        // No LocalTeeHole rows inserted. Saving with a teeId should
-        // still succeed, but SG must remain nil because the calculator
-        // can't determine hole length.
+        // No yardage data, so SG can't be computed even with a teeId.
         let draft = RoundDraft(
             id: UUID(),
             externalId: UUID(),

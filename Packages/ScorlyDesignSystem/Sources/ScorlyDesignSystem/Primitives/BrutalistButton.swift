@@ -3,11 +3,7 @@ import SwiftUI
 /// Full-width brutalist button. Title on the left, optional mono
 /// caption on the right. Inverts on press for tactile feedback.
 ///
-/// Uses a raw `DragGesture(minimumDistance: 0)` rather than SwiftUI's
-/// `Button` so the hit shape is exactly the framed rectangle. SwiftUI's
-/// `Button` applies an implicit minimum-touch-target expansion that
-/// `.contentShape` does not override, so a `Button`-based version
-/// leaked taps in the margin around the visible rect.
+/// Uses a raw `DragGesture` instead of `Button` so the hit shape matches the framed rect exactly.
 public struct BrutalistButton<Title: View, Caption: View>: View {
     public enum Kind {
         case fg
@@ -61,11 +57,7 @@ public struct BrutalistButton<Title: View, Caption: View>: View {
         .gesture(pressGesture)
     }
 
-    /// `DragGesture(minimumDistance: 0)` fires `onChanged` immediately
-    /// on touch-down (acts as a press-start) and `onEnded` on lift.
-    /// The drag-magnitude check distinguishes a tap from a true drag,
-    /// so swiping off the button cancels its action like a system
-    /// `Button` would.
+    /// Drag-magnitude check distinguishes a tap from a drag, so swiping off cancels the action.
     private var pressGesture: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { _ in

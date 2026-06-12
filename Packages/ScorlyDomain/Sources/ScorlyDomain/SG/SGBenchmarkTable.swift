@@ -1,23 +1,11 @@
 import Foundation
 
 /// Mark Broadie's PGA Tour benchmark "expected strokes to hole out"
-/// curves, indexed by starting lie and distance.
-///
-/// Source: `Resources/SGBenchmarks.json`, bundled into the
-/// `ScorlyDomain` module. The JSON encodes `expected` as a string so
-/// values round-trip exactly through `Decimal` (numeric JSON literals
-/// would route through `Double` and introduce binary-float drift).
-///
-/// Lookup uses linear interpolation between adjacent buckets and clamps
-/// to the nearest endpoint outside the table range. The clamp rather
-/// than nil-out is deliberate: tour-pro tables go to ~600 yds and
-/// ~90 ft, but a v2 user might enter a 700-yd par 5 or a 110-ft putt,
-/// and we'd rather give a slightly-off SG number than refuse to
-/// compute one.
+/// curves, indexed by starting lie and distance. Loaded from
+/// `Resources/SGBenchmarks.json`. Lookup interpolates between adjacent
+/// buckets and clamps to the nearest endpoint outside the table range.
 public struct SGBenchmarkTable: Sendable {
-    /// The table loaded from `Resources/SGBenchmarks.json`. Trapped at
-    /// process start if the resource is missing or malformed — the JSON
-    /// is a build-time invariant of this package.
+    /// Trapped at process start if the resource is missing or malformed.
     public static let bundled: SGBenchmarkTable = {
         do {
             return try loadBundled()
@@ -29,13 +17,7 @@ public struct SGBenchmarkTable: Sendable {
         }
     }()
 
-    /// Returns the expected number of strokes to hole out from `lie` at
-    /// `distance`. Distance is in **yards** for every lie except
-    /// `.green`, where it's in **feet**.
-    ///
-    /// Returns `nil` only if the underlying table for `lie` is empty
-    /// (impossible with the bundled JSON, but kept for defensive use
-    /// with custom-loaded tables in tests).
+    /// Distance is yards, except feet for `.green`. `nil` only if the table for `lie` is empty.
     public func expectedStrokes(lie: SGBenchmarkLie, distance: Decimal) -> Decimal? {
         guard let series = points[lie], !series.isEmpty else { return nil }
         return interpolate(in: series, at: distance)
@@ -46,14 +28,10 @@ public struct SGBenchmarkTable: Sendable {
     private let points: [SGBenchmarkLie: [SGBenchmarkPoint]]
 
     init(points: [SGBenchmarkLie: [SGBenchmarkPoint]]) {
-        // Sort each series by distance so binary-search-like lookup is
-        // valid regardless of JSON ordering.
+        // Sort by distance regardless of JSON ordering.
         self.points = points.mapValues { $0.sorted { $0.distance < $1.distance } }
     }
 
-    /// Linear interpolation. `series` is assumed non-empty and sorted by
-    /// distance ascending. Out-of-range distances clamp to the nearest
-    /// endpoint.
     private func interpolate(in series: [SGBenchmarkPoint], at distance: Decimal) -> Decimal {
         if let first = series.first, distance <= first.distance {
             return first.expected
@@ -72,8 +50,7 @@ public struct SGBenchmarkTable: Sendable {
                 return lower.expected + fraction * (upper.expected - lower.expected)
             }
         }
-        // Unreachable given the clamp checks above; return last as a
-        // belt-and-braces fallback rather than crash.
+        // Unreachable given the clamps above; fallback rather than crash.
         return series[series.count - 1].expected
     }
 
@@ -87,9 +64,6 @@ public struct SGBenchmarkTable: Sendable {
         return try decode(data)
     }
 
-    /// Decodes a JSON `Data` blob into an `SGBenchmarkTable`. Exposed
-    /// internal so tests can verify the round-trip without touching the
-    /// bundle.
     static func decode(_ data: Data) throws -> Self {
         let decoded = try JSONDecoder().decode(SGBenchmarkFile.self, from: data)
         var points: [SGBenchmarkLie: [SGBenchmarkPoint]] = [:]
@@ -106,9 +80,7 @@ public struct SGBenchmarkTable: Sendable {
 /// One (distance, expected-strokes) point in a benchmark curve.
 struct SGBenchmarkPoint: Codable, Equatable {
     let distance: Decimal
-    /// Expected strokes to hole out. Decoded from a JSON string so the
-    /// value is exact (e.g. `"2.92"` → `Decimal(2.92)` exactly, not
-    /// `Decimal(Double(2.92))` which is `2.9199999999999...`).
+    /// Decoded from a JSON string so values like "2.92" stay exact (avoids Double drift).
     let expected: Decimal
 
     private enum CodingKeys: String, CodingKey {
@@ -138,8 +110,7 @@ struct SGBenchmarkPoint: Codable, Equatable {
     func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(distance, forKey: .distance)
-        // Round-trip-friendly: encode as the same string form we decode
-        // from so the on-disk format is stable.
+        // Encode in the same string form we decode, so the on-disk format is stable.
         try container.encode("\(expected)", forKey: .expected)
     }
 }

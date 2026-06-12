@@ -1,21 +1,11 @@
 import Foundation
 
-/// One stroke that finished in trouble. Replaces the v1 / v2 pattern
-/// of ten separate counter columns (`outOfBoundsLeft`, `hazardLong`,
-/// etc.) with a list of typed events. The kind tells you what
-/// happened; the direction (optional) tells you where the ball went;
-/// the phase (optional for legacy rows) identifies the shot field.
-///
-/// Stored as a JSON array on the wire (`penalty_events_json` column)
-/// and on disk (`LocalHoleStat.penaltyEventsJSON`). HoleStat exposes
-/// the old per-field accessors as computed properties over this list
-/// so existing call sites (GIR, sand save, effective penalty strokes)
-/// keep working.
+/// One stroke that finished in trouble. Stored as a JSON array (`penalty_events_json`);
+/// `HoleStat` exposes the old per-field accessors as computed properties over this list.
 public struct PenaltyEvent: Sendable, Equatable, Codable {
     public let kind: PenaltyKind
     public let direction: PenaltyDirection?
-    /// Shot field that produced the event. Optional for legacy rows
-    /// written before phase-aware persistence landed.
+    /// Optional for legacy rows written before phase-aware persistence landed.
     public let phase: PenaltyPhase?
 
     public init(
@@ -29,17 +19,15 @@ public struct PenaltyEvent: Sendable, Equatable, Codable {
     }
 }
 
-/// What kind of penalty the stroke was. `outOfBounds` = stroke +
-/// distance (the ball is unplayable and gone); `hazard` = water or
-/// penalty area (the ball is findable, takes a drop).
+/// `outOfBounds` = stroke and distance (ball unplayable, gone); `hazard` = water or
+/// penalty area (ball findable, takes a drop).
 public enum PenaltyKind: String, Sendable, Equatable, Codable, CaseIterable {
     case outOfBounds
     case hazard
 }
 
-/// Where the trouble shot went relative to the target line. `nil`
-/// means the user didn't record a direction — legacy rounds where
-/// only the count was stored decode this way.
+/// Where the trouble shot went relative to the target line. `nil` means no direction
+/// recorded (legacy rounds that only stored a count).
 public enum PenaltyDirection: String, Sendable, Equatable, Codable, CaseIterable {
     case left
     case right
@@ -47,8 +35,8 @@ public enum PenaltyDirection: String, Sendable, Equatable, Codable, CaseIterable
     case short
 }
 
-/// Which persisted shot field produced the trouble event. Par-3 input
-/// is captured through the approach editor, so it uses `.approach`.
+/// Which persisted shot field produced the event. Par-3 input goes through
+/// the approach editor, so it uses `.approach`.
 public enum PenaltyPhase: String, Sendable, Equatable, Codable, CaseIterable {
     case tee
     case approach

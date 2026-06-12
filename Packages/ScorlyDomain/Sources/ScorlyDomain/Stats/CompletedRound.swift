@@ -1,15 +1,7 @@
 import Foundation
 
 /// A finished round, in the shape goals + insights need to evaluate it.
-///
-/// Pure value type: this is the domain aggregate that `GoalEvaluator` and
-/// `InsightEngine` operate on. The data layer (Phase C) is responsible for
-/// constructing one from the union of `LocalRound` + `LocalHole` +
-/// `LocalHoleStat` (or the equivalent `RoundRow` payload from Supabase).
-///
-/// `sgTotals` is optional because v1 historical rounds may not have shot
-/// distances recorded, in which case SG can't be computed. Goals and
-/// insights that rely on SG silently skip rounds with `sgTotals == nil`.
+/// `sgTotals` is nil when shot distances weren't recorded; goals/insights relying on SG skip those rounds.
 public struct CompletedRound: Sendable, Equatable, Identifiable {
     public let id: UUID
     public let datePlayed: Date
@@ -20,9 +12,7 @@ public struct CompletedRound: Sendable, Equatable, Identifiable {
     public let slope: Decimal?
     public let holeStats: [HoleStat]
     public let sgTotals: SGTotals?
-    /// Per-hole SG breakdown, parallel-indexed with `holeStats`. Same nil
-    /// semantics as `sgTotals`: populated together or both nil. Used by
-    /// the Round Detail view to render the per-hole timeline.
+    /// Per-hole SG breakdown, parallel-indexed with `holeStats`; nil iff `sgTotals` is nil.
     public let sgHoles: [SGTotals]?
     public let roundType: RoundType?
     public let roundFormat: RoundFormat?
@@ -75,9 +65,7 @@ public struct CompletedRound: Sendable, Equatable, Identifiable {
 
     // MARK: - Derived
 
-    /// WHS score differential, or nil if the round isn't WHS-eligible (not
-    /// 18 holes, missing rating/slope). Delegates to `WHSCalculator` so the
-    /// answer is always consistent with the handicap calc.
+    /// WHS score differential, or nil if not WHS-eligible (not 18 holes, missing rating/slope).
     public var differential: Decimal? {
         guard let rating = courseRating, let slope else { return nil }
         return WHSCalculator.differential(
@@ -103,7 +91,7 @@ public struct CompletedRound: Sendable, Equatable, Identifiable {
         holeStats.lazy.filter(\.fairwayInRegulation).count
     }
 
-    /// Holes where FIR is even applicable (par 4+). Denominator for FIR rate.
+    /// Denominator for FIR rate: holes where FIR is applicable (par 4+).
     public var firOpportunities: Int {
         holeStats.lazy.filter { $0.par >= 4 }.count
     }

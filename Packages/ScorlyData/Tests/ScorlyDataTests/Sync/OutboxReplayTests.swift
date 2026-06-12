@@ -4,11 +4,8 @@ import SwiftData
 import Testing
 @testable import ScorlyData
 
-/// End-to-end outbox lifecycle:
-/// - Repository writes while offline → entries pile up in the outbox.
-/// - Network flips online → engine drains them in FIFO order.
-/// - Transient errors trigger backoff retry; they don't dead-letter.
-/// - Deletes are sent exactly once even after retry.
+/// Outbox drains in FIFO order once online, retries transient errors with backoff,
+/// and never double-sends.
 struct OutboxReplayTests {
     @Test("Writes made offline drain in FIFO order once network flips online")
     func offlineThenOnlineDrains() async throws {
@@ -39,9 +36,6 @@ struct OutboxReplayTests {
         let createdAts = (0..<3).map { Date(timeIntervalSince1970: TimeInterval(1_000 + $0)) }
         #expect(pushes.allSatisfy { $0.aggregate == .goal })
         #expect(pushes.map(\.op) == [.insert, .insert, .insert])
-        // The repository created entries with createdAt = now (clock = .live),
-        // so we just check ordering via a stable attribute — the externalIds
-        // came in the same order the writes did.
         _ = createdAts
     }
 
@@ -61,16 +55,13 @@ struct OutboxReplayTests {
         #expect(first.pushed == 0)
         #expect(first.retried == 1)
         #expect(await fixture.engine.pendingCount() == 1)
-        // Drain 2: still failing (2nd retry scheduled). nextAttemptAt may
-        // gate it briefly — the .fast configuration uses a 1ms base, so we
-        // give it a moment.
+        // nextAttemptAt gates retries briefly even with .fast's 1ms base.
         try await Task.sleep(nanoseconds: 50_000_000)
         let second = await fixture.engine.drain()
         #expect(second.pushed == 0 || second.pushed == 1)
-        // Drain 3: should succeed (failure budget exhausted at 2).
         try await Task.sleep(nanoseconds: 50_000_000)
         let third = await fixture.engine.drain()
-        #expect(third.pushed >= 0) // Combined with `second` we expect total 1 push eventually.
+        #expect(third.pushed >= 0)
         try await Task.sleep(nanoseconds: 50_000_000)
         _ = await fixture.engine.drain()
         #expect(await fixture.engine.pendingCount() == 0)

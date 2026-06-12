@@ -1,10 +1,7 @@
 import SwiftUI
 
-/// Lie selection keypad. 5x5 cross — target in the center, miss arms,
-/// then OB outer arms. The bottom-left cell is the Water modifier
-/// (paired with an OB direction) and the bottom-right cell is the
-/// Bunker modifier (paired with a Miss direction). Modifiers compose
-/// with the directional pick instead of replacing it.
+/// Lie selection keypad. 5x5 cross: target center, miss arms, OB outer arms.
+/// Water (bottom-left) pairs with an OB direction; Bunker (bottom-right) pairs with a Miss direction.
 public struct LieKeypad: View {
     public struct AuxButton {
         public let label: String
@@ -64,9 +61,7 @@ public struct LieKeypad: View {
             }
         }
         .onChange(of: value) { _, newValue in
-            // If the directional pick clears or moves off its modifier's
-            // domain, clear the modifier so we never store an orphan
-            // "Bunker" without a direction.
+            // Clear modifier if the directional pick moves off its domain, to avoid orphan modifiers.
             if newValue == nil {
                 modifier = nil
                 return

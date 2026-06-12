@@ -6,13 +6,9 @@ import ScorlyFeatureCourses
 import ScorlyFeatureRound
 import SwiftUI
 
-/// Linear screen state machine matching the brutalist design source.
-/// Five primary screens; transitions are horizontal slides.
-///
-/// `play` and `confirm` carry their `RoundPlayState` as an associated
-/// value so navigation and round-state propagation are inherently
-/// atomic — there's no possibility of rendering the .play branch
-/// before the play state is observable.
+/// Linear screen state machine; transitions are horizontal slides.
+/// `play`/`confirm` carry `RoundPlayState` so navigation and round
+/// state update atomically.
 @MainActor
 @Observable
 final class AppFlow {
@@ -21,15 +17,12 @@ final class AppFlow {
         case play(RoundPlayState)
         case confirm(RoundPlayState)
         case courseEditor(CourseDraft?)
-        /// Round Detail. The season list is metadata passed through to
-        /// the destination view (powers the SG card's vs-season
-        /// comparison); it intentionally does not participate in screen
-        /// identity for `flow.go` deduping.
+        /// `season` powers the SG card's vs-season comparison and is
+        /// excluded from screen-identity equality below.
         case roundDetail(CompletedRound, season: [CompletedRound])
 
-        /// Equality compares only the case identity, not the associated
-        /// state. Two `.play` entries are "the same screen" for the
-        /// purposes of `flow.go` deduping.
+        /// Compares only case identity, ignoring associated state, so
+        /// two `.play` entries count as "the same screen" for deduping.
         var caseTag: Int {
             switch self {
             case .home: 0
@@ -50,9 +43,8 @@ final class AppFlow {
         }
     }
 
-    /// Stack of visited screens. Last is the visible screen. We keep a
-    /// stack so transition direction can be inferred (going deeper =
-    /// forward slide, popping = back slide).
+    /// Visited screens; last is visible. Lets transition direction be
+    /// inferred (push = forward slide, pop = back slide).
     private(set) var stack: [Screen] = [.home]
 
     var current: Screen {
@@ -73,8 +65,8 @@ final class AppFlow {
         stack.removeLast()
     }
 
-    /// Hard reset to home — used when a round files and we want to
-    /// land on History without revealing the intermediate stack.
+    /// Hard reset, e.g. landing on History after a round files without
+    /// revealing the intermediate stack.
     func resetTo(_ screen: Screen) {
         guard current != screen else { return }
         Haptics.rigid()

@@ -1,11 +1,8 @@
 import ScorlyDesignSystem
 import SwiftUI
 
-/// 4-bucket hole-outcome distribution rendered as a donut chart. Same
-/// color vocabulary as the heat grid below — both views consume
+/// 4-bucket hole-outcome distribution rendered as a donut chart, sharing
 /// `HoleHeatGrid.colors(for:)` so a token change propagates to both.
-/// The donut's center carries the total holes counted; a compact
-/// legend table below names each segment with its count and share.
 struct HoleOutcomeDistribution: View {
     let counts: [HoleOutcome: Int]
     let total: Int

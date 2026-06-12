@@ -1,9 +1,8 @@
 import ScorlyDesignSystem
 import SwiftUI
 
-/// Bottom sheet that hosts the tee-shot or approach editor. Mirrors
-/// the chrome of `PenaltySheetView` (grab handle, header, hairline,
-/// content, DONE) so all live-round sheets feel like one component.
+/// Bottom sheet hosting the tee-shot or approach editor. Mirrors `PenaltySheetView`'s
+/// chrome so all live-round sheets feel like one component.
 struct ShotSheetView: View {
     enum Kind {
         case tee
@@ -89,9 +88,7 @@ struct ShotSheetView: View {
                     club: clubBinding(\.teeClub),
                     distance: distanceBinding(\.teeShotDistance)
                 )
-                // Par 3: the tee shot is the approach. When it misses
-                // the green, capture LANDED AT so the chip phase has a
-                // real start distance.
+                // Par 3: tee shot is the approach, so capture LANDED AT for a missed green.
                 if state.currentHole.par == 3 {
                     landedAtSection
                 }
@@ -136,8 +133,7 @@ struct ShotSheetView: View {
 
     // MARK: - LANDED AT (approach landing distance)
 
-    /// Conditional row: appears only when the chosen result lie is
-    /// non-green, non-OB, non-nil — the cases that imply a chip phase.
+    /// Shown only when the result lie implies a chip phase (non-green, non-OB, non-nil).
     @ViewBuilder
     private var landedAtSection: some View {
         let approachLie = approachLieForLandingPrompt
@@ -159,8 +155,7 @@ struct ShotSheetView: View {
     private var approachLieForLandingPrompt: String? {
         switch kind {
         case .tee:
-            // Par-3 tee editor — the result lie binding is the same
-            // one ShotEditor writes for the keypad.
+            // Par-3 tee editor uses the same binding ShotEditor writes for the keypad.
             state.entries[state.holeIdx].teeShot
         case .approach:
             state.entries[state.holeIdx].approach
@@ -236,9 +231,8 @@ struct ShotSheetView: View {
         )
     }
 
-    /// Par-5-only "ON IN 2" aux button for the approach keypad. Stored
-    /// as the sentinel `"On In 2"` so it toggles independently from
-    /// the center GRN cell; both decode to `Lie.green` for stats.
+    /// Par-5-only "ON IN 2" aux button, stored as sentinel `"On In 2"` so it toggles
+    /// independently from the GRN cell; both decode to `Lie.green` for stats.
     private var par5OnInTwo: LieKeypad.AuxButton? {
         guard kind == .approach, state.currentHole.par == 5 else { return nil }
         let active = state.entries[state.holeIdx].approach == "On In 2"

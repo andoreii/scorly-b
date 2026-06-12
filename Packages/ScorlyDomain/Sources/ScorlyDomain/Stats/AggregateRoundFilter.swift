@@ -1,14 +1,11 @@
 import Foundation
 
 /// Shared eligibility predicate for any aggregate stat surface (Home avg,
-/// History, Trends, Courses best). Defines what "counts" toward a derived
-/// number.
+/// History, Trends, Courses best).
 ///
-/// Empty set on a category means "include every value for that category"
-/// (including rounds whose value is `nil` for that field). A non-empty set
-/// means "include only rounds whose value is present and in the set" —
-/// which is what excludes historical missing-format rounds under
-/// `.default`.
+/// An empty set on a category means "include everything for that category"
+/// (including nil values); a non-empty set requires the value to be
+/// present and in the set.
 public struct AggregateRoundFilter: Sendable, Equatable, Codable {
     public var holesPlayed: Set<HolesPlayed>
     public var formats: Set<RoundFormat>
@@ -27,8 +24,7 @@ public struct AggregateRoundFilter: Sendable, Equatable, Codable {
         self.teeNames = teeNames
     }
 
-    /// Brief-default: 18 holes, Stroke + Stableford + Match, all round
-    /// types, all tees.
+    /// 18 holes, Stroke + Stableford + Match, all round types, all tees.
     public static let `default` = AggregateRoundFilter(
         holesPlayed: [.eighteen],
         formats: [.stroke, .stableford, .match],

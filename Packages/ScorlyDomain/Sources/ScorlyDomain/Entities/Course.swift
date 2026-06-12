@@ -1,14 +1,7 @@
 import Foundation
 
-/// A user's golf course definition.
-///
-/// `externalId` is the client-generated UUID that becomes
-/// `courses.course_external_id` on the server — the idempotency key the
-/// SyncEngine uses to deduplicate retried writes (plan invariant 6).
-///
-/// A Course owns its tees and holes; persisting a Course persists the whole
-/// graph. The `colorTheme` string is stored verbatim in the DB and parsed by
-/// the UI per the v1 encoding (`name | CustomSolid:RRGGBB | CustomGradient:RRGGBB-RRGGBB`).
+/// A user's golf course definition. Owns its tees and holes; persisting a
+/// Course persists the whole graph.
 public struct Course: Sendable, Equatable, Identifiable, Codable {
     public let id: UUID
     public let externalId: UUID

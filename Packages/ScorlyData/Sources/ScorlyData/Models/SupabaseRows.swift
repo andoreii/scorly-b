@@ -1,29 +1,13 @@
-// Optional Bools are deliberate: derived per-hole stats (GIR, 3-putt,
-// up-and-down, sand save, opportunity flags) carry a "not applicable"
-// state that a non-optional Bool can't express. Disabling the lint here
-// is the right tradeoff. Snake-case keys live on the wire, not on these
-// types — the JSON coder bridges them.
-//
-// file_length: this file is a deliberate single-source-of-truth catalog
-// for the Supabase row shapes — splitting by table would scatter the
-// schema across N files and make schema-evolution review harder. We
-// take the file-length carve-out instead.
+// Optional Bools carry a "not applicable" state for derived per-hole stats.
+// Single-file catalog of Supabase row shapes; splitting would scatter schema-evolution review.
 // swiftlint:disable discouraged_optional_boolean file_length
 
 import Foundation
 import ScorlyDomain
 
 // Codable Row / Insert / Update types mirroring the Supabase schema.
-//
-// Naming convention (ported from v1 DataService.swift):
-// - *Row is the read shape — every column nullable as the DB allows.
-// - *Insert is the write shape used on from(table).insert(payload).
-// - *Update is the partial-write shape — every field optional so a
-//   selective update() only touches the columns the caller passes.
-//
-// All types use camelCase property names and rely on the snake-case
-// JSON coder (SupabaseConfig.encoder / decoder) to bridge to/from the
-// course_id / date_played style on the wire.
+// *Row is the nullable read shape, *Insert is the write payload, *Update is partial-write.
+// camelCase properties; SupabaseConfig's snake-case coder bridges to the wire format.
 
 // MARK: - users
 
@@ -292,14 +276,8 @@ public struct RoundInsert: Sendable, Codable, Equatable {
     }
 }
 
-/// Outbox payload for `rounds.insert`. Carries external IDs for course/tee
-/// (resolved to server serial IDs at push time, after the local cache has
-/// picked up the latest pull) plus the round's hole stats so a single
-/// outbox entry fans out to two Supabase inserts.
-///
-/// We don't enqueue per-hole `holeStat` entries — the parent round's
-/// server ID isn't known until the round insert returns, so the push
-/// handler does the chained insert atomically.
+/// Outbox payload for `rounds.insert`. Bundles hole stats with the round so the push handler can
+/// chain both inserts atomically once the round's server ID is known.
 public struct RoundOutboxBody: Sendable, Codable, Equatable {
     public let courseExternalId: UUID
     public let teeExternalId: UUID?

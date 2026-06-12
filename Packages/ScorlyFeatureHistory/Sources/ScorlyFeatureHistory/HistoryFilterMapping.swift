@@ -2,9 +2,7 @@ import ScorlyDesignSystem
 import ScorlyDomain
 import SwiftUI
 
-/// In-flight selection state for the History filter sheet. The sheet
-/// operates on raw `Set<String>` chips; this struct converts to/from the
-/// typed `AggregateRoundFilter` the rest of the feature reads.
+/// Converts between the sheet's raw `Set<String>` chips and the typed `AggregateRoundFilter`.
 struct AggregateFilterEditState: Identifiable, Equatable {
     let id = UUID()
     var holes: Set<String>

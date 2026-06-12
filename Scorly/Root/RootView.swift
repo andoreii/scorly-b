@@ -11,12 +11,9 @@ import Supabase
 import SwiftData
 import SwiftUI
 
-/// Root scene. Auth gate, then a flow-driven switch between brutalist
-/// screens with horizontal slide transitions.
-///
-/// Repositories are created (or recreated) whenever the authenticated
-/// userId changes — this ensures the SwiftData predicates always filter
-/// by the current user's UUID and the SyncEngine is scoped correctly.
+/// Root scene: auth gate, then a flow-driven switch between screens.
+/// Repositories are rebuilt whenever the authenticated userId changes
+/// so SwiftData predicates and the SyncEngine stay scoped correctly.
 struct RootView: View {
     let authService: AuthService
     let supabase: SupabaseClient
@@ -28,11 +25,8 @@ struct RootView: View {
     @State private var devBypassAuth = false
     @State private var coursesRepository: any CoursesRepository = InMemoryCoursesRepository()
     @State private var roundsRepository: any RoundsRepository = InMemoryRoundsRepository()
-    // Home's rounds + handicap live on the parent so they survive
-    // every navigation. Without this, HomeView's local @State resets on
-    // each remount and the "Last Round" stamp pops in mid-slide once
-    // the async fetch resolves — instead of sliding in with the rest
-    // of the screen.
+    // Owned by the parent so they survive navigation; otherwise the
+    // "Last Round" stamp pops in mid-slide on remount.
     @State private var homeRounds: [CompletedRound] = []
     @State private var homeHandicap: Decimal?
     @State private var inProgressDraft: InProgressRoundDraft?
@@ -67,10 +61,7 @@ struct RootView: View {
                     await reloadInProgressDraft()
                 }
                 .task(id: flow.current) {
-                    // Refetch when arriving on Home so the stamp
-                    // reflects a freshly filed round (Confirm flow
-                    // routes to History first, but the user often
-                    // bounces back to Home).
+                    // Refetch on Home so the stamp reflects a freshly filed round.
                     if flow.current == .home {
                         await reloadHomeRounds()
                         await reloadInProgressDraft()
@@ -79,8 +70,7 @@ struct RootView: View {
         }
     }
 
-    /// Build live repos scoped to the current userId, then fetch courses.
-    /// Called whenever userId changes (sign-in, sign-out, account switch).
+    /// Builds live repos scoped to userId, then fetches courses.
     private func buildReposAndLoadCourses() async {
         guard let userId = authService.userId else {
             courses = []
@@ -107,9 +97,7 @@ struct RootView: View {
             syncEngine: syncEngine,
             supabase: supabase
         )
-        // Catch up the outbox on every userId-scoped rebuild (sign-in,
-        // account switch, app launch). Then keep watching the network so
-        // any future offline→online flip re-drains automatically.
+        // Drain the outbox now, then keep watching for offline→online flips.
         await syncEngine.startWatchingNetwork()
         Task { _ = await syncEngine.drain() }
         if let fetched = try? await coursesRepository.fetchAll() {
@@ -118,9 +106,7 @@ struct RootView: View {
         }
     }
 
-    /// DEBUG-only escape hatch so we can walk through the brutalist
-    /// screens before a signup flow exists. In RELEASE the closure is
-    /// nil and the bypass button never renders.
+    /// DEBUG-only bypass; nil in RELEASE so the button never renders.
     private var devBypassClosure: (() -> Void)? {
         #if DEBUG
         return { devBypassAuth = true }
@@ -266,8 +252,7 @@ struct RootView: View {
                     )
                     .transition(transition)
                 } else {
-                    // Should never happen behind the auth gate. Drop
-                    // the user back to courses if it does.
+                    // Should never happen behind the auth gate.
                     Color.clear.onAppear { flow.back() }
                 }
             }
@@ -384,8 +369,7 @@ struct RootView: View {
             courses = fetched
             seedDefaultCourseSelection()
         }
-        // Syncing courses re-pulls rounds (via SyncEngine), so the
-        // home-screen stats may be stale until we refetch them.
+        // SyncEngine re-pulls rounds too, so refresh home stats.
         await reloadHomeRounds()
     }
 
@@ -408,9 +392,7 @@ struct RootView: View {
         let differentials = fetched.compactMap(\.differential).prefix(20).map { $0 }
         homeRounds = sorted
         homeHandicap = WHSCalculator.handicapIndex(from: differentials)
-        // Keep the "You" slot in setup in sync with the calculated index so
-        // the read-only field in Round Setup always reflects the latest WHS
-        // value rather than a stale captured one.
+        // Keep the "You" slot's handicap in sync with the latest WHS value.
         if let first = setupForm.players.first {
             setupForm.players[0] = RoundSetupForm.Player(
                 id: first.id,

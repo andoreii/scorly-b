@@ -507,10 +507,8 @@ public struct PlayView: View {
         }
     }
 
-    /// Compact, centered CARD button. The shared `navButton` helper
-    /// uses an HStack with `title — Spacer — caption` so a `.fixedSize`
-    /// version still left-aligns its text. This standalone button keeps
-    /// the label centered in its frame.
+    /// Standalone (not `navButton`) so the label stays centered rather
+    /// than left-aligned by the shared title/caption HStack.
     private var cardButton: some View {
         Text("CARD")
             .font(BrutalistType.mono(.semibold, size: 11))

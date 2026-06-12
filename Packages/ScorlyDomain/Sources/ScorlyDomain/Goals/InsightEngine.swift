@@ -2,20 +2,10 @@ import Foundation
 
 /// Generates `Insight` cards from a set of `CompletedRound`s.
 ///
-/// Single entry point: `weeklyInsights(from:referenceDate:)`.
-/// "Weekly" means the function filters input rounds to those played in
-/// the 7 days **strictly before** `referenceDate` (inclusive of
-/// `referenceDate` itself). Rounds outside that window — and rounds
-/// without `sgTotals` — are ignored.
-///
-/// Output ordering (when present):
-/// 1. Up to 3 weaknesses (most-negative average SG first).
-/// 2. Up to 1 strength (most-positive average SG, if positive).
-/// 3. Up to 1 practice focus (= the single worst weakness).
-///
-/// All three sections may be empty: no recent rounds → empty array;
-/// every category positive → no weaknesses or practice focus; every
-/// category negative → no strength.
+/// `weeklyInsights` looks at rounds played in the 7 days up to and
+/// including `referenceDate` (ignoring rounds without `sgTotals`) and
+/// returns up to 3 weaknesses (most-negative SG first), 1 strength (if
+/// positive), and 1 practice focus (the single worst weakness).
 public enum InsightEngine {
     /// 7 days expressed in seconds — used for the rolling-week window.
     private static let weekSeconds: TimeInterval = 7 * 24 * 60 * 60

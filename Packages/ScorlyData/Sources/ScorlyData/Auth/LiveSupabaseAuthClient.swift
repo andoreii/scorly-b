@@ -2,17 +2,10 @@ import Foundation
 import Supabase
 
 /// Production `AuthClient`. Wraps `supabase-swift`'s `SupabaseClient.auth`
-/// and translates between Supabase types and the v2 `AuthSession` /
-/// `AuthEvent` value types `AuthService` consumes.
-///
-/// All work happens on whatever queue the Supabase SDK chose — the only
-/// `@MainActor` boundary in the auth stack is `AuthService` itself.
+/// and translates Supabase types into `AuthSession` / `AuthEvent`.
 public struct LiveSupabaseAuthClient: AuthClient {
     private let supabase: SupabaseClient
 
-    /// Default initializer wires the singleton Supabase client the app
-    /// holds (constructed from `SupabaseConfig` in `ScorlyApp`). Tests
-    /// don't construct this — they use `MockAuthClient`.
     public init(supabase: SupabaseClient) {
         self.supabase = supabase
     }
@@ -22,9 +15,7 @@ public struct LiveSupabaseAuthClient: AuthClient {
             let session = try await supabase.auth.session
             return AuthSession(session: session)
         } catch {
-            // The SDK throws `.sessionMissing` when there's no persisted
-            // session. Treat that as "logged out" rather than an error so
-            // first-launch UX doesn't surface a spurious banner.
+            // No persisted session is "logged out", not an error.
             if isSessionMissing(error) {
                 return nil
             }
@@ -56,9 +47,7 @@ public struct LiveSupabaseAuthClient: AuthClient {
         } catch {
             throw AuthClientError.underlying(error.localizedDescription)
         }
-        // v1 explicitly signs in after sign-up — the project may require
-        // email confirmation, in which case `signUp` does not start an
-        // active session. Mirror that behaviour exactly.
+        // signUp alone may not start a session if email confirmation is required.
         return try await signIn(email: email, password: password)
     }
 
@@ -81,12 +70,8 @@ public struct LiveSupabaseAuthClient: AuthClient {
 
     // MARK: - Mapping
 
-    /// Collapse the SDK's richer event enum into the three the v2 service
-    /// reacts to. Anything else (`userUpdated`, `passwordRecovery`,
-    /// `mfaChallengeVerified`, `initialSession`) is reported through the
-    /// nearest equivalent — `tokenRefreshed` if a session is present,
-    /// `signedOut` if not — so the state machine never sees a "no-op"
-    /// event it has to special-case.
+    /// Collapse the SDK's event enum into the three cases we react to;
+    /// anything else maps to `tokenRefreshed` (if a session exists) or `signedOut`.
     private func mapEvent(
         _ event: AuthChangeEvent,
         session: Session?
@@ -107,11 +92,8 @@ public struct LiveSupabaseAuthClient: AuthClient {
         }
     }
 
-    /// The Supabase SDK has changed how it spells "no session" across
-    /// versions — sometimes `AuthError.sessionMissing`, sometimes
-    /// `.sessionNotFound`. String-match is uglier than a typed catch but
-    /// resilient across SDK bumps and harmless because the only consumer
-    /// is "swallow vs rethrow".
+    /// String-match since the SDK has spelled "no session" differently
+    /// across versions; resilient to SDK bumps.
     private func isSessionMissing(_ error: Error) -> Bool {
         let description = String(describing: error).lowercased()
         return description.contains("sessionmissing")
@@ -122,9 +104,6 @@ public struct LiveSupabaseAuthClient: AuthClient {
 }
 
 private extension AuthSession {
-    /// Convert the SDK's `Session` into the v2 value type. The userId is
-    /// the only field downstream code actually depends on; the email is
-    /// surfaced for UI display (settings, avatar fallback).
     init(session: Session) {
         self.init(userId: session.user.id, email: session.user.email)
     }

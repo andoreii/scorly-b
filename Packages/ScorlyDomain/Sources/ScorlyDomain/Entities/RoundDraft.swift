@@ -1,12 +1,7 @@
 import Foundation
 
-/// Persisted shape of a finished round — everything the data layer needs to
-/// store + sync. Distinct from `CompletedRound` (the read-shaped aggregate
-/// goals + insights consume) because writes carry richer metadata: course /
-/// tee linkage, conditions, transport, mental state, notes.
-///
-/// `externalId` is the idempotency key (plan invariant 6); the same UUID is
-/// reused if the SyncEngine retries the upload.
+/// Persisted shape of a finished round, with the richer write-side metadata
+/// that `CompletedRound` (the read shape) doesn't carry.
 public struct RoundDraft: Sendable, Equatable, Identifiable {
     public let id: UUID
     public let externalId: UUID
@@ -30,7 +25,6 @@ public struct RoundDraft: Sendable, Equatable, Identifiable {
     public let holeStats: [HoleStat]
     public let players: [RoundPlayer]
 
-    /// Pluck the obvious init out of the way; the data layer assembles these.
     public init(
         id: UUID,
         externalId: UUID,

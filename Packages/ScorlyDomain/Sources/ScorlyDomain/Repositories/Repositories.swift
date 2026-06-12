@@ -1,21 +1,7 @@
 import Foundation
 
-// Repository protocols live in Domain so features can program against
-// abstractions and use in-memory fakes in tests. Concrete implementations
-// live in `ScorlyData`.
-//
-// Conventions:
-// - All operations are `async throws`.
-// - Reads return Domain value types (already round-tripped from rows).
-// - Writes accept Domain value types; the data layer is responsible for
-//   converting to `*Insert`/`*Update` payloads, persisting to SwiftData,
-//   and enqueuing an outbox entry within the same transaction.
-// - `delete` is by domain `id` (UUID), never by serial DB key — the data
-//   layer translates as needed.
-//
-// Sendable: every protocol is `Sendable` so repositories can be passed
-// across actor boundaries (the SyncEngine owns its own actor; features
-// run on the main actor).
+// Protocols live in Domain so features can use in-memory fakes in tests;
+// ScorlyData provides the SwiftData + outbox-backed implementations.
 
 public protocol UsersRepository: Sendable {
     /// Current signed-in user's profile, or nil if no row exists yet.
@@ -41,41 +27,19 @@ public protocol RoundsRepository: Sendable {
     func fetchRecent(limit: Int) async throws -> [CompletedRound]
     /// Most recent completed rounds for a specific course, newest first.
     func fetchRecentCompleted(forCourseExternalId courseExternalId: UUID, limit: Int) async throws -> [CompletedRound]
-    /// Pull the most recent `limit` rounds from Supabase and upsert them
-    /// into the local SwiftData cache. Idempotent; never enqueues outbox entries.
-    /// Returns the number of remote rows received for the active user.
+    /// Pulls recent rounds from Supabase into the local cache; never enqueues outbox entries.
     func refreshFromRemote(limit: Int) async throws -> Int
-    /// Persist a finished round. The implementation derives `CompletedRound`
-    /// state from the draft for downstream consumers.
     func save(_ round: RoundDraft) async throws
     func update(_ round: RoundDraft) async throws
     func delete(id: UUID) async throws
-    /// Read the user's single in-progress round draft, or nil if none.
-    /// Local-only — never round-trips through Supabase.
+    /// The user's single in-progress draft, local-only and never synced.
     func fetchInProgressDraft() async throws -> InProgressRoundDraft?
-    /// Insert or replace the in-progress draft for the current user.
-    /// One draft per user; existing draft is overwritten.
+    /// One draft per user; replaces any existing draft.
     func upsertInProgressDraft(_ draft: InProgressRoundDraft) async throws
-    /// Remove the in-progress draft. No-op if nothing is stored.
     func deleteInProgressDraft() async throws
     /// Lowest `totalScore` per course among rounds matching `filter`.
-    /// Returns `[courseExternalId: bestScore]`. Courses with no eligible
-    /// rounds are absent from the dictionary, so call sites should treat
-    /// missing entries as "no best yet".
     func bestScoresByCourse(filter: AggregateRoundFilter) async throws -> [UUID: Int]
-    /// One-shot retroactive push of per-hole detail to Supabase.
-    ///
-    /// The outbox/save path only began carrying `puttDistances`,
-    /// `teeShotDistance`, `approachDistance`, `teeClub`, `approachClub`,
-    /// `pinPosition`, `greenInReg`, `threePutt`, `girOpportunity`, and
-    /// `fairwayOpportunity` recently. Existing `hole_stats` rows in
-    /// Supabase are NULL for those columns. This method upserts every
-    /// local round's hole detail back to Supabase using the
-    /// `(round_id, hole_number)` UNIQUE constraint as the conflict key —
-    /// idempotent, safe to run multiple times.
-    ///
-    /// Returns the number of hole rows pushed. Throws if the network
-    /// is unreachable or the user isn't authenticated.
+    /// Backfills per-hole detail for rows written before those columns existed.
     func backfillHoleStatsToCloud() async throws -> Int
 }
 

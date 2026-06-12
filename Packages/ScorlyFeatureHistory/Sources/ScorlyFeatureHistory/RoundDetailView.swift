@@ -4,11 +4,7 @@ import ScorlyDomain
 import ScorlyReviewKit
 import SwiftUI
 
-/// Round Detail — pushed from a History row tap. Header + dark hero
-/// stamp (literal port of the Claude Design mockup, minus the
-/// "Card · Shots · Distance · Trouble" subtitle) followed by the
-/// Strokes Gained card. Additional sections (score distribution,
-/// hole-by-hole grid, dispersion, distance) are deferred.
+/// Round Detail screen, pushed from a History row tap.
 public struct RoundDetailView: View {
     let round: CompletedRound
     let seasonRounds: [CompletedRound]

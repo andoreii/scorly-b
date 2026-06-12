@@ -1,15 +1,8 @@
 import Foundation
 
 /// Pure evaluation of a `Goal` against a list of `CompletedRound`s.
-///
-/// Each `GoalKind` has a "current value" computed from the round set
-/// (best score, aggregate rate, average SG, etc.) and a comparison
-/// against the target. The result is packed into `GoalProgress`.
-///
-/// **No round filtering happens here.** Caller decides which rounds are
-/// in scope (e.g. "rounds since the goal was created", "last 90 days").
-/// Empty or all-nil-data round sets return `current = 0`, `fraction = 0`,
-/// `isAchieved = false`.
+/// Caller decides which rounds are in scope; no filtering happens here.
+/// Empty or all-nil-data round sets return zero progress, not achieved.
 public enum GoalEvaluator {
     public static func evaluate(goal: Goal, against rounds: [CompletedRound]) -> GoalProgress {
         switch goal.kind {
@@ -93,8 +86,8 @@ public enum GoalEvaluator {
 
     // MARK: - Direction helpers
 
-    /// Progress for an "at least" goal: `current ≥ target`.
-    /// Fraction is `current / target`, capped at 1.
+    /// Progress for an "at least" goal: `current >= target`, fraction
+    /// capped at 1.
     private static func atLeast(current: Decimal, target: Decimal) -> GoalProgress {
         let achieved = current >= target
         let fraction: Decimal
@@ -103,15 +96,14 @@ public enum GoalEvaluator {
         } else if target > 0 {
             fraction = max(0, min(current / target, 1))
         } else {
-            // target ≤ 0 with current < target is degenerate; report 0.
+            // target <= 0 with current < target is degenerate; report 0.
             fraction = 0
         }
         return GoalProgress(current: current, target: target, isAchieved: achieved, fraction: fraction)
     }
 
-    /// Progress for an "at most" goal: `current ≤ target`.
-    /// Fraction inverts: as `current` shrinks toward `target`, fraction
-    /// grows toward 1. Computed as `target / current` while above target.
+    /// Progress for an "at most" goal: `current <= target`. Fraction
+    /// inverts toward 1 as `current` shrinks toward `target`.
     private static func atMost(current: Decimal, target: Decimal) -> GoalProgress {
         let achieved = current <= target
         let fraction: Decimal

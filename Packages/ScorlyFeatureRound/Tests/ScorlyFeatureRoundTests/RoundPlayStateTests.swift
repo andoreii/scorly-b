@@ -158,9 +158,7 @@ struct RoundPlayStateTests {
         let stat = state.derivedStat(for: 2)
         #expect(stat.par == 3)
         #expect(stat.greenInRegulation == true)
-        // Par 3 has no separate approach — derivation should fold the lie
-        // into the tee-shot slot to match the domain GIR rule and the v1
-        // schema (which writes par-3 results to tee_shot).
+        // Par 3 has no separate approach — fold the lie into the tee-shot slot.
         #expect(stat.teeShotLie == .green)
         #expect(stat.approachLie == nil)
     }
@@ -174,8 +172,7 @@ struct RoundPlayStateTests {
         state.entries[2].approach = "Miss Right"
         let stat = state.derivedStat(for: 2)
         #expect(stat.greenInRegulation == false)
-        // The approach editor decodes "Miss Right" with target=.green into
-        // the recovery family; we then fold it into teeShotLie for par 3.
+        // "Miss Right" with target=.green decodes to recovery, folded into teeShotLie for par 3.
         #expect(stat.teeShotLie == .recoveryRight)
         #expect(stat.approachLie == nil)
     }

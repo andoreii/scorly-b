@@ -3,9 +3,7 @@ import ScorlyDomain
 import Testing
 @testable import ScorlyData
 
-/// Behavioural coverage for the auth state machine. The mock client drives
-/// every transition deterministically — there's no Supabase SDK in the
-/// loop, no network, no timing.
+/// Behavioural coverage for the auth state machine, driven by a deterministic mock client.
 struct AuthServiceTests {
     // MARK: - Bootstrap
 
@@ -174,8 +172,7 @@ struct AuthServiceTests {
 
 private enum SampleError: Error { case boom }
 
-/// Records every (UUID) callback for assertions. Actor-isolated so tests
-/// don't have to reason about race conditions on `calls`.
+/// Records every (UUID) callback for assertions.
 private actor CallRecorder {
     var calls: [UUID] = []
     func record(_ uuid: UUID) {
@@ -185,19 +182,12 @@ private actor CallRecorder {
 
 @MainActor
 private extension AuthService {
-    /// Bootstrap returns once the restore + first event have been
-    /// processed. The mock emits an initial event synchronously after
-    /// register, so this resolves quickly. `timeout` guards against the
-    /// off-chance the event never arrives — in that case the test fails
-    /// loudly via the subsequent assertion rather than hanging.
+    /// Waits for the mock's initial event after bootstrap; timeout guards against it never arriving.
     func waitForBootstrapTimeout(_ timeout: Duration = .milliseconds(500)) async {
         await waitForEvent(timeout: timeout)
     }
 
-    /// The observation loop runs forever, so we can't await it directly.
-    /// Sleep briefly to let pending event-stream work flush onto the main
-    /// actor. 50ms is generous enough on CI; the mock yields events
-    /// almost immediately.
+    /// The observation loop runs forever, so we sleep briefly to flush pending event-stream work.
     func waitForEvent(timeout: Duration = .milliseconds(100)) async {
         try? await Task.sleep(for: timeout)
     }

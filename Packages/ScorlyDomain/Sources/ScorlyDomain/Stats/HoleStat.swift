@@ -1,91 +1,43 @@
 import Foundation
 
-/// One hole's worth of recorded play. The minimum input the rest of the
-/// app needs to derive per-hole stats (GIR, FIR, 3-putt, up-and-down,
-/// sand save, effective penalty strokes).
-///
-/// This is the v2 equivalent of v1's `HoleStat` in `RoundTrackerView.swift`.
-/// Two intentional shape changes from v1:
-///
-/// 1. v1 stored `teeShot` and `approach` as free-form `String?` because
-///    the same field encoded both lies (`"Fairway"`, `"Bunker Left"`) and
-///    ball-result markers (`"Out Left"`, `"Left water"`). v2 splits those
-///    concerns: `teeShotLie` / `approachLie` are typed `Lie?` (only valid
-///    *playable* lies), and OB / hazard outcomes flow into the
-///    `penaltyEvents` list.
-///
-/// 2. v1 derived `bunkerCount` from string prefixes; v2 derives it from
-///    the `Lie` enum via `Lie.isBunker`. Same semantics, type-safe.
-///
-/// 3. v2 collapses the original ten OB / hazard counter columns
-///    (`outOfBoundsLeft`, `hazardLong`, etc.) into a single
-///    `penaltyEvents: [PenaltyEvent]` list. Per-direction and total
-///    counts are exposed as computed properties so existing
-///    derivations (GIR, sand save, effective penalty strokes) keep
-///    working without churn at every call site.
-///
-/// All derivations are pure computed properties so a HoleStat is fully
-/// described by its stored fields — no caching, no view-layer state.
+/// One hole's worth of recorded play, used to derive per-hole stats (GIR, FIR, 3-putt, etc).
+/// OB/hazard outcomes live in `penaltyEvents`; computed properties below expose the old
+/// per-direction shape for existing call sites.
 public struct HoleStat: Sendable, Equatable, Codable {
-    /// Hole par (3, 4, or 5 in standard play). Stored, not derived,
-    /// because the same `HoleStat` shape is used in tests where the par
-    /// isn't tied to a `Hole` model yet.
     public let par: Int
-    /// Total strokes taken on the hole, **including** putts and any
-    /// penalty strokes the player chose to enter.
+    /// Total strokes taken on the hole, including putts and any penalty strokes.
     public let strokes: Int
-    /// Number of strokes taken from the green. Putts are counted in
-    /// `strokes` too — this is a sub-count, not an addition.
+    /// Sub-count of `strokes` taken from the green, not an addition.
     public let putts: Int
     /// Where the tee shot ended up, if the player recorded it.
     public let teeShotLie: Lie?
-    /// Where the approach shot ended up. Only meaningful on par 4 / par 5
-    /// (par 3 has no separate approach — the tee shot is the approach).
+    /// Where the approach shot ended up. Only meaningful on par 4 / par 5.
     public let approachLie: Lie?
-    /// Manually-entered penalty strokes (player ticks "+1" for an
-    /// unplayable, lateral drop, etc.).
+    /// Manually-entered penalty strokes (player ticks "+1" for an unplayable, drop, etc.).
     public let penaltyStrokes: Int
-    /// Every stroke that finished in trouble, ordered by stroke. One
-    /// entry per OB / hazard event; direction is optional (nil = the
-    /// user didn't pick one, as in legacy rounds).
+    /// Every stroke that finished in trouble, ordered by stroke.
     public let penaltyEvents: [PenaltyEvent]
-    /// Manual override flag. If the player ticked "I scrambled here" but
-    /// the auto-derivation (missed GIR + 1 putt + ≤ par) doesn't fire
-    /// (e.g. they two-putted from the fringe), this lets `upAndDown`
-    /// still return true.
+    /// Manual override so a real up-and-down counts even if the auto-rule
+    /// (missed GIR + 1 putt + <= par) doesn't fire.
     public let upAndDownSuccess: Bool
     /// Manual override flag for sand save. Same role as `upAndDownSuccess`.
     public let sandSaveSuccess: Bool
-    /// Distance the tee shot travelled, yards. Optional — only some
-    /// rounds (v2 round play) record this. Needed by `SGCalculator`.
+    /// Distance the tee shot travelled, yards. Needed by `SGCalculator`.
     public let teeShotDistance: Int?
-    /// Distance remaining when the approach shot was taken, yards.
-    /// Unused on par 3 (tee shot is the approach). Optional for the
-    /// same reason as `teeShotDistance`.
+    /// Distance remaining when the approach shot was taken, yards. Unused on par 3.
     public let approachDistance: Int?
-    /// Putt distances in feet, ordered by stroke (first putt → last).
-    /// Optional — populated only when the player logged distances on
-    /// the green during the round.
+    /// Putt distances in feet, ordered first putt to last.
     public let puttDistances: [Int]?
-    /// Club used for the tee shot, free-form string (e.g. "Driver",
-    /// "5 iron"). Optional — only populated when the player logged it.
+    /// Club used for the tee shot, free-form string (e.g. "Driver", "5 iron").
     public let teeClub: String?
-    /// Club used for the approach shot, free-form string. Unused on
-    /// par 3 (the tee shot is the approach). Optional.
+    /// Club used for the approach shot. Unused on par 3.
     public let approachClub: String?
-    /// Pin position string (e.g. "Front", "Middle", "Back"). Optional.
     public let pinPosition: String?
-    /// Distance the approach finished from the pin, in yards. Only set
-    /// when `approachLie` is non-green (it's how we anchor the chip's
-    /// start). Nil = SG calculator falls back to a lie-based default.
+    /// Distance the approach finished from the pin, in yards; nil falls back to a lie-based default.
     public let approachLandingDistance: Int?
-    /// One entry per around-the-green shot, ordered by stroke. Length
-    /// should match the inferred ARG count (`strokes − putts − 2` on
-    /// par 4/5; `strokes − putts − 1` on par 3 off-green). Nil = SG
-    /// calculator uses lie-based defaults for every chip on this hole.
+    /// One entry per around-the-green shot, ordered by stroke. Nil means SG uses lie-based defaults.
     public let argShots: [ARGShot]?
-    /// Par-5 only: lie where the layup landed. Presence flips the
-    /// SG reconstruction to a three-shot pre-green chain.
+    /// Par-5 only: lie where the layup landed. Presence flips SG to a three-shot pre-green chain.
     public let layupLie: Lie?
     /// Par-5 only: distance from pin after the layup, in yards.
     public let layupDistance: Int?
@@ -134,11 +86,8 @@ public struct HoleStat: Sendable, Equatable, Codable {
 
     // MARK: - Codable
 
-    // Forwards-compat decode: older serialized blobs (test fixtures, any
-    // in-memory snapshots) carry the v1 counter columns
-    // (`outOfBoundsCount`, `outOfBoundsLeft`, etc.) instead of the
-    // `penaltyEvents` list. The decoder reads either shape and folds
-    // the legacy counters into the events list at load time.
+    // Older blobs carry per-direction OB/hazard counters instead of `penaltyEvents`;
+    // the decoder folds those into events.
 
     enum CodingKeys: String, CodingKey {
         case par, strokes, putts, teeShotLie, approachLie, penaltyStrokes,
@@ -147,7 +96,7 @@ public struct HoleStat: Sendable, Equatable, Codable {
              teeShotDistance, approachDistance, puttDistances, teeClub,
              approachClub, pinPosition,
              approachLandingDistance, argShots, layupLie, layupDistance,
-             // Legacy decode-only keys — never written by new encoders.
+             // Legacy decode-only keys, never written by new encoders.
              outOfBoundsCount, hazardCount,
              outOfBoundsLeft, outOfBoundsRight, outOfBoundsLong, outOfBoundsShort,
              hazardLeft, hazardRight, hazardLong, hazardShort
@@ -177,11 +126,7 @@ public struct HoleStat: Sendable, Equatable, Codable {
         if let events = try container.decodeIfPresent([PenaltyEvent].self, forKey: .penaltyEvents) {
             penaltyEvents = events
         } else {
-            // Legacy: build events from the old counter columns. The
-            // directional counts produce events with `direction` set;
-            // any residual count beyond the sum of directions yields
-            // direction-nil events (the v1 "OB recorded but not
-            // localized" case).
+            // Legacy: any count beyond the directional sum becomes a direction-nil event.
             let obLeft = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsLeft) ?? 0
             let obRight = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsRight) ?? 0
             let obLong = try container.decodeIfPresent(Int.self, forKey: .outOfBoundsLong) ?? 0
@@ -230,9 +175,7 @@ public struct HoleStat: Sendable, Equatable, Codable {
         try container.encodeIfPresent(layupDistance, forKey: .layupDistance)
     }
 
-    /// Folds the legacy 10-column counter shape into a `[PenaltyEvent]`
-    /// list. Public so the data layer's SQL/SwiftData migration can use
-    /// the same backfill logic the in-memory decoder applies.
+    /// Folds the legacy 10-column counter shape into a `[PenaltyEvent]` list.
     public static func eventsFromLegacy( // swiftlint:disable:this function_parameter_count
 
         obTotal: Int,
@@ -280,8 +223,7 @@ public struct HoleStat: Sendable, Equatable, Codable {
 
     // MARK: - Penalty accessors
 
-    /// Count of out-of-bounds events. Sums the events list; replaces
-    /// the old stored `outOfBoundsCount` column.
+    /// Count of out-of-bounds events.
     public var outOfBoundsCount: Int {
         penaltyEvents.lazy.filter { $0.kind == .outOfBounds }.count
     }
@@ -291,8 +233,7 @@ public struct HoleStat: Sendable, Equatable, Codable {
         penaltyEvents.lazy.filter { $0.kind == .hazard }.count
     }
 
-    /// Per-direction OB counts. Backwards-compat accessors for code
-    /// that previously read the dedicated columns.
+    /// Per-direction OB counts, for backwards-compat call sites.
     public var outOfBoundsLeft: Int {
         count(kind: .outOfBounds, direction: .left)
     }
@@ -331,84 +272,48 @@ public struct HoleStat: Sendable, Equatable, Codable {
 
     // MARK: - Derived
 
-    /// Number of bunker shots recorded. 0, 1, or 2 in normal play
-    /// (tee + approach can each be in sand). Drives `sandSave`.
+    /// 0, 1, or 2: tee and/or approach can each be in sand. Drives `sandSave`.
     public var bunkerCount: Int {
         (teeShotLie?.isBunker == true ? 1 : 0)
             + (approachLie?.isBunker == true ? 1 : 0)
     }
 
-    /// Green in regulation. The classic golf-stat rule:
-    /// - Par 3: tee shot finishes on the green.
-    /// - Par 4 / par 5: tee shot drives the green, or approach finishes there.
-    /// - **Plus** `strokes − putts ≤ par − 2` so a hole reached the green
-    ///   with one stroke to spare for two putts.
-    ///
-    /// The second clause matters when v1's UI lets the player tick
-    /// "approach on green" but they actually scrambled there (tee → bunker
-    /// → green isn't a GIR even though the approach landed on green).
-    /// Returns `false` if `strokes` or `putts` is zero (hole not yet
-    /// played) — same defensive guard as v1.
+    /// Ball on green in par minus 2 strokes, with enough strokes left for two putts.
     public var greenInRegulation: Bool {
         guard strokes > 0, putts > 0, putts <= strokes else { return false }
         let greenLanding = teeShotLie == .green ? teeShotLie : (par == 3 ? teeShotLie : approachLie)
         return greenLanding == .green && (strokes - putts) <= par - 2
     }
 
-    /// Fairway in regulation. Par 4+ only (a par 3's tee shot targets
-    /// the green, not a fairway). True iff the tee shot finished on the
-    /// fairway.
+    /// Par 4+ only: tee shot finished on the fairway.
     public var fairwayInRegulation: Bool {
         par >= 4 && teeShotLie == .fairway
     }
 
-    /// Whether this hole counts as a fairway-in-regulation *opportunity*
-    /// (the denominator for FIR rate). Par 4 and par 5 always; par 3
-    /// never.
+    /// Denominator for FIR rate: par 4 and 5 only.
     public var fairwayOpportunity: Bool {
         par >= 4
     }
 
-    /// Three-putt (or worse). Pure putt count; doesn't care about the
-    /// rest of the hole.
     public var threePutt: Bool {
         putts >= 3
     }
 
-    /// Up-and-down made. True if **either**:
-    /// - the player manually ticked `upAndDownSuccess`, OR
-    /// - the auto-rule fires: GIR was missed, exactly one putt was taken,
-    ///   and the hole was completed at or under par.
-    ///
-    /// The manual override exists because the auto-rule misses some real
-    /// up-and-downs (e.g. a chip-in counts: 0 putts; v1's auto-rule
-    /// requires `putts == 1` so the player has to tick the box).
+    /// Manually flagged, or GIR missed with exactly one putt at or under par
+    /// (covers chip-ins the auto-rule can't see).
     public var upAndDown: Bool {
         if upAndDownSuccess { return true }
         return !greenInRegulation && putts == 1 && strokes <= par
     }
 
-    /// Sand save made. True if **either**:
-    /// - the player manually ticked `sandSaveSuccess`, OR
-    /// - at least one bunker shot was recorded, exactly one putt was
-    ///   taken, and the hole was completed at or under par.
+    /// Manually flagged, or a bunker shot plus one putt at or under par.
     public var sandSave: Bool {
         if sandSaveSuccess { return true }
         return bunkerCount > 0 && putts == 1 && strokes <= par
     }
 
-    /// Effective penalty strokes for the hole.
-    ///
-    /// Formula: `max(penaltyStrokes, outOfBoundsCount + hazardCount)`.
-    ///
-    /// The max-not-sum is deliberate: v1's UI lets the player either tick
-    /// individual OB / hazard shots **or** type a manual penalty total;
-    /// taking the max prevents double-counting when both are entered. We
-    /// preserve that v1 contract verbatim — see plan invariant #3.
-    ///
-    /// Note this **under-weighs** OB (a real OB costs +2: stroke + distance)
-    /// but matches v1's stored value exactly. A future refinement is
-    /// noted in the plan's "open items".
+    /// Max of the manual total and the OB/hazard event count, to avoid double-counting.
+    /// Under-weighs OB (a real OB costs +2: stroke and distance).
     public var effectivePenaltyStrokes: Int {
         max(penaltyStrokes, outOfBoundsCount + hazardCount)
     }
@@ -417,9 +322,7 @@ public struct HoleStat: Sendable, Equatable, Codable {
 // MARK: - Lie helpers
 
 public extension Lie {
-    /// True if this lie is one of the four bunker variants. Used by
-    /// `HoleStat.bunkerCount` (and any UI categorisation that wants to
-    /// group "in the sand").
+    /// True if this lie is one of the four bunker variants.
     var isBunker: Bool {
         switch self {
         case .bunkerLeft, .bunkerRight, .bunkerShort, .bunkerLong:

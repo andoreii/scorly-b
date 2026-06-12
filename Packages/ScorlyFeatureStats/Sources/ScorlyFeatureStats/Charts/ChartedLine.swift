@@ -1,15 +1,9 @@
 import ScorlyDesignSystem
 import SwiftUI
 
-/// Taller cousin of `Sparkline`. Same single-stroke ink line + dashed
-/// mean baseline + endpoint marker as the original, but at chart
-/// scale (default 96pt) with a two-line "AVG" label anchored top-left
-/// so the magnitude is readable without the surrounding parent
-/// having to display the same number elsewhere.
-///
-/// Format of the label adapts to the series kind:
-///   - `.percent`  →  "58%"   (FIR / GIR / 3-putt rate when expressed as a rate)
-///   - `.decimal`  →  "32.1"  (avg putts per round, average 3-putts per round)
+/// Taller cousin of `Sparkline` — same line + mean baseline + endpoint
+/// marker, but at chart scale (default 96pt) with an "AVG" label
+/// top-left so the magnitude reads without a separate caption.
 struct ChartedLine: View {
     enum Format {
         case percent
@@ -22,8 +16,7 @@ struct ChartedLine: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            // Background sparkline canvas, identical drawing logic to
-            // `Sparkline` but at full height.
+            // Same drawing logic as `Sparkline`, at full height.
             Canvas { ctx, size in
                 guard series.count > 1 else {
                     if let last = series.last {
@@ -38,8 +31,7 @@ struct ChartedLine: View {
                 let mean = series.reduce(0, +) / Double(series.count)
                 let step = size.width / CGFloat(series.count - 1)
 
-                // Dashed mean baseline so the value rendered in the
-                // AVG label has a visual anchor on the chart.
+                // Dashed baseline anchors the AVG label to the chart.
                 let meanY = yFor(mean, minV: minV, range: range, size: size)
                 var baseline = Path()
                 baseline.move(to: CGPoint(x: 0, y: meanY))
@@ -68,9 +60,7 @@ struct ChartedLine: View {
                     drawEndpoint(ctx: ctx, at: CGPoint(x: xPos - 3, y: yPos))
                 }
             }
-            // Top-left two-line label so the magnitude reads at a
-            // glance even without a separate caption next to the
-            // chart.
+            // Top-left two-line magnitude label.
             VStack(alignment: .leading, spacing: 2) {
                 Text("AVG")
                     .font(BrutalistType.monoMicro)
@@ -101,8 +91,7 @@ struct ChartedLine: View {
 
     private func yFor(_ value: Double, minV: Double, range: Double, size: CGSize) -> CGFloat {
         let norm = (value - minV) / range
-        // Inset top by ~30pt so the AVG label has room without
-        // colliding with the line.
+        // Top inset leaves room for the AVG label.
         let topInset: CGFloat = 32
         let bottomInset: CGFloat = 6
         let padded = size.height - topInset - bottomInset

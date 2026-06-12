@@ -24,10 +24,7 @@ public enum Motion {
 
     // MARK: - Reduce Motion fallback
 
-    /// Returns a crossfade-style animation when Reduce Motion is on,
-    /// otherwise the requested curve. Use this everywhere
-    /// non-essential motion is applied so accessibility is honored
-    /// without per-call boilerplate.
+    /// Crossfade when Reduce Motion is on, otherwise the requested curve.
     public static func adaptive(_ animation: Animation, reduceMotion: Bool) -> Animation {
         reduceMotion ? .easeOut(duration: 0.18) : animation
     }

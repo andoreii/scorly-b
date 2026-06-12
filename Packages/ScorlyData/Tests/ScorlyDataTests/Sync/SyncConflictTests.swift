@@ -4,9 +4,7 @@ import SwiftData
 import Testing
 @testable import ScorlyData
 
-/// Pull-side last-write-wins. Two scenarios:
-/// 1. Pulled row is newer than the local cache → local row updates.
-/// 2. Pulled row is OLDER than local → no overwrite (LWW respects time).
+/// Pull-side last-write-wins: newer pulled rows overwrite local, older ones are ignored.
 struct SyncConflictTests {
     @Test("Newer pulled goal overwrites the local version (LWW)")
     func newerPullWins() async throws {

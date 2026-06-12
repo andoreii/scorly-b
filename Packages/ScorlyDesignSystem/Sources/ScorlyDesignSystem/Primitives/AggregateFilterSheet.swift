@@ -2,11 +2,8 @@ import SwiftUI
 
 /// Bottom-sheet body for picking aggregate eligibility (holes / format /
 /// round type / tees) and an optional sample-window choice. Raw-string
-/// parameterised so the DesignSystem can stay free of domain imports —
-/// each host feature converts to/from its typed filter model.
-///
-/// Selection semantics: an empty `Set<String>` for a category means
-/// "include all values for that category", matching the brief's rule.
+/// parameterised so the DesignSystem stays free of domain imports.
+/// An empty `Set<String>` for a category means "include all values".
 public struct AggregateFilterSheet: View {
     public struct Group: Identifiable {
         public let id: String

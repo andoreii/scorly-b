@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Per-round hit-rate sample for the trend chart inside the
-/// accuracy card. Percentage is 0…1.
+/// Per-round hit-rate sample for the trend chart. Percentage is 0…1.
 public struct AccuracyTrendPoint: Sendable, Equatable, Hashable {
     public let date: Date
     public let hitRate: Double
@@ -13,13 +12,8 @@ public struct AccuracyTrendPoint: Sendable, Equatable, Hashable {
 }
 
 /// Accuracy card — hazard-coded windrose + 20-round hit-% line graph.
-/// Two surfaces: `kind == .fairway` (Fairways / FIR) and
-/// `kind == .green` (Greens / GIR). Both use the same composition.
-///
-/// The card collapses the data shape into three hazard tiers — rough
-/// (recoverable miss), bunker (sand), OB (penalty, includes water).
-/// Color is reserved for hazards + the improving/declining indicator;
-/// everything else is ink-on-bone.
+/// Covers both `.fairway` (FIR) and `.green` (GIR) via the same composition.
+/// Color is reserved for hazard tiers + trend indicator; rest is ink-on-bone.
 public struct AccuracyTrendCard: View {
     private let kind: AccuracyRoseKind
     private let values: AccuracyRoseValues
@@ -111,9 +105,7 @@ public struct AccuracyTrendCard: View {
         }
     }
 
-    /// Delta in percentage points between the mean of the last 5
-    /// hit-rates and the first 5. nil until at least 10 rounds are
-    /// available — the indicator simply hides instead of bluffing.
+    /// Delta (pts) between mean of last 5 and first 5 hit-rates. nil until 10+ rounds.
     private var trendDelta: Double? {
         guard trend.count >= 10 else { return nil }
         let recent = trend.suffix(5).map(\.hitRate)
@@ -253,10 +245,8 @@ extension AccuracyRoseKind {
 
 // MARK: - Hazard palette
 
-/// Scoped hazard palette. These three accents are unique to the
-/// accuracy card — they encode WHERE a missed shot ended (rough /
-/// bunker / OB). Not promoted to BrutalistColor because they're not
-/// meant to be reused as semantic tokens.
+/// Hazard palette encoding where a missed shot ended (rough / bunker / OB).
+/// Scoped here, not promoted to BrutalistColor since these aren't reusable semantic tokens.
 enum AccuracyHazardPalette {
     static let rough = Color(red: 0x8A / 255, green: 0x87 / 255, blue: 0x80 / 255)
     static let bunker = Color(red: 0xC9 / 255, green: 0xA8 / 255, blue: 0x6B / 255)
@@ -266,14 +256,12 @@ enum AccuracyHazardPalette {
 
 // MARK: - Windrose
 
-/// Four-sector hazard-stacked windrose. Center disc radius scales with
-/// hit rate; each sector grows outward as that direction's miss share
-/// grows, stacked rough→bunker→OB.
+/// Four-sector hazard-stacked windrose. Disc radius scales with hit rate;
+/// each sector grows outward with miss share, stacked rough→bunker→OB.
 private struct AccuracyWindrose: View {
     let values: AccuracyRoseValues
 
-    /// Compass-style directions, 0° = up, clockwise. We render all four
-    /// for both surfaces; an empty sector simply doesn't draw.
+    /// Compass-style directions, 0° = up, clockwise. Empty sectors just don't draw.
     private struct Sector {
         let direction: AccuracyRoseValues.Direction
         let word: String
@@ -287,8 +275,7 @@ private struct AccuracyWindrose: View {
         Sector(direction: .left, word: "LEFT", centerAngle: 270)
     ]
 
-    /// Geometry constants, scaled to the canvas side length. Match the
-    /// design's reference (240 px) ratios.
+    /// Geometry constants scaled to canvas side length, matching the 240px design reference.
     private struct Geometry {
         let center: CGPoint
         let r0: CGFloat      // disc zone radius
@@ -354,8 +341,7 @@ private struct AccuracyWindrose: View {
     }
 
     private func drawSectors(ctx: inout GraphicsContext, geo: Geometry) {
-        // Normalise sector growth against the loudest direction so
-        // the rose visually balances even when totals are small.
+        // Normalise against the loudest direction so the rose balances even with small totals.
         let totals = Self.sectors.map { stack(for: $0.direction).total }
         let maxTotal = max(totals.max() ?? 0, 1)
         let range = geo.maxOuter - geo.r0
@@ -366,8 +352,7 @@ private struct AccuracyWindrose: View {
             guard length > 0.3 else { continue }
             let a1 = sector.centerAngle - geo.halfAngle
             let a2 = sector.centerAngle + geo.halfAngle
-            // Stack rough → bunker → OB outward. Water folds into OB
-            // since both incur penalty strokes.
+            // Stack rough → bunker → OB outward. Water folds into OB (both penalty strokes).
             let stacks: [(count: Int, color: Color)] = [
                 (m.clean, AccuracyHazardPalette.rough),
                 (m.bunker, AccuracyHazardPalette.bunker),
@@ -443,9 +428,8 @@ private struct AccuracyWindrose: View {
         values.byDirection[direction] ?? .init()
     }
 
-    /// Annular sector built as two ring arcs joined by radial lines.
-    /// Compass-degree inputs (0° = up, clockwise). Converted to math
-    /// angles (0° = east, +CCW) for `Path.addArc`.
+    /// Annular sector as two ring arcs joined by radial lines. Compass-degree
+    /// inputs converted to math angles (0° = east, +CCW) for `Path.addArc`.
     private func sectorPath(
         center: CGPoint,
         r1: CGFloat,
@@ -489,9 +473,8 @@ private struct AccuracyWindrose: View {
 
 // MARK: - Hit-% line chart
 
-/// Single-series line chart for the bottom half of the accuracy card.
-/// Solid ink stroke, hollow dots with the last filled, right-edge
-/// numeric tag, dashed gridlines every 10 percentage points.
+/// Single-series line chart: solid ink stroke, hollow dots (last one filled),
+/// right-edge numeric tag, dashed gridlines every 10 percentage points.
 private struct AccuracyHitLineChart: View {
     let points: [AccuracyTrendPoint]
 
@@ -545,8 +528,7 @@ private struct AccuracyHitLineChart: View {
                 style: StrokeStyle(lineWidth: 1.9, lineJoin: .round)
             )
 
-            // Dots — hollow until the last, which fills solid ink so
-            // the eye snaps to "now".
+            // Dots hollow except the last, which fills solid so the eye snaps to "now".
             for (i, v) in values.enumerated() {
                 let isLast = i == values.count - 1
                 let r: CGFloat = isLast ? 3.4 : 2.2

@@ -3,8 +3,7 @@ import Foundation
 import UIKit
 #endif
 
-/// Tiny haptic facade. Centralizes the design system's vocabulary of
-/// physical feedback so individual call sites stay declarative.
+/// Tiny haptic facade centralizing the design system's feedback vocabulary.
 @MainActor
 public enum Haptics {
     /// Default press feedback for any interactive primitive.

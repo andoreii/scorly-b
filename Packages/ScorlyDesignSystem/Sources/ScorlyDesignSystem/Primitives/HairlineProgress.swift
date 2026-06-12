@@ -1,10 +1,7 @@
 import SwiftUI
 
 /// 1px indeterminate progress bar with a mono `SYNCING…` caption.
-/// Brutalist alternative to `UIActivityIndicator` / `ProgressView` —
-/// the bar lives at the top of a screen, slides in when async work
-/// starts, slides out when it finishes. Width animates a 25%-wide
-/// sweep from left to right and loops.
+/// Slides in/out at the top of a screen during async work.
 public struct HairlineProgress: View {
     private let isLoading: Bool
     private let caption: String

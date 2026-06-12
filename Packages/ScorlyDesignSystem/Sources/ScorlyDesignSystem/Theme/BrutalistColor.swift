@@ -1,12 +1,8 @@
 import SwiftUI
 
-/// Brutalist palette. Bone-cream paper, ink type, no accent. Token
-/// names mirror the React design source 1:1 so spotting a misuse in
-/// review is trivial.
-///
-/// Values are intentionally tinted away from absolute black / white —
-/// `bg` carries warmth, `fg` carries a hint of warm ink, so the page
-/// reads like aged paper instead of an LCD.
+/// Brutalist palette. Bone-cream paper, ink type, no accent. Token names
+/// mirror the React design source 1:1. Values are tinted off pure black/white
+/// so the page reads like aged paper instead of an LCD.
 public enum BrutalistColor {
     /// Page ground — bone-cream paper. `#EFEBE2`.
     public static let bg = Color(red: 0xEF / 255, green: 0xEB / 255, blue: 0xE2 / 255)
@@ -33,15 +29,9 @@ public enum BrutalistColor {
 
     // MARK: - Strokes Gained accents
 
-    //
-    // **Documented exception.** DESIGN.md states the accent budget is
-    // zero and "no accent color ever." Strokes Gained is the single,
-    // deliberate carve-out: green/red here are *notation* — same role
-    // as the circle-under-par / box-over-par convention in `Pip` —
-    // encoding the direction of a signed number. They are only used in
-    // `StrokesGainedCard` (`SGDivergingBars`, `SGHoleTimeline`, and the
-    // summary cells). Never use these tokens for buttons, highlights,
-    // or "important" things. The rest of the app remains accent-free.
+    // Documented exception to the "no accent color" rule: green/red here are
+    // notation for signed SG values, used only in StrokesGainedCard. Don't reuse
+    // for buttons/highlights.
 
     /// Muted green for strokes gained. `#2F6B3A`.
     public static let sgPos = Color(red: 0x2F / 255, green: 0x6B / 255, blue: 0x3A / 255)
@@ -54,14 +44,10 @@ public enum BrutalistColor {
 
     // MARK: - Score grid
 
-    //
-    // Score-distribution + hole-heatmap palette. Same notation rationale
-    // as the SG accents above — green/red/bogey here encode the
-    // direction of a score relative to par, not decoration. Used only by
-    // the Trend page's distribution bars and hole-by-hole heat grid.
+    // Score-distribution + hole-heatmap palette. Same notation rationale as
+    // SG accents above — encodes score relative to par, not decoration.
 
-    /// Warm ochre for bogey cells. `#B5862A`, OKLCH ~ L 0.66 / C 0.10 /
-    /// H 78 — sits between sand and ink on bone paper.
+    /// Warm ochre for bogey cells. `#B5862A`.
     public static let bogey = Color(red: 0xB5 / 255, green: 0x86 / 255, blue: 0x2A / 255)
     /// Low-opacity ochre fill for bogey grid cells.
     public static let bogeyFill = bogey.opacity(0.22)

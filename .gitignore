@@ -71,17 +71,6 @@ Inspiration/
 *.reference
 *.reference.*
 
-# AI assistant context files (kept locally, never committed)
-CLAUDE.md
-AGENTS.md
-.claude/
-.cursor/
-.cursorrules
-.aider*
-.continue/
-.codeium/
-GEMINI.md
-
 # Project docs (kept locally, never committed)
 PRODUCT.md
 DESIGN.md

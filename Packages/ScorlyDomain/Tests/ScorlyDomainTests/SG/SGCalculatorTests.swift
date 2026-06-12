@@ -28,7 +28,6 @@ struct SGCalculatorTests {
         let table = SGBenchmarkTable.bundled
         let start = ShotPosition(lie: .fairway, distance: 100)
         let end = ShotEnd.position(ShotPosition(lie: .green, distance: 5))
-        // E(fairway, 100) = 2.80; E(green, 5) = 1.23; SG = 2.80 − 1.23 − 1 = 0.57
         #expect(SGCalculator.shotSG(start: start, end: end, benchmarks: table) == dec("0.57"))
     }
 
@@ -36,7 +35,6 @@ struct SGCalculatorTests {
     func holedShotFormula() {
         let table = SGBenchmarkTable.bundled
         let start = ShotPosition(lie: .green, distance: 5)
-        // E(green, 5) = 1.23; holed → SG = 1.23 − 1 = 0.23
         #expect(SGCalculator.shotSG(start: start, end: .holed, benchmarks: table) == dec("0.23"))
     }
 
@@ -66,7 +64,6 @@ struct SGCalculatorTests {
             SGShotResult(category: .ott, strokesGained: nil),
             SGShotResult(category: .app, strokesGained: dec("0.2")),
             SGShotResult(category: .putt, strokesGained: dec("-0.1")),
-            // .arg has no entries → totals.arg should be 0.
         ]
         let totals = SGCalculator.aggregate(shots)
         #expect(totals.ott == dec("0.5"))
@@ -104,16 +101,10 @@ struct SGCalculatorTests {
         let result = SGCalculator.computeHole(input)
         #expect(result.shots.map(\.category) == [.ott, .app, .putt, .putt])
 
-        // OTT: E(tee, 400)=3.99 − E(fairway, 150)=2.945 − 1 = 0.045
         #expect(result.shots[0].strokesGained == dec("0.045"))
-        // APP: E(fairway, 150)=2.945 − E(green, 20)=1.87 − 1 = 0.075
         #expect(result.shots[1].strokesGained == dec("0.075"))
-        // PUTT 1: E(green, 20)=1.87 − E(green, 3)=1.04 − 1 = -0.17
         #expect(result.shots[2].strokesGained == dec("-0.17"))
-        // PUTT 2: holed from 3 ft. E(green, 3)=1.04 − 1 = 0.04
         #expect(result.shots[3].strokesGained == dec("0.04"))
-
-        // Total = 0.045 + 0.075 − 0.17 + 0.04 = -0.01
         #expect(result.totals.total == dec("-0.01"))
     }
 
@@ -131,9 +122,7 @@ struct SGCalculatorTests {
         let result = SGCalculator.computeHole(input)
         #expect(result.shots.count == 1)
         #expect(result.shots[0].category == .app)
-        // Par-3 tee uses fairway baseline. E(fairway, 165) interpolated:
-        // 160=2.98, 180=3.08 → 165 = 2.98 + (5/20)*0.10 = 3.005
-        // SG = 3.005 − 0 − 1 = 2.005
+        // Par-3 tee shots use the fairway baseline, interpolated.
         #expect(result.shots[0].strokesGained == dec("2.005"))
     }
 
@@ -150,7 +139,6 @@ struct SGCalculatorTests {
         )
         let result = SGCalculator.computeHole(input)
         #expect(result.shots.map(\.category) == [.app, .putt, .putt])
-        // APP: E(fairway, 150)=2.945 − E(green, 25)=1.94 − 1 = 0.005
         #expect(result.shots[0].strokesGained == dec("0.005"))
     }
 
@@ -169,17 +157,12 @@ struct SGCalculatorTests {
             strokes: 3
         )
         let result = SGCalculator.computeHole(input)
-        // Categories: OTT, APP, ARG (holed)
         #expect(result.shots.map(\.category) == [.ott, .app, .arg])
-        // OTT: E(tee, 540)=4.65 − E(fairway, 260)=3.58 − 1 = 0.07
         #expect(result.shots[0].strokesGained == dec("0.07"))
-        // APP: no landing distance recorded → defaults to (rough, 20yd).
-        //   E(fairway, 260)=3.58 − E(rough, 20)=2.59 − 1 = -0.01
+        // No landing distance recorded -> defaults to (rough, 20yd).
         #expect(result.shots[1].strokesGained == dec("-0.01"))
-        // ARG (holed chip): E(rough, 20)=2.59 − 0 − 1 = 1.59
         #expect(result.shots[2].strokesGained == dec("1.59"))
         #expect(result.totals.arg == dec("1.59"))
-        // Total telescopes to E(tee, 540) − strokes = 1.65
         #expect(result.totals.total == dec("1.65"))
     }
 
@@ -196,19 +179,13 @@ struct SGCalculatorTests {
             strokes: 4
         )
         let result = SGCalculator.computeHole(input)
-        // 2 ARG shots — intermediate uses the 10yd intermediate default,
-        // last is holed. Every shot is bounded; no nils.
+        // Intermediate ARG shot uses the 10yd default; last is holed.
         #expect(result.shots.map(\.category) == [.ott, .app, .arg, .arg])
-        // OTT = 0.07, APP = -0.01 (same chain entry as par5ChipInNoPutts)
         #expect(result.shots[0].strokesGained == dec("0.07"))
         #expect(result.shots[1].strokesGained == dec("-0.01"))
-        // ARG[0]: E(rough, 20)=2.59 − E(rough, 10)=2.34 − 1 = -0.75
         #expect(result.shots[2].strokesGained == dec("-0.75"))
-        // ARG[1]: E(rough, 10)=2.34 − 0 − 1 = 1.34
         #expect(result.shots[3].strokesGained == dec("1.34"))
-        // ARG total = -0.75 + 1.34 = 0.59
         #expect(result.totals.arg == dec("0.59"))
-        // Total telescopes to E(tee, 540) − 4 = 0.65
         #expect(result.totals.total == dec("0.65"))
     }
 
@@ -228,20 +205,14 @@ struct SGCalculatorTests {
         )
         let result = SGCalculator.computeHole(input)
         #expect(result.shots.map(\.category) == [.ott, .app, .arg, .putt, .putt])
-        // OTT: E(tee, 380)=3.96 − E(fairway, 140)=2.91 − 1 = 0.05
         #expect(result.shots[0].strokesGained == dec("0.05"))
-        // APP: no landing distance → bunker default = 12yd from pin.
-        //   E(sand, 12) = 2.43 + 0.2 × (2.53 − 2.43) = 2.45
-        //   APP = E(fairway, 140)=2.91 − 2.45 − 1 = -0.54
+        // No landing distance -> bunker default of 12yd from pin.
         #expect(result.shots[1].strokesGained == dec("-0.54"))
-        // ARG (chip onto green): E(sand, 12)=2.45 − E(green, 10)=1.61 − 1 = -0.16
         #expect(result.shots[2].strokesGained == dec("-0.16"))
-        // PUTT1: E(green, 10)=1.61 − E(green, 2 clamps to 1.04) − 1 = -0.43
+        // 2ft putt clamps to the 1.04 (3ft) benchmark.
         #expect(result.shots[3].strokesGained == dec("-0.43"))
-        // PUTT2: E(green, 2 → 1.04) − 0 − 1 = 0.04
         #expect(result.shots[4].strokesGained == dec("0.04"))
         #expect(result.totals.arg == dec("-0.16"))
-        // Total telescopes to E(tee, 380) − 5 = -1.04
         #expect(result.totals.total == dec("-1.04"))
     }
 
@@ -262,13 +233,9 @@ struct SGCalculatorTests {
             argShots: [ARGShot(lie: .roughLeft, distanceToPinYards: 25)]
         )
         let result = SGCalculator.computeHole(input)
-        // APP end at rough, 25yd: E(rough, 25) = 2.59 + 0.5 × (2.70 − 2.59) = 2.645
-        //   APP = E(fairway, 140)=2.91 − 2.645 − 1 = -0.735
         #expect(result.shots[1].strokesGained == dec("-0.735"))
-        // ARG uses the user-recorded distance (25yd rough).
-        //   ARG = E(rough, 25)=2.645 − E(green, 6)=1.34 − 1 = 0.305
+        // ARG uses the user-recorded distance (25yd rough), not a default.
         #expect(result.shots[2].strokesGained == dec("0.305"))
-        // Total still telescopes to E(tee, 380) − 5 = -1.04
         #expect(result.totals.total == dec("-1.04"))
     }
 
@@ -287,15 +254,11 @@ struct SGCalculatorTests {
             layupDistance: 100
         )
         let result = SGCalculator.computeHole(input)
-        // Categories: OTT, APP (layup), APP (approach), PUTT, PUTT
+        // Layup inserts a second APP shot between the tee shot and approach.
         #expect(result.shots.map(\.category) == [.ott, .app, .app, .putt, .putt])
-        // OTT: E(tee, 540)=4.65 − E(fairway, 280)=3.69 − 1 = -0.04
         #expect(result.shots[0].strokesGained == dec("-0.04"))
-        // Layup: E(fairway, 280)=3.69 − E(fairway, 100)=2.80 − 1 = -0.11
         #expect(result.shots[1].strokesGained == dec("-0.11"))
-        // Approach (onto green at 15ft): E(fairway, 100)=2.80 − E(green, 15)=1.78 − 1 = 0.02
         #expect(result.shots[2].strokesGained == dec("0.02"))
-        // Total = E(tee, 540) − 5 = -0.35
         #expect(result.totals.total == dec("-0.35"))
     }
 
@@ -334,9 +297,8 @@ struct SGCalculatorTests {
             strokes: 4
         )
         let result = SGCalculator.computeHole(input)
-        // OTT start is known (.tee, 400), end is unknown → SG nil.
+        // OTT end and APP start are both unknown -> nil SG for those shots.
         #expect(result.shots[0].strokesGained == nil)
-        // APP start is unknown (no tee shot lie) → SG nil.
         #expect(result.shots[1].strokesGained == nil)
         // Putts still compute.
         #expect(result.shots[2].strokesGained != nil)
@@ -390,11 +352,9 @@ struct SGCalculatorTests {
         )
         let round = SGCalculator.compute(holes: [hole1, hole2])
         #expect(round.holes.count == 2)
-        // Round totals.ott = hole1.ott + hole2.ott (hole2 has no OTT shots = 0)
+        // hole2 has no OTT shots, so round OTT == hole1's alone.
         #expect(round.totals.ott == round.holes[0].totals.ott)
-        // Round totals.app = hole1.app + hole2.app
         #expect(round.totals.app == round.holes[0].totals.app + round.holes[1].totals.app)
-        // Round total = sum of all 4 categories
         #expect(
             round.totals.total ==
                 round.totals.ott + round.totals.app + round.totals.arg + round.totals.putt

@@ -1,10 +1,7 @@
 import Foundation
 
-/// Mean of per-category Strokes Gained across every round in `rounds`
-/// that has SG data and is not the round identified by `id`. Returns
-/// `nil` if no other round contributes — in which case the caller
-/// (e.g. the Round Detail SG card) hides the ghost markers and the
-/// "vs season" delta.
+/// Mean of per-category SG across other rounds with SG data, excluding `id`.
+/// `nil` if no other round contributes, so the caller can hide the "vs season" delta.
 public func sgSeasonAverages(
     excluding id: UUID,
     from rounds: [CompletedRound]

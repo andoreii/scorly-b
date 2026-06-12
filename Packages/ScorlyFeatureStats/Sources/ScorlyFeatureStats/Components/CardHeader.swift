@@ -1,13 +1,8 @@
 import ScorlyDesignSystem
 import SwiftUI
 
-/// Shared header for every Trend-page card. Mirrors the
-/// design-system Strokes Gained card: a mono uppercase meta label
-/// above a sans hero title on the left, optional mono trailing tag
-/// (N=count, etc.) on the right.
-///
-/// Using one component for all cards keeps the rhythm consistent and
-/// makes future copy / typography tweaks a single-file change.
+/// Shared header for every Trend-page card: mono uppercase meta label
+/// above a sans hero title, optional mono trailing tag on the right.
 struct CardHeader: View {
     let meta: String
     let title: String

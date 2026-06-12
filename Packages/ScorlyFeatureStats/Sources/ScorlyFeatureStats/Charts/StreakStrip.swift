@@ -1,17 +1,8 @@
 import ScorlyDesignSystem
 import SwiftUI
 
-/// Hot/cold streak strip. One cell per round in chronological order.
-/// Each cell renders the round's vs-par result in the scorecard
-/// notation vocabulary:
-///
-///   under par → bone cell, ink-circled mono number (good)
-///   even par  → bone cell, plain mono number
-///   over par  → inverse cell (ink ground, bone mono number), the
-///               "bogey" square spirit
-///
-/// The strip reads as a 20-cell ticker — pattern visible at a
-/// glance, exact magnitude legible on demand.
+/// Hot/cold streak strip. One cell per round, chronological order.
+/// Under par = circled number, even par = plain, over par = inverse cell.
 struct StreakStrip: View {
     /// vs-par values, oldest → newest.
     let values: [Int]

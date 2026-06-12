@@ -1,12 +1,8 @@
 import ScorlyDesignSystem
 import ScorlyDomain
 
-/// Aggregate per-round metrics shared between Sign & File (in-progress
-/// round about to be filed) and Round Detail (filed round in History).
-/// Sits in a feature-shared package because it maps Domain `HoleStat`
-/// onto DesignSystem value types — neither side of the boundary can
-/// own this without breaking the `ArchitectureTests` invariant that DS
-/// stays Domain-free.
+/// Maps Domain `HoleStat` to DesignSystem value types; shared so neither
+/// side breaks the DS-stays-Domain-free `ArchitectureTests` invariant.
 public struct RoundDetailMetrics {
     public let playedHoleCount: Int
     public let totalPutts: Int
@@ -21,9 +17,7 @@ public struct RoundDetailMetrics {
         self.init(holeStats: round.holeStats, holesPlayed: round.holesPlayed)
     }
 
-    /// Build metrics directly from raw hole stats — used by Sign & File,
-    /// which has `[HoleStat]` from `RoundPlayState.derivedStat(for:)`
-    /// but no `CompletedRound` until the save actually happens.
+    /// For Sign & File, which has `[HoleStat]` but no `CompletedRound` yet.
     public init(holeStats: [HoleStat], holesPlayed: HolesPlayed) {
         let played = holeStats.filter { $0.strokes > 0 }
         playedHoleCount = played.count

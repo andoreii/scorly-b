@@ -1,13 +1,7 @@
 import SwiftUI
 
-/// Page-level container. Bone-cream ground, safe-area padding,
-/// horizontal padding 18. Wrap every screen in this so the iOS status
-/// bar never overlaps content.
-///
-/// `scrollable` defaults to `true` — the standard idiom is a vertical
-/// scroll. Set to `false` for fixed-layout landing screens (Home),
-/// where content must fit above the fold; content is laid out in a
-/// non-scrolling VStack that fills the safe area exactly.
+/// Page-level container with safe-area + horizontal padding. Wrap every screen in this.
+/// `scrollable: false` for fixed-layout landing screens where content must fit above the fold.
 public struct ScreenShell<Content: View>: View {
     private let scrollable: Bool
     private let content: () -> Content

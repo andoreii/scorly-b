@@ -41,9 +41,8 @@ public enum RadarAxisKey: String, CaseIterable, Sendable {
         }
     }
 
-    /// Medium-length form used by the radar polygon — needs to fit
-    /// next to the spoke without overflowing the card. The full name
-    /// still appears in the expanded Areas table and the summary strip.
+    /// Medium-length form for the radar polygon, sized to fit next to
+    /// the spoke without overflowing the card.
     public var polygonLabel: String {
         switch self {
         case .putting: "PUTTING"
@@ -128,9 +127,8 @@ public extension RadarAxis {
     }
 
     /// Build all eight axes from measurements recorded on the scorecard.
-    /// SG is kept in its dedicated analysis block; it is not used here
-    /// because historical/imported shots cannot fully reconstruct missed
-    /// approach and recovery endpoints.
+    /// SG isn't used here since imported rounds can't fully reconstruct
+    /// missed approach/recovery endpoints.
     static func makeAll(window: [CompletedRound], season: [CompletedRound]) -> [RadarAxis] {
         RadarAxisKey.allCases.map { key in
             RadarAxis(
@@ -307,7 +305,6 @@ public extension RadarAxis {
 
     /// Linear map `value ∈ [lower, upper] → 0…100`, clamped. If
     /// `lower > upper` the map is inverted (lower-is-better metrics).
-    /// Tests pin behaviour at the anchors via this entry point.
     static func percentile(value: Double, lower: Double, upper: Double) -> Int {
         let span = upper - lower
         guard span != 0 else { return clampPercentile(value >= lower ? 100 : 0) }

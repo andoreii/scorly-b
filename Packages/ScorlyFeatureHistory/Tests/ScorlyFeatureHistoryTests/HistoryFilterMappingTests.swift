@@ -23,8 +23,7 @@ struct HistoryFilterMappingTests {
     func editStateHolesLabels() {
         let filter = AggregateRoundFilter(holesPlayed: [.eighteen, .front9])
         let state = AggregateFilterEditState(from: filter)
-        // The mapping intentionally collapses front9/back9 into a single
-        // "9" chip — round-trip widens the selection but is stable.
+        // front9/back9 both collapse into a single "9" chip.
         #expect(state.holes == ["18", "9"])
     }
 

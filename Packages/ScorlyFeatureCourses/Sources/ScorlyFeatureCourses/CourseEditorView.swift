@@ -3,12 +3,8 @@ import ScorlyDesignSystem
 import ScorlyDomain
 import SwiftUI
 
-/// Add / Edit course screen. Editable fields: name, location, notes.
-/// On save, persists via the repository — for new drafts a standard
-/// par-72 graph is generated under the hood. Delete shows up only when
-/// editing an existing course; a two-step "tap to arm, tap to confirm"
-/// pattern keeps destructive actions a deliberate move without a
-/// modal alert (DESIGN.md bans modal-as-first-thought).
+/// Add / Edit course screen. Delete uses a two-step "tap to arm, tap to
+/// confirm" pattern instead of a modal alert (DESIGN.md bans modals).
 public struct CourseEditorView: View {
     let coursesRepository: any CoursesRepository
     let userId: UUID
@@ -182,8 +178,7 @@ public struct CourseEditorView: View {
         }
     }
 
-    /// Two-step delete: first tap arms (shifts the row to "TAP AGAIN
-    /// TO CONFIRM"), second tap commits. No modal, no alert.
+    /// First tap arms the row; second tap commits the delete.
     private var deleteRow: some View {
         HStack {
             Text(deleteArmed ? "TAP AGAIN TO CONFIRM" : "DELETE THIS COURSE")

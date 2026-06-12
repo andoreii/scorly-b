@@ -1,16 +1,7 @@
 import SwiftUI
 
-/// Brutalist-tight tap target. SwiftUI's `Button` applies an implicit
-/// ~44pt minimum-touch-target expansion that `.contentShape` does not
-/// override, so taps register noticeably outside the visible rect.
-/// This modifier sidesteps `Button` entirely and uses an explicit
-/// `.contentShape(Rectangle())` + `.onTapGesture` pair, which honors
-/// the exact framed bounds. The `.isButton` accessibility trait keeps
-/// VoiceOver behavior parity.
-///
-/// Use `content.brutalistTap { action }` instead of wrapping content
-/// in a `Button` when pixel-tight hit areas matter (which is
-/// everywhere in this brutalist UI).
+/// Tap target that honors exact framed bounds, unlike `Button`'s implicit ~44pt expansion.
+/// Use `content.brutalistTap { action }` wherever pixel-tight hit areas matter.
 public extension View {
     func brutalistTap(disabled: Bool = false, action: @escaping () -> Void) -> some View {
         contentShape(Rectangle())

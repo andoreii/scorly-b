@@ -2,12 +2,8 @@ import Foundation
 import ScorlyDomain
 import SwiftData
 
-/// SwiftData-backed `GoalsRepository`. Every write is local-first:
-/// 1. Insert / update / delete the `LocalGoal` row.
-/// 2. Encode an `OutboxEntry` payload via `SyncEngine.enqueue(_:)`.
-///
-/// Both happen inside the same `ModelContext` save, so a crash between
-/// them is impossible — either both land or neither does.
+/// SwiftData-backed `GoalsRepository`. Local-first: writes the `LocalGoal` row and
+/// enqueues its outbox entry in the same `ModelContext` save.
 public actor GoalsRepositoryLive: GoalsRepository {
     nonisolated let userId: UUID
     nonisolated let syncEngine: SyncEngine
@@ -179,10 +175,7 @@ public actor GoalsRepositoryLive: GoalsRepository {
 
     // MARK: - Static helpers
 
-    /// Discriminator string for the `kind` column. Stable across versions
-    /// — `String(describing:)` on enum cases without payload is the case
-    /// name, but we use the explicit switch so adding a future case
-    /// surfaces as a compile error rather than a silent rename.
+    /// Explicit switch so a new `GoalKind` case is a compile error here, not a silent gap.
     static func discriminator(for kind: GoalKind) -> String {
         switch kind {
         case .scoreUnderOrEqual: "scoreUnderOrEqual"

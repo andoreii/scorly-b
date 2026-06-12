@@ -33,11 +33,7 @@ public enum ScorlyDesignSystem {
         }
     }
 
-    /// SPM's `.process` rule flattens `Resources/Fonts/*.ttf` to the
-    /// bundle root, so we look up by basename without a subdirectory.
-    /// Asserts loudly in DEBUG if either the URL is missing or
-    /// registration fails — a silent miss here would mean every
-    /// custom-font glyph silently falls back to SF Pro.
+    /// SPM's `.process` rule flattens `Resources/Fonts/*.ttf` to the bundle root.
     private static func registerFont(name: String) {
         guard let url = Bundle.module.url(forResource: name, withExtension: "ttf") else {
             assertionFailure("Missing bundled font: \(name).ttf")

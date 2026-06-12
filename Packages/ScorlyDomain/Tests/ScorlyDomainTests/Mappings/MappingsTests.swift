@@ -86,7 +86,6 @@ struct MappingsTests {
 
     @Test("Conditions CSV — round-trip every subset")
     func conditionsCSVRoundTripAllSubsets() {
-        // 2^4 = 16 subsets of the 4-flag set
         for mask in 0..<16 {
             let original = Conditions(rawValue: mask)
             let csv = Mappings.csv(for: original)

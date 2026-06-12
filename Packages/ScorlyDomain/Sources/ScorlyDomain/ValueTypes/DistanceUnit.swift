@@ -1,10 +1,7 @@
 import Foundation
 
-/// User's preferred unit for displaying distances.
-///
-/// Persisted to `UserDefaults` under `com.scorly.distanceUnit` (raw value).
-/// Storage in the DB and SwiftData is always canonical yards regardless;
-/// this type only governs presentation.
+/// User's preferred unit for displaying distances. Storage is always
+/// canonical yards; this only governs presentation.
 public enum DistanceUnit: String, Codable, CaseIterable, Hashable, Sendable {
     case yards
     case meters

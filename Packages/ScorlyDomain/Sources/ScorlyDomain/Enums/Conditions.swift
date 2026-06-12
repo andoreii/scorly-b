@@ -1,11 +1,7 @@
 import Foundation
 
-/// Weather conditions during the round. Multi-select.
-///
-/// Persisted in `rounds.conditions` as a comma-separated subset of the
-/// labels `Sunny, Cloudy, Windy, Rainy`. The CSV ↔ option-set codec
-/// lives in `Mappings.swift` (Phase B2); this type defines only the
-/// in-memory representation and the canonical label ordering.
+/// Weather conditions during the round. Multi-select; persisted as a
+/// comma-separated subset of labels (see Mappings.swift for the CSV codec).
 public struct Conditions: OptionSet, Hashable, Sendable {
     public let rawValue: Int
 
@@ -18,8 +14,7 @@ public struct Conditions: OptionSet, Hashable, Sendable {
     public static let windy = Self(rawValue: 1 << 2)
     public static let rainy = Self(rawValue: 1 << 3)
 
-    /// Stable ordering for serialization. Defines the canonical sequence
-    /// flags appear in the DB CSV (e.g. `"Sunny,Windy"`, never `"Windy,Sunny"`).
+    /// Canonical ordering for CSV serialization.
     public static let labeledFlags: [(label: String, flag: Self)] = [
         (label: "Sunny", flag: .sunny),
         (label: "Cloudy", flag: .cloudy),

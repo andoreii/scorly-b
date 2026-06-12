@@ -3,14 +3,8 @@ import ScorlyDomain
 import Supabase
 import SwiftData
 
-/// SwiftData-backed `RoundsRepository`. Persists `RoundDraft` + every
-/// `HoleStat` as `LocalRound` + `[LocalHoleStat]`, then enqueues outbox
-/// entries for each.
-///
-/// Reads return `[CompletedRound]` — the engine-shaped read aggregate.
-/// Drafts (`isDraft == true`) are excluded from reads and from sync; the
-/// in-progress round (Phase Z3) lives on the same model but is hidden
-/// from goal evaluation until finished.
+/// SwiftData-backed `RoundsRepository`. Persists rounds + hole stats locally and enqueues outbox entries.
+/// Drafts (`isDraft == true`) are excluded from reads and sync until finished.
 public actor RoundsRepositoryLive: RoundsRepository {
     nonisolated let userId: UUID
     nonisolated let syncEngine: SyncEngine
@@ -145,9 +139,7 @@ public actor RoundsRepositoryLive: RoundsRepository {
         let rounds = try modelContext.fetch(descriptor)
         var best: [UUID: Int] = [:]
         for local in rounds {
-            // Lightweight projection — we deliberately skip hydrating
-            // LocalHoleStat since AggregateRoundFilter only inspects
-            // metadata columns.
+            // Skip hydrating hole stats — filter only needs metadata columns.
             guard
                 let holesPlayed = HolesPlayed(rawValue: local.holesPlayed),
                 let totalScore = local.totalScore
@@ -213,10 +205,7 @@ public actor RoundsRepositoryLive: RoundsRepository {
             players: playersData
         )
         modelContext.insert(local)
-        // Capture each hole stat's external id once so the local row and the
-        // outbox payload reference the same UUID — that's the idempotency
-        // key the server-side `hole_stat_external_id` UNIQUE constraint uses
-        // to dedupe push retries.
+        // Same UUID used for the local row and outbox payload — server dedupes push retries on it.
         var pendingHoleStats: [RoundOutboxBody.PendingHoleStat] = []
         pendingHoleStats.reserveCapacity(round.holeStats.count)
         for (index, stat) in round.holeStats.enumerated() {
@@ -289,10 +278,7 @@ public actor RoundsRepositoryLive: RoundsRepository {
                 body: Self.encoder.encode(body)
             )
         )
-        // Fire-and-forget drain so the round reaches Supabase as soon as the
-        // network allows, rather than waiting for the next offline→online
-        // flip or the next app launch. Errors are absorbed inside drain
-        // (transient → backoff, permanent → dead-letter), so we don't await.
+        // Fire-and-forget drain to push immediately; drain handles its own errors.
         Task { [syncEngine] in _ = await syncEngine.drain() }
     }
 
@@ -401,18 +387,13 @@ public actor RoundsRepositoryLive: RoundsRepository {
         guard let holeStatsRemote else {
             throw RoundsRepositoryError.remoteUnavailable
         }
-        // Only rounds that already landed in Supabase (serverId != nil)
-        // are candidates — rows without serverId still have an outbox
-        // insert entry that will carry the full payload when it drains.
+        // Only rounds already synced (serverId != nil); others get their hole stats via outbox drain.
         let descriptor = FetchDescriptor<LocalRound>(
             predicate: #Predicate { $0.isDraft == false }
         )
         let locals = try modelContext.fetch(descriptor)
 
-        // Upsert complete rows on the non-partial `(round_id, hole_number)`
-        // constraint. That updates existing detail and recreates rows when
-        // a previous parent-round insert succeeded before its child batch
-        // failed.
+        // Upserts on (round_id, hole_number) recover from a parent insert succeeding before its hole stats did.
         var inserts: [HoleStatInsert] = []
         for local in locals {
             guard let roundId = local.serverId else { continue }
@@ -490,9 +471,7 @@ private extension RoundsRepositoryLive {
         )
     }
 
-    /// Per-tee, per-hole yardage map. Used to feed `SGCalculator` with
-    /// the hole length each shot started from. One global fetch, then a
-    /// nested-dictionary lookup keyed `[teeExternalId][holeNumber]`.
+    /// Per-tee, per-hole yardage map, keyed `[teeExternalId][holeNumber]`, for feeding `SGCalculator`.
     private func teeHoleYardageLookup() throws -> [UUID: [Int: Int]] {
         let teeHoles = try modelContext.fetch(FetchDescriptor<LocalTeeHole>())
         var byTee: [UUID: [Int: Int]] = [:]
@@ -513,10 +492,7 @@ private extension RoundsRepositoryLive {
         let stats: [HoleStat] = holeStats.map { stat in
             let teeLie = stat.teeShot.flatMap(Mappings.lie(fromV1ShotLocation:))
             let approachLie = stat.approach.flatMap(Mappings.lie(fromV1ShotLocation:))
-            // Par 3 is a single shot — historical v1 wrote it on tee_shot,
-            // some early v2 rounds wrote it on approach. Coalesce on read so
-            // the domain's par-3 GIR rule (which inspects teeShotLie) fires
-            // either way.
+            // Par 3 lies may be stored on either tee_shot or approach; coalesce so the GIR rule fires either way.
             let resolvedTee: Lie?
             let resolvedApproach: Lie?
             if stat.par == 3 {
@@ -578,16 +554,8 @@ private extension RoundsRepositoryLive {
         )
     }
 
-    /// Strokes Gained for a finished round, if every played hole carries
-    /// the minimum data the calculator needs: a tee yardage from
-    /// `LocalTeeHole` + recorded putt distances. Rounds logged before
-    /// distance capture was wired (v1 imports) fail this gate and get
-    /// `nil` SG; the detail view renders its placeholder card in that case.
-    ///
-    /// `SGCalculator` itself is tolerant of partial per-shot data
-    /// (missing distances → nil per-shot SG, aggregates skip nils), so
-    /// the gate here is a UX choice — distinguish "round had no SG
-    /// logging" from "round was a flat scratch performance".
+    /// Returns nil SG unless every hole has tee yardage and putt distances recorded,
+    /// so the UI can distinguish "no SG data" from "round with zero SG".
     private func computeSG(
         local: LocalRound,
         localStats: [LocalHoleStat],
@@ -653,7 +621,7 @@ private extension RoundsRepositoryLive {
     private func makeRoundInsert(from draft: RoundDraft) -> RoundInsert {
         RoundInsert(
             userId: draft.userId,
-            courseId: 0, // Update path: server-side lookup pending until Phase D round-edit lands.
+            courseId: 0, // TODO: server-side course lookup for update path
             teeId: nil,
             datePlayed: SupabaseConfig.dateOnlyFormatter.string(from: draft.datePlayed),
             holesPlayed: draft.holesPlayed.rawValue,
@@ -676,10 +644,7 @@ private extension RoundsRepositoryLive {
 
     // MARK: - ARG shots JSON codec
 
-    /// Encode `[ARGShot]` to a compact JSON string for SwiftData /
-    /// Supabase storage. Returns nil for nil / empty input so the
-    /// stored column stays NULL rather than `"[]"`, keeping the
-    /// "absent" semantics clean.
+    /// Returns nil for empty input so the column stores NULL rather than `"[]"`.
     static func encodeARGShots(_ shots: [ARGShot]?) -> String? {
         guard let shots, !shots.isEmpty else { return nil }
         let encoder = JSONEncoder()
@@ -702,10 +667,7 @@ private extension RoundsRepositoryLive {
 
     // MARK: - PenaltyEvent JSON codec
 
-    /// Encode `[PenaltyEvent]` to a compact JSON string for SwiftData
-    /// / Supabase storage. Returns nil for nil / empty input so the
-    /// stored column stays NULL rather than `"[]"`, keeping the
-    /// "no penalties" case distinct from "no data".
+    /// Returns nil for empty input to distinguish "no penalties" from "no data".
     static func encodePenaltyEvents(_ events: [PenaltyEvent]) -> String? {
         PenaltyEventJSONCodec.encode(events)
     }
@@ -717,11 +679,8 @@ private extension RoundsRepositoryLive {
 
 public enum RoundsRepositoryError: Error, LocalizedError, Sendable, Equatable {
     case notFound(UUID)
-    /// Repository wasn't constructed with a Supabase client (e.g. in-memory
-    /// preview path). The operation requires a network round-trip.
+    /// No Supabase client configured (e.g. in-memory preview).
     case remoteUnavailable
-    /// A retroactive backfill push failed. The wrapped string is the
-    /// underlying error's `localizedDescription` for surface in UI.
     case backfillFailed(String)
 
     public var errorDescription: String? {

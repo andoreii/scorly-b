@@ -1,10 +1,7 @@
 import Foundation
 import ScorlyDomain
 
-/// Local-only courses fixture so the Round Setup screen has real
-/// courses to cycle through while the supabase pipeline (phase 6) is
-/// not yet wired. None of this ships to the server — supabase
-/// migrations stay schema-only.
+/// Local fixture courses for Round Setup until the live repository lands.
 final class InMemoryCoursesRepository: CoursesRepository {
     private let courses: [Course]
 
@@ -26,9 +23,7 @@ final class InMemoryCoursesRepository: CoursesRepository {
 
     // MARK: - Seed
 
-    /// A handful of demo courses with realistic pars + tee yardages.
-    /// Same shape an eventual supabase course graph would take; phase 6
-    /// swaps this out for the live repository.
+    /// Demo courses with realistic pars + tee yardages.
     static func seed() -> [Course] {
         let userId = UUID()
         return [

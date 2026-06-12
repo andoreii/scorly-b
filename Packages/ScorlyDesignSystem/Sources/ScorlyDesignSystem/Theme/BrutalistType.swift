@@ -1,11 +1,7 @@
 import SwiftUI
 
-/// Typography tokens. Two families: Geist Sans for body + hero
-/// numerals, JetBrains Mono for labels + metadata + tabular figures.
-///
-/// All number-bearing displays should call `.monospacedDigit()` to
-/// turn on tabular numerals — the design requires perfect numeric
-/// alignment.
+/// Typography tokens: Geist Sans for body + hero numerals, JetBrains Mono for
+/// labels/metadata/figures. Number displays should call `.monospacedDigit()`.
 public enum BrutalistType {
     // MARK: - Family names (Postscript)
 
@@ -82,9 +78,8 @@ public enum BrutalistType {
 // MARK: - Convenience modifiers
 
 public extension View {
-    /// Apply tabular numerals + standard letter-spacing modifiers in
-    /// one go. Pass negative tracking for hero displays (-7 to -0.8)
-    /// and positive for mono labels (0.4 to 1.4).
+    /// Standard letter-spacing modifier. Negative for hero displays (-7 to -0.8),
+    /// positive for mono labels (0.4 to 1.4).
     func brutalistTracking(_ tracking: CGFloat) -> some View {
         kerning(tracking)
     }

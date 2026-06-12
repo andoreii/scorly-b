@@ -1,27 +1,17 @@
 import Foundation
 
-/// Locates source files inside the Scorly repo and inspects their
-/// `import` statements. Used by the architecture tests in this folder
-/// to pin the package layering rules from the v2 plan:
+/// Locates source files and inspects their `import` statements, used
+/// by the architecture tests to enforce package layering rules (Domain
+/// can't import UI/network/downstream packages, features can't import
+/// each other, etc).
 ///
-/// - `ScorlyDomain` may not import UIKit/SwiftUI/Supabase or any
-///   downstream package (Data / Features / DesignSystem).
-/// - `ScorlyData` may not import UIKit/SwiftUI or any feature package.
-/// - `ScorlyFeature*` may not import another `ScorlyFeature*`.
-///
-/// Implementation note: the alternative is a third-party AST tool
-/// (Harmonize / Sourcery). For the rules above — which only need to
-/// check import statements — a regex pass over the package's source
-/// files is just as reliable and ships with zero extra dependencies.
-/// If the rule set ever needs structural facts (subclass relationships,
-/// access-control conformance, etc.), that's the moment to swap in a
-/// real AST tool.
+/// A regex pass over imports is enough for these rules; only switch to
+/// a real AST tool if we need structural facts beyond imports.
 enum ArchitectureScanner {
     // MARK: - Repo discovery
 
-    /// Walks up from this file's location until it finds the directory
-    /// containing `project.yml`. Tests run with arbitrary cwd, so file
-    /// paths must be resolved from `#filePath`.
+    /// Walks up from this file's location to find the directory
+    /// containing `project.yml`, since tests can run with arbitrary cwd.
     static func repoRoot(file: StaticString = #filePath) -> URL {
         var dir = URL(fileURLWithPath: "\(file)").deletingLastPathComponent()
         let fileManager = FileManager.default
@@ -36,8 +26,7 @@ enum ArchitectureScanner {
         fatalError("Could not locate Scorly repo root from \(file)")
     }
 
-    /// Sources directory for a given SPM package, e.g.
-    /// `Packages/ScorlyDomain/Sources/ScorlyDomain`.
+    /// e.g. `Packages/ScorlyDomain/Sources/ScorlyDomain`.
     static func sourcesDirectory(for package: String) -> URL {
         repoRoot()
             .appendingPathComponent("Packages")
@@ -53,9 +42,7 @@ enum ArchitectureScanner {
 
     // MARK: - File walking
 
-    /// All `.swift` files under `directory`, recursively. Returns paths
-    /// relative to `repoRoot()` so test failures point at something a
-    /// human can find immediately.
+    /// All `.swift` files under `directory`, recursively.
     static func swiftFiles(under directory: URL) -> [URL] {
         let fileManager = FileManager.default
         guard
@@ -81,24 +68,8 @@ enum ArchitectureScanner {
 
     // MARK: - Import extraction
 
-    /// Returns the module names imported by `file`. Strips submodule
-    /// paths (`import Foundation.NSURL` → `Foundation`) and ignores
-    /// import attributes (`@testable import X`, `@_implementationOnly`,
-    /// etc.) so the caller only sees the top-level module.
-    ///
-    /// Handles the common forms:
-    /// ```swift
-    /// import Foundation
-    /// import struct Foundation.URL
-    /// @testable import ScorlyData
-    /// @_implementationOnly import Supabase
-    /// ```
-    /// Does NOT try to be a full Swift parser — line comments and
-    /// block-comment-aware stripping are sufficient because the rules
-    /// only need to detect deliberate imports. A determined developer
-    /// could hide one inside a multi-line string, but at that point the
-    /// rule is being intentionally subverted and any tooling would
-    /// fail.
+    /// Returns the top-level module names imported by `file`, stripping
+    /// submodule paths and import attributes (`@testable`, etc).
     static func importedModules(in file: URL) -> Set<String> {
         guard let contents = try? String(contentsOf: file, encoding: .utf8) else {
             return []
@@ -115,9 +86,8 @@ enum ArchitectureScanner {
         return modules
     }
 
-    /// Remove `//` line comments and `/* ... */` block comments from a
-    /// single source line. `inBlockComment` is threaded across lines so
-    /// multi-line `/* ... */` blocks are tracked correctly.
+    /// Strips `//` and `/* ... */` comments from a line; `inBlockComment`
+    /// tracks state across multi-line block comments.
     private static func stripComments(
         from rawLine: String,
         inBlockComment: inout Bool
@@ -150,10 +120,8 @@ enum ArchitectureScanner {
         return line.trimmingCharacters(in: .whitespaces)
     }
 
-    /// Parse a single comment-stripped line and return its top-level
-    /// imported module, or nil if the line is not an `import` statement.
-    /// Handles leading attributes (`@testable`, `@_implementationOnly`,
-    /// etc.) and the `import struct Foundation.URL` form.
+    /// Returns the imported module from a comment-stripped line, or nil
+    /// if it's not an import statement.
     private static func parseImport(from line: String) -> String? {
         guard !line.isEmpty else { return nil }
 
@@ -191,9 +159,8 @@ enum ArchitectureScanner {
 
     // MARK: - Reporting
 
-    /// Convenience: collect every (file, forbidden-module) pair under
-    /// `directory` whose imports match `forbidden`. Used to produce a
-    /// single rich failure message instead of one assert per file.
+    /// Collects every (file, forbidden-module) pair under `directory`
+    /// for a single combined failure message.
     static func forbiddenImports(
         under directory: URL,
         forbidden: Set<String>
@@ -209,8 +176,7 @@ enum ArchitectureScanner {
         return hits
     }
 
-    /// Render `forbiddenImports` as a multi-line string the developer
-    /// can paste into a fix.
+    /// Renders `forbiddenImports` as a multi-line string for failure output.
     static func renderHits(_ hits: [(file: URL, module: String)]) -> String {
         let root = repoRoot().path
         return hits

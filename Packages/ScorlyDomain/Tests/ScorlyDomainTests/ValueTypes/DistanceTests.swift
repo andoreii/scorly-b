@@ -21,18 +21,15 @@ struct DistanceTests {
     @Test("Meters convert with international yard exact ratio")
     func metersConversion() {
         let dist = Distance(yards: 100)
-        // 100 yd × 0.9144 = 91.44 m → rounds to 91
         #expect(dist.value(in: .meters) == 91)
         #expect(dist.meters == 91.44)
     }
 
     @Test("Constructing from meters rounds to nearest yard")
     func metersInputRounds() {
-        // 100 m / 0.9144 = 109.361… yd → rounds to 109
         let dist = Distance(100, unit: .meters)
         #expect(dist.yards == 109)
 
-        // Exact: 91.44 m == 100 yd
         let exact = Distance(91.44, unit: .meters)
         #expect(exact.yards == 100)
     }

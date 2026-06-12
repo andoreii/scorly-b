@@ -2,15 +2,10 @@ import ScorlyData
 import ScorlyDesignSystem
 import SwiftUI
 
-/// Routes between loading splash, sign-in form, and the authenticated
-/// content, driven by `AuthService.state`. The authenticated closure is
-/// composed in the app target so this package never needs to know what
-/// "home" looks like.
-///
-/// `onDevBypass` is an optional escape hatch the app target wires in
-/// DEBUG only — it lets the developer skip past the auth form when no
-/// signup flow exists yet. When the closure runs, the app target flips
-/// a bypass flag and re-renders the gate with `forceAuthenticated: true`.
+/// Routes between loading splash, sign-in form, and authenticated content
+/// based on `AuthService.state`.
+/// `onDevBypass` is a DEBUG-only escape hatch wired by the app target to
+/// skip auth when no signup flow exists yet.
 public struct AuthGateView<Authenticated: View>: View {
     private let authService: AuthService
     private let forceAuthenticated: Bool

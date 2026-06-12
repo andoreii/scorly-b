@@ -1,18 +1,9 @@
 import ScorlyDesignSystem
 import SwiftUI
 
-/// Eight-axis brutalist radar polygon. Single series — the windowed
-/// average across the sample. Comparison is the round-detail view's
-/// job; this is a season-snapshot read.
-///
-/// Layout math mirrors the React mock at `radar-chart.jsx`. The
-/// polygon, rings, spokes, ring scale, and vertex dots draw into a
-/// `Canvas`; axis labels (and the live value chip under each one)
-/// render as SwiftUI overlays positioned by angle around the polygon.
-/// Keeping labels out of the Canvas means they can sit outside the
-/// polygon's bounding circle without being clipped — the polygon
-/// itself can fill the available area instead of shrinking to leave
-/// room for axis text.
+/// Eight-axis brutalist radar polygon, single series (windowed average).
+/// Polygon/rings/spokes draw into a `Canvas`; axis labels render as
+/// SwiftUI overlays so they aren't clipped by the polygon's bounding circle.
 public struct SkillsRadarChart: View {
     public let axes: [RadarAxis]
     public var rings = 5
@@ -41,10 +32,7 @@ public struct SkillsRadarChart: View {
 
     // MARK: - Geometry
 
-    /// Geometry — the polygon centers in the available frame, with
-    /// the radius pegged to the shorter axis so the chart is round.
-    /// The label radius (where SwiftUI label overlays sit) is just
-    /// outside the polygon's outer ring.
+    /// Polygon centers in the frame, radius pegged to the shorter axis to stay round.
     private struct Geometry {
         let centerX: CGFloat
         let centerY: CGFloat
@@ -54,13 +42,8 @@ public struct SkillsRadarChart: View {
         let rings: Int
 
         init(size: CGSize, axisCount: Int, rings: Int) {
-            // labelRadius is the smaller of two caps so the polygon
-            // grows to fill whichever dimension is least constrained:
-            // * Vertical cap: leave 14pt of margin at 12 / 6 o'clock
-            //   for the value-chip + axis-label VStack.
-            // * Horizontal cap: keep the rightmost glyph of the
-            //   widest side label (~26pt half-width including
-            //   padding) at least 6pt clear of the canvas edge.
+            // labelRadius is the smaller of the vertical/horizontal caps so the
+            // polygon fills whichever dimension is least constrained.
             let halfShort = min(size.width, size.height) / 2
             let centerX = size.width / 2
             let verticalCap = halfShort - 14
@@ -166,10 +149,7 @@ public struct SkillsRadarChart: View {
 
     // MARK: - SwiftUI label overlays
 
-    /// Where a label sits relative to the polygon — drives the
-    /// vertical ordering of label / value so the value chip always
-    /// points AWAY from the polygon (the chip never sits on top of
-    /// the polygon's outer ring).
+    /// Drives label/value ordering so the value chip points away from the polygon.
     private enum LabelPlacement { case top, bottom, side }
 
     private func axisLabels(geom: Geometry) -> some View {
@@ -196,8 +176,7 @@ public struct SkillsRadarChart: View {
         var body: some View {
             VStack(spacing: 3) {
                 if placement == .top {
-                    // Value above label so the chip points UP, away
-                    // from the polygon's top vertex.
+                    // Value above label so the chip points up, away from the vertex.
                     value
                     label
                 } else {
@@ -241,8 +220,7 @@ public struct SkillsRadarChart: View {
 
     // MARK: - Helpers
 
-    /// Build a closed polygon path from a percent provider — used for
-    /// rings (constant percent) and series (per-axis percent).
+    /// Closed polygon path from a percent provider (constant for rings, per-axis for series).
     private func polygonPath(
         geom: Geometry,
         percentForAxis: (Int) -> Double

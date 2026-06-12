@@ -1,9 +1,7 @@
 import SwiftUI
 
-/// Per-category Strokes Gained values shaped for the design system.
-/// Mirrors `ScorlyDomain.SGTotals`. Defined here so this primitive
-/// layer can stay free of Domain imports (per ArchitectureTests).
-/// Callers map at the feature boundary.
+/// Per-category Strokes Gained values, mirrors `ScorlyDomain.SGTotals`.
+/// Defined here to keep this layer free of Domain imports (per ArchitectureTests).
 public struct SGCardValues: Sendable, Equatable {
     public let ott: Decimal
     public let app: Decimal
@@ -20,19 +18,13 @@ public struct SGCardValues: Sendable, Equatable {
     }
 }
 
-/// Strokes Gained "01 Full" panel — the literal port of the Claude
-/// design at `Scorly B Strokes Gained.html`. Header total + vs-season
-/// delta, 4-row category diverging bars with season-avg ghosts,
-/// 18-hole timeline with cumulative trace, and a best/worst/net
-/// summary strip.
+/// Strokes Gained "01 Full" panel: header total + vs-season delta, 4-row
+/// category diverging bars with season-avg ghosts, 18-hole cumulative
+/// timeline, and a best/worst/net summary strip.
 ///
-/// Accepts already-computed values (no `CompletedRound`) so the same
-/// card can be driven from a saved round on Round Detail or from a
-/// live `RoundPlayState` once Sign & File is unified with this layout.
-///
-/// `total == nil` triggers the placeholder branch: same frame +
-/// header, no bars/timeline/summary, inline mono message explaining
-/// SG requires distances.
+/// Accepts pre-computed values (no `CompletedRound`) so it can be driven from
+/// either a saved round or a live `RoundPlayState`. `total == nil` shows a
+/// placeholder explaining SG requires distances.
 public struct StrokesGainedCard: View {
     private let meta: String
     private let title: String
@@ -47,16 +39,8 @@ public struct StrokesGainedCard: View {
     private let summaryStyle: SGSummaryStyle
     private let breakdownDensity: SGBreakdownDensity
 
-    /// - Parameters:
-    ///   - timelineTitle: Header on the bottom timeline panel
-    ///     (default "HOLE-BY-HOLE SG · CUMULATIVE"). Multi-round
-    ///     callers can pass "ROUND-BY-ROUND SG · CUMULATIVE".
-    ///   - timelineUnitSingular / Plural: nouns substituted into the
-    ///     "\(count) HOLES" caption — multi-round callers pass
-    ///     "ROUND" / "ROUNDS".
-    ///   - timelineXAxisTitle: X-axis label drawn inside the
-    ///     timeline chart (default "HOLE"). Multi-round callers pass
-    ///     "ROUND".
+    /// Multi-round callers should pass "ROUND"/"ROUNDS" variants for the
+    /// timeline title, unit labels, and x-axis title (defaults assume holes).
     public init(
         meta: String,
         title: String = "Strokes gained",

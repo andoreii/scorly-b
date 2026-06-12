@@ -2,64 +2,11 @@ import Foundation
 import Testing
 @testable import ScorlyDomain
 
-/// SG hand-calc parity. Exercises the full SGCalculator end-to-end against
-/// a fully-instrumented 4-hole sample round whose per-shot values are
-/// hand-traced through `SGBenchmarks.json` in the comments below. If any
-/// of these expectations break, the failure diff points directly to which
-/// reconstruction step diverged from the hand calc.
-///
-/// Plan invariant covered: "SG totals match a hand-calc on one fully-
-/// instrumented sample round" (Phase B7).
+/// SG hand-calc parity: runs SGCalculator end-to-end on a 4-hole sample
+/// round and checks every shot/hole/round total against values hand-traced
+/// through SGBenchmarks.json.
 struct SGHandCalcParityTests {
     // MARK: - The sample round
-
-    //
-    // Hole 1 — Par 4, 380y
-    //   Drive: fairway, 280y travelled → 100y remaining
-    //   Approach: green, 20 ft from hole
-    //   2 putts: 20 ft → 5 ft → holed
-    //   Per-shot SG (from Broadie tables):
-    //     OTT  E(tee,380)=3.96  − E(fairway,100)=2.80 − 1 =  0.16
-    //     APP  E(fairway,100)=2.80 − E(green,20)=1.87  − 1 = -0.07
-    //     PUTT E(green,20)=1.87  − E(green,5)=1.23     − 1 = -0.36
-    //     PUTT E(green,5)=1.23   − 0                   − 1 =  0.23
-    //   Hole totals: OTT=0.16, APP=-0.07, ARG=0, PUTT=-0.13, Total=-0.04
-    //
-    // Hole 2 — Par 3, 160y
-    //   Tee shot: green, 10 ft from hole; 1 putt
-    //   Per-shot SG:
-    //     APP  E(fairway,160)=2.98 − E(green,10)=1.61 − 1 = 0.37  (par-3 baseline = fairway)
-    //     PUTT E(green,10)=1.61    − 0                − 1 = 0.61
-    //   Hole totals: APP=0.37, PUTT=0.61, Total=0.98
-    //
-    // Hole 3 — Par 5, 500y (eagle attempt — reached in 2)
-    //   Drive: fairway, 280y travelled → 220y remaining
-    //   Approach: green, 30 ft from hole
-    //   2 putts: 30 ft → 8 ft → holed
-    //   Per-shot SG:
-    //     OTT  E(tee,500)=4.41    − E(fairway,220)=3.32 − 1 =  0.09
-    //     APP  E(fairway,220)=3.32 − E(green,30)=1.98    − 1 =  0.34
-    //     PUTT E(green,30)=1.98   − E(green,8)=1.50     − 1 = -0.52
-    //     PUTT E(green,8)=1.50    − 0                   − 1 =  0.50
-    //   Hole totals: OTT=0.09, APP=0.34, PUTT=-0.02, Total=0.41
-    //
-    // Hole 4 — Par 4, 360y (recovery from bunker tee shot)
-    //   Drive: bunker left, 200y travelled → 160y remaining
-    //   Approach (from sand): green, 25 ft from hole
-    //   2 putts: 25 ft → 6 ft → holed
-    //   Per-shot SG:
-    //     OTT  E(tee,360)=3.92   − E(sand,160)=3.31 − 1 = -0.39
-    //     APP  E(sand,160)=3.31  − E(green,25)=1.94 − 1 =  0.37
-    //     PUTT E(green,25)=1.94  − E(green,6)=1.34  − 1 = -0.40
-    //     PUTT E(green,6)=1.34   − 0                − 1 =  0.34
-    //   Hole totals: OTT=-0.39, APP=0.37, PUTT=-0.06, Total=-0.08
-    //
-    // Round totals (sum across all 4 holes):
-    //   OTT   =  0.16 + 0    + 0.09 + (-0.39) = -0.14
-    //   APP   = -0.07 + 0.37 + 0.34 + 0.37    =  1.01
-    //   ARG   = 0
-    //   PUTT  = -0.13 + 0.61 + (-0.02) + (-0.06) = 0.40
-    //   Total = -0.14 + 1.01 + 0     + 0.40   =  1.27
 
     private let holes: [HoleSGInput] = [
         HoleSGInput(

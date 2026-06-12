@@ -1,11 +1,7 @@
 import XCTest
 
-/// Walks through the main screens and captures a screenshot of each one.
-/// Screenshots are attached to the test result (kept always) so CI can pull
-/// them out of the .xcresult bundle afterwards.
-///
-/// Relies on the DEBUG-only "DEV BYPASS" row on the auth screen to get past
-/// sign-in, which lands on the home screen backed by in-memory sample data.
+/// Walks the main screens, capturing a screenshot of each for CI.
+/// Uses the DEBUG-only "DEV BYPASS" row to skip sign-in.
 final class ScreenshotUITests: XCTestCase {
     func testCaptureMainScreens() throws {
         let app = XCUIApplication()

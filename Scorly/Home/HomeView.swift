@@ -2,14 +2,8 @@ import ScorlyDesignSystem
 import ScorlyDomain
 import SwiftUI
 
-/// Brutalist home screen. Wordmark, handicap + rounds twin cards,
-/// last-round inverse stamp, "Start new round" CTA, ghost buttons for
-/// History, Trends, and Settings.
-///
-/// Data flows in via `rounds` + `handicap` — owned by `RootView` so it
-/// survives navigation. Without parent-owned state the "Last Round"
-/// stamp would pop in mid-slide whenever an async refetch resolved
-/// after a remount, instead of sliding in as part of the screen.
+/// `rounds` + `handicap` are owned by `RootView` so they survive
+/// navigation and the "Last Round" stamp doesn't pop in mid-slide.
 struct HomeView: View {
     let flow: AppFlow
     let rounds: [CompletedRound]
@@ -35,10 +29,8 @@ struct HomeView: View {
     }
 
     private var averageScore: Double? {
-        // ROUNDS counts every completed round; AVG SCORE applies the shared
-        // default aggregate filter (18-hole Stroke / Stableford / Match) so
-        // scrambles, 9-hole rounds, and historical missing-format rounds
-        // don't skew the headline number.
+        // AVG SCORE uses the default aggregate filter so scrambles, 9-hole,
+        // and missing-format rounds don't skew it.
         let eligible = rounds.eligible(for: .default)
         guard !eligible.isEmpty else { return nil }
         let total = eligible.reduce(0) { $0 + $1.totalScore }
@@ -92,10 +84,8 @@ struct HomeView: View {
                     .font(BrutalistType.monoLabel)
                     .kerning(1.4)
                     .foregroundStyle(BrutalistColor.muted)
-                // Explicit two-line composition. Text concatenation with
-                // an embedded "\n" plus negative kerning miscalculates
-                // its intrinsic width and triggers single-line
-                // truncation on tighter device widths.
+                // Split into two Texts; a single "\n" + negative kerning
+                // mis-measures width and truncates on narrow devices.
                 VStack(alignment: .leading, spacing: -12) {
                     Text("SCOR")
                         .font(BrutalistType.wordmark)
@@ -332,9 +322,7 @@ struct HomeView: View {
         .onChange(of: showStartNewConfirm) { _, isPresented in
             guard !isPresented, pendingStartNew else { return }
             pendingStartNew = false
-            // Wait for the sheet's dismissal animation to finish before
-            // navigating, otherwise Setup pushes underneath the still-
-            // animating sheet on slower devices.
+            // Wait for the sheet dismissal animation before navigating.
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(350))
                 onDiscardDraft()
@@ -442,10 +430,8 @@ struct HomeView: View {
     }()
 }
 
-/// Brutalist confirmation bottom sheet. Matches the chrome of the in-
-/// round sheets (grab handle, mono eyebrow, sans title, HBar, stacked
-/// buttons) so the discard prompt feels native to the rest of the app
-/// instead of using SwiftUI's system confirmation dialog.
+/// Confirmation sheet matching the in-round chrome instead of the
+/// system confirmation dialog.
 private struct DiscardDraftSheet: View {
     let eyebrow: String
     let title: String
@@ -541,10 +527,8 @@ private struct DiscardDraftSheet: View {
     }
 }
 
-/// View-layer snapshot of an in-progress round. RootView builds this
-/// from the persisted `InProgressRoundDraft` + the `Course` lookup,
-/// keeping HomeView ignorant of the Domain types and the raw entries
-/// payload.
+/// View-layer snapshot of an in-progress round, built by `RootView` so
+/// HomeView stays ignorant of Domain types.
 struct InProgressSummary: Equatable {
     let courseName: String
     let subtitle: String
@@ -557,9 +541,7 @@ struct InProgressSummary: Equatable {
     let vsPar: Int
 }
 
-/// Bone-cream panel with corner registration marks. Compact rectangle
-/// shape — half the height of a square card. Used for the Handicap +
-/// Rounds twin stamps on Home.
+/// Compact panel used for the Handicap + Rounds twin stamps on Home.
 private struct StampCard: View {
     let label: String
     let value: String

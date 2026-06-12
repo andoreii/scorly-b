@@ -1,14 +1,9 @@
 import Foundation
 import ScorlyDomain
 
-/// Editable form state for the Course Editor screen. Owns the three
-/// fields the editor exposes (name, location, notes); everything else
-/// on the underlying `Course` is preserved verbatim on save.
-///
-/// `existing` is the source-of-truth `Course` we're editing; nil for
-/// "+ NEW COURSE". When nil, `commit` synthesises a standard par-72
-/// 18-hole course graph so a freshly-added course is immediately
-/// usable in Round Setup without a follow-up edit pass.
+/// Editable form state for the Course Editor screen. `existing` is nil
+/// for "+ NEW COURSE", in which case `commit` synthesises a standard
+/// par-72 18-hole graph so the course is usable right away.
 public struct CourseDraft: Equatable {
     public var name: String
     public var location: String
@@ -45,11 +40,7 @@ public struct CourseDraft: Equatable {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// Build the `Course` to persist. For new drafts, generates a
-    /// standard par-72 18-hole graph (4 par-5s, 10 par-4s, 4 par-3s,
-    /// canonical hole order) plus one default tee ("White") with
-    /// approximate yardages. The user can refine via remote sync once
-    /// the real course is set up upstream.
+    /// Builds the `Course` to persist; new drafts get a generated par-72 graph and default tee.
     public func commit(userId: UUID, now: Date = .now) -> Course {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedLocation = location.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -94,12 +85,10 @@ public struct CourseDraft: Equatable {
         )
     }
 
-    /// Canonical par sequence for a generated par-72 18-hole course.
-    /// Mix is the textbook 4 × par-5, 10 × par-4, 4 × par-3 ordered so
-    /// par-3s and par-5s are spread across both nines.
+    /// Par-72 sequence: 4 par-5s, 10 par-4s, 4 par-3s, split evenly across both nines.
     private static let standardPars: [Int] = [
-        4, 5, 4, 3, 4, 4, 3, 4, 5, // front 9 — total 36
-        4, 4, 3, 5, 4, 4, 3, 4, 5, // back 9  — total 36
+        4, 5, 4, 3, 4, 4, 3, 4, 5,
+        4, 4, 3, 5, 4, 4, 3, 4, 5,
     ]
 
     private static func standardHoles() -> [Hole] {
@@ -115,9 +104,7 @@ public struct CourseDraft: Equatable {
         }
     }
 
-    /// One default tee with rough yardage estimate per hole (par × 100
-    /// for the par-3-light average). Real yardages come in via course
-    /// sync when the course is connected to a curated record.
+    /// Default tee with rough per-hole yardage estimates; refined later via course sync.
     private static func standardTee() -> Tee {
         let teeId = UUID()
         let teeHoles: [TeeHole] = standardPars.enumerated().map { index, par in

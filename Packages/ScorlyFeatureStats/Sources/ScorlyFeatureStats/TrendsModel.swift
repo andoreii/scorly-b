@@ -1,10 +1,8 @@
 import Foundation
 import ScorlyDomain
 
-/// Sample window — Trends shows either the last 10 or last 20
-/// completed rounds. Both windows have prior-window counterparts (the
-/// 10 rounds before the most-recent 10; same shape for 20) so we can
-/// quote a delta vs. the previous window on every headline figure.
+/// Sample window — Trends shows either the last 10 or last 20 completed
+/// rounds, each with a prior-window counterpart for delta comparisons.
 public enum TrendsWindow: Int, CaseIterable, Sendable {
     case ten = 10
     case twenty = 20
@@ -20,12 +18,9 @@ public struct TrendsTimelinePoint: Sendable, Equatable, Identifiable {
     public let id: UUID
     public let date: Date
     public let scoreVsPar: Int
-    /// Raw total strokes for the round. Used by the new Trend page
-    /// score line graph, which plots raw scores instead of vs-par.
+    /// Raw total strokes; the score line graph plots this instead of vs-par.
     public let totalScore: Int
-    /// Three-putts on the round.
     public let threePutts: Int
-    /// Effective penalty strokes summed across all holes.
     public let penalties: Int
 
     public init(
@@ -112,9 +107,7 @@ public struct SGBreakdownRow: Sendable, Equatable, Identifiable {
     }
 }
 
-/// Pre-baked Trends payload. The view consumes this and renders. All
-/// math lives here — adding a metric means adding a property here,
-/// not editing the view.
+/// Pre-baked Trends payload — all math lives here, the view just renders.
 public struct TrendsModel: Sendable, Equatable {
     public let window: TrendsWindow
 
@@ -134,15 +127,12 @@ public struct TrendsModel: Sendable, Equatable {
     public let streak: [Int]
 
     // Distribution
-    /// Total holes counted across the sample. Some rounds in the
-    /// archive may be summary-only (no hole stats); they contribute
-    /// to score/handicap math but not to distribution / accuracy /
-    /// SG. `distributionHoles` is the denominator for the
-    /// distribution chart specifically.
+    /// Denominator for the distribution chart — summary-only rounds
+    /// (no hole stats) don't contribute here even though they count
+    /// toward score/handicap math.
     public let distributionHoles: Int
     public let distribution: [ScoreBucket: Int]
 
-    /// SG
     /// nil when no round in the sample has SG totals recorded.
     public let sg: [SGBreakdownRow]?
 
@@ -151,25 +141,23 @@ public struct TrendsModel: Sendable, Equatable {
     public let girRate: Double?
     public let puttsPerRound: Double?
     public let threePuttRate: Double?
-    /// Rate of one-putt holes across the window. Used alongside
-    /// `threePuttRate` in the touch carousel's mini-stats.
+    /// Rate of one-putt holes, used alongside `threePuttRate` in the
+    /// touch carousel's mini-stats.
     public let onePuttRate: Double?
     public let firSeries: [Double]
     public let girSeries: [Double]
     public let puttsSeries: [Double]
     public let threePuttSeries: [Double]
-    /// Dates that parallel `firSeries` / `girSeries`. Rounds without
-    /// hole stats are skipped from both, so the count may be smaller
-    /// than `timeline.count`.
+    /// Parallels `firSeries` / `girSeries`; rounds without hole stats
+    /// are skipped, so this may be shorter than `timeline`.
     public let accuracyDates: [Date]
 
     // Penalty heatmap
     public let penalties: [Int]
     public let penaltyMax: Int
 
-    /// Eight-axis skills radar inputs. Scores use recorded scorecard
-    /// measures so imported rounds are comparable even when SG cannot
-    /// reconstruct every shot endpoint.
+    /// Eight-axis skills radar inputs, computed from scorecard measures
+    /// so imported rounds stay comparable even without full SG.
     public let radarAxes: [RadarAxis]
 
     public init(
@@ -262,10 +250,7 @@ public struct TrendsModel: Sendable, Equatable {
 
     // MARK: - Build
 
-    /// Build a model for the given window from a (newest-first)
-    /// round archive. `rounds` should already be sorted descending
-    /// by `datePlayed`; we re-order it chronologically for the
-    /// timeline.
+    /// `rounds` should be newest-first; re-ordered chronologically for the timeline.
     public static func build(
         rounds: [CompletedRound],
         window: TrendsWindow
@@ -357,8 +342,7 @@ public struct TrendsModel: Sendable, Equatable {
         for round in chrono {
             let holes = round.holeStats
             guard !holes.isEmpty else {
-                // Round has no hole stats — emit nothing rather than
-                // a zero, so the sparkline doesn't dip artificially.
+                // Skip rather than emit a zero, so the sparkline doesn't dip artificially.
                 continue
             }
             let girHoles = holes.count
@@ -399,9 +383,7 @@ public struct TrendsModel: Sendable, Equatable {
         let penalties = timeline.map(\.penalties)
         let penaltyMax = penalties.max() ?? 0
 
-        // Radar — THIS WINDOW vs SEASON AVG. `rounds` is already the
-        // post-filter eligible set; the season is the same collection.
-        // Falls back gracefully when a metric can't be computed.
+        // Radar: this window vs season avg (`rounds` is the eligible set).
         let radarAxes = RadarAxis.makeAll(window: sample, season: rounds)
 
         return TrendsModel(

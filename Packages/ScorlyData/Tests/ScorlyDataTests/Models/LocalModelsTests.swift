@@ -3,9 +3,7 @@ import SwiftData
 import Testing
 @testable import ScorlyData
 
-/// `init(from row:)` + `update(from row:)` parity tests for the SwiftData
-/// `@Model` types — the conversions are the only thing that translates
-/// server rows into the local cache, so they need explicit pinning.
+/// Pins `init(from row:)` / `update(from row:)` behavior for the @Model types.
 struct LocalModelsTests {
     @Test("LocalUser init+update from UserRow round-trips scalar fields")
     func localUserFromRow() {

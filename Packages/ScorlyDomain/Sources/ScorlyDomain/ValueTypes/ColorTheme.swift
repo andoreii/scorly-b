@@ -1,14 +1,8 @@
 import Foundation
 
-/// Course color theme. Persisted as a single string in `courses.color_theme`.
-///
-/// Encoded forms (the v1 wire format, preserved verbatim):
-/// - preset:   theme name (e.g. `Forest`)
-/// - solid:    `CustomSolid:RRGGBB`
-/// - gradient: `CustomGradient:RRGGBB-RRGGBB`
-///
-/// Hex codes are normalized to uppercase 6-character RRGGBB. A leading
-/// `#` is accepted on input and stripped on output.
+/// Course color theme, persisted as a single string in `courses.color_theme`.
+/// Encoded as either a preset name, `CustomSolid:RRGGBB`, or
+/// `CustomGradient:RRGGBB-RRGGBB`. Hex codes normalize to uppercase RRGGBB.
 public enum ColorTheme: Hashable, Sendable {
     case preset(name: String)
     case customSolid(hex: String)

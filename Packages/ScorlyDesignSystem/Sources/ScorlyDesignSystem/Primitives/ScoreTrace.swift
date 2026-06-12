@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// One round on the score-trace chart. Carries date + score + par
-/// so the chart can draw the par reference line and label rounds
-/// without a second pass.
+/// One round on the score-trace chart. Carries date + score + par so the
+/// chart can draw the par line and label rounds in a single pass.
 public struct ScoreTracePoint: Sendable, Equatable, Hashable {
     public let date: Date
     public let score: Int
@@ -17,12 +16,8 @@ public struct ScoreTracePoint: Sendable, Equatable, Hashable {
 
 // MARK: - Chart primitive
 
-/// Score-vs-par line graph. One solid ink stroke through every round,
-/// a single dashed par reference line, and (optionally) a thin dotted
-/// 5-round rolling average overlay. Y-ticks every 2 strokes; x-labels
-/// at the four anchor positions (first, ~1/3, ~2/3, last).
-///
-/// Points must be supplied oldest → newest.
+/// Score-vs-par line graph with optional dashed par line and 5-round rolling
+/// average overlay. Points must be supplied oldest → newest.
 public struct ScoreTraceChart: View {
     let points: [ScoreTracePoint]
     let showAxis: Bool
@@ -63,7 +58,7 @@ public struct ScoreTraceChart: View {
                 padT + ih * CGFloat(1 - (v - yMin) / (yMax - yMin))
             }
 
-            // 1) Y-grid: dashed hairline every 2 strokes.
+            // Y-grid: dashed hairline every 2 strokes.
             let lowTick = Int((yMin / 2).rounded(.up)) * 2
             let highTick = Int(yMax)
             for t in stride(from: lowTick, through: highTick, by: 2) {
@@ -84,9 +79,7 @@ public struct ScoreTraceChart: View {
                 }
             }
 
-            // 2) Par reference line — single dashed horizontal at the
-            //    most common par. Most rounds are par-72; if pars vary
-            //    the line still gives the eye a stable anchor.
+            // Par reference line at the most common par, for a stable anchor when pars vary.
             if showParLine {
                 let parRef = modePar(of: points.map(\.par))
                 let parY = yFor(Double(parRef))
@@ -105,7 +98,7 @@ public struct ScoreTraceChart: View {
                 ctx.draw(tag, at: CGPoint(x: size.width - padR - 2, y: parY - 7), anchor: .trailing)
             }
 
-            // 3) 5-round rolling average — thin dotted ink overlay.
+            // 5-round rolling average — thin dotted ink overlay.
             if showRollingAvg, points.count >= 2 {
                 let avg = rollingAvg(scores, window: 5)
                 var path = Path()
@@ -120,7 +113,7 @@ public struct ScoreTraceChart: View {
                 )
             }
 
-            // 4) Score line — solid ink, primary.
+            // Score line — solid ink, primary.
             var scoreLine = Path()
             for (i, s) in scores.enumerated() {
                 let p = CGPoint(x: xFor(i), y: yFor(s))
@@ -132,9 +125,7 @@ public struct ScoreTraceChart: View {
                 style: StrokeStyle(lineWidth: 1.8, lineJoin: .round)
             )
 
-            // 5) Per-round dots. Hollow bone with ink ring; the last
-            //    round flips to solid ink so the latest reads as the
-            //    current state.
+            // Per-round dots, hollow except the last which flips solid to mark current state.
             for i in scores.indices {
                 let cx = xFor(i)
                 let cy = yFor(scores[i])
@@ -146,7 +137,7 @@ public struct ScoreTraceChart: View {
                 ctx.stroke(ring, with: .color(BrutalistColor.fg), lineWidth: 1.4)
             }
 
-            // 6) X-axis date labels at four anchor positions.
+            // X-axis date labels at four anchor positions.
             if showAxis, points.count >= 2 {
                 let idxs = [
                     0,
@@ -192,9 +183,8 @@ public struct ScoreTraceChart: View {
 
 // MARK: - History card (compact)
 
-/// Compact score-trace card. Pinned above the History list. Surfaces
-/// the latest score + a small Avg/Best stack, then the line graph,
-/// then a one-line legend.
+/// Compact score-trace card pinned above the History list: latest score +
+/// Avg/Best stack, line graph, one-line legend.
 public struct ScoreTraceHistoryCard: View {
     let points: [ScoreTracePoint]
 
@@ -320,10 +310,8 @@ public struct ScoreTraceHistoryCard: View {
 
 // MARK: - Trends card (hero)
 
-/// Hero score-trace card for the Trends tab. Title + AVG-vs-par
-/// readout up top, a 3-cell KPI strip (last 20 avg, best, form),
-/// then the full chart with rolling-average overlay, then a date
-/// footer.
+/// Hero score-trace card for the Trends tab: AVG-vs-par readout, 3-cell KPI
+/// strip (last 20 avg, best, form), full chart with rolling avg, date footer.
 struct ScoreTraceTrendsSummary {
     let averageLabel: String
     let average: Double?
@@ -580,8 +568,7 @@ private func trailingMean(of values: [Double], window: Int) -> Double? {
     return slice.reduce(0, +) / Double(window)
 }
 
-/// Mean of trailing `window` minus mean of the `window` before that.
-/// nil unless there are at least 2 × window samples.
+/// Mean of trailing `window` minus mean of the `window` before that. nil unless 2×window samples.
 private func trailingDelta(of values: [Double], window: Int) -> Double? {
     guard values.count >= window * 2 else { return nil }
     let recent = values.suffix(window)

@@ -2,12 +2,8 @@ import ScorlyDesignSystem
 import SwiftUI
 
 /// The marquee Trends card: an eight-axis brutalist skills radar.
-///
-/// Always-on view: a header (label + title + overall score), a meta
-/// row, and the radar polygon. There's no comparison polygon (that's
-/// the round-detail view's job) and no expand/collapse — the trends
-/// page already aggregates a sample window, so the polygon IS the
-/// "season" read.
+/// No comparison polygon or expand/collapse — the windowed average
+/// polygon is itself the "season" read.
 public struct SkillsRadarCard: View {
     private let axes: [RadarAxis]
 
@@ -80,12 +76,7 @@ public struct SkillsRadarCard: View {
     // MARK: - Chart
 
     private var chart: some View {
-        // Extend the chart edge-to-edge of the card by negating the
-        // card's horizontal padding so the polygon can grow as large
-        // as the card width allows. Side labels ("TROUBLE", "DRIVING")
-        // are positioned right against the card edge with just a few
-        // points of breathing room — handled by the Geometry's
-        // adaptive labelRadius cap.
+        // Negate the card's horizontal padding so the polygon grows edge-to-edge.
         SkillsRadarChart(axes: axes)
             .aspectRatio(1.1, contentMode: .fit)
             .frame(maxWidth: .infinity)

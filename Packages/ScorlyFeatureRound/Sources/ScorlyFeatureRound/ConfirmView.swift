@@ -4,11 +4,8 @@ import ScorlyDomain
 import ScorlyReviewKit
 import SwiftUI
 
-/// Post-round summary, attestation + file. Drives `RoundDetailMetrics`
-/// off the live `RoundPlayState`, captures a signature, then persists
-/// the completed round via `RoundsRepository.save`. Visual parity with
-/// `RoundDetailView` is intentional — same hero stamp, same card stack,
-/// same numbers the player will see later in History.
+/// Post-round summary, attestation + file. Mirrors `RoundDetailView`'s
+/// layout so the player sees the same numbers later in History.
 public struct ConfirmView: View {
     let state: RoundPlayState
     let authService: AuthService
@@ -126,10 +123,8 @@ public struct ConfirmView: View {
 
     // MARK: - Sub-views
 
-    /// Renders the SG card with an optional tappable header caption
-    /// when any hole has an estimated chip phase. Mono caption sits
-    /// just above the card border so the tap target is obvious without
-    /// breaking the existing card layout.
+    /// Shows a "tap to refine" caption above the SG card when any
+    /// hole has an estimated chip phase.
     @ViewBuilder
     private func sgCardWithRefine(
         sg: (totals: SGTotals?, holes: [SGTotals]?)
@@ -164,10 +159,8 @@ public struct ConfirmView: View {
         }
     }
 
-    /// Holes where the chip phase exists but the user hasn't fully
-    /// recorded the per-shot data. These show up as "ESTIMATED" in
-    /// the SG refinement sheet — the calculator falls back to lie-based
-    /// defaults for them.
+    /// Holes with an unrecorded chip phase; shown as "ESTIMATED" since
+    /// the SG calculator falls back to lie-based defaults for them.
     private var estimatedHoleCount: Int {
         state.holes.indices.reduce(0) { acc, index in
             let inferred = state.inferredARGCount(at: index)

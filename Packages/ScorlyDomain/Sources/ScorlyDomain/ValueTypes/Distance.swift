@@ -1,11 +1,8 @@
 import Foundation
 
-/// A length measurement with yards as the canonical storage unit.
-///
-/// Storage in the DB and SwiftData is always whole yards. Display uses
-/// the user's `DistanceUnit` preference, converting on the fly. Negative
-/// distances are clamped to zero — there's no such thing as a negative
-/// shot distance in the domain.
+/// A length measurement with yards as the canonical storage unit. Display
+/// converts to the user's `DistanceUnit` preference. Negative distances
+/// are clamped to zero.
 public struct Distance: Hashable, Codable, Sendable, Comparable {
     /// Canonical storage — always yards.
     public let yards: Int
@@ -37,8 +34,7 @@ public struct Distance: Hashable, Codable, Sendable, Comparable {
         }
     }
 
-    /// "<n> <symbol>" suitable for inline display. Not localized — number
-    /// localization is handled in Phase F (i18n + accessibility scaffolding).
+    /// "<n> <symbol>" suitable for inline display. Not localized.
     public func formatted(in unit: DistanceUnit) -> String {
         "\(value(in: unit)) \(unit.symbol)"
     }

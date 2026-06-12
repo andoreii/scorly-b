@@ -2,12 +2,8 @@ import Foundation
 import Testing
 @testable import ScorlyDomain
 
-/// Exhaustive round-trip parity for every UI/DB enum mapping.
-///
-/// Plan invariant covered: "Mapping round-trips for every UI/DB enum
-/// pairing" (Phase B7). Every case of every enum that has a mapping
-/// helper is round-tripped through `Mappings`; every v1 alias and
-/// "N/A" sentinel is verified.
+/// Exhaustive round-trip parity for every UI/DB enum mapping, including
+/// v1 aliases and the "N/A" sentinel.
 struct MappingsRoundTripTests {
     // MARK: - RoundType
 
@@ -81,9 +77,8 @@ struct MappingsRoundTripTests {
         let parsed = Mappings.conditions(fromCSV: csv)
         #expect(parsed == all)
 
-        // CSV ordering matches Conditions.labeledFlags declaration order
-        // exactly — important so two equal Conditions values always
-        // serialize to byte-identical CSVs (DB compare-friendly).
+        // Order must match declaration order so equal Conditions always
+        // serialize to byte-identical CSVs.
         let expectedOrder = Conditions.labeledFlags.map(\.label).joined(separator: ",")
         #expect(csv == expectedOrder)
     }
@@ -137,9 +132,7 @@ struct MappingsRoundTripTests {
         #expect(Mappings.lie(fromV1ShotLocation: "Beach") == nil)
     }
 
-    // MARK: - HolesPlayed (rawValue is its own UI label — no Mappings entry,
-
-    // but the round-trip property still has to hold)
+    // MARK: - HolesPlayed (rawValue is its own UI label, no Mappings entry)
 
     @Test("HolesPlayed rawValue round-trips via init(rawValue:)")
     func holesPlayedRawValueRoundTrip() {

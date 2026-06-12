@@ -1,22 +1,11 @@
-// Optional Bools are deliberate: derived stats (GIR, FIR, 3-putt, up-and-down,
-// sand save) carry a third "not applicable" state that a non-optional Bool
-// cannot express. Disabling the lint here is the right tradeoff.
+// Optional Bools carry a "not applicable" state for derived stats (GIR, FIR, 3-putt, etc).
 // swiftlint:disable discouraged_optional_boolean
 
 import Foundation
 import SwiftData
 
-// SwiftData @Model classes mirroring the Supabase schema. Each one has:
-// - The DB serial PK as `Int?` (nil until the server assigns it)
-// - The client-generated `externalId` UUID (idempotency key, set immediately
-//   on local insert so the SyncEngine can deduplicate retries)
-// - All scalar columns
-// - `init(from row:)` and `update(from row:)` for round-tripping
-//
-// Why `Int?` for the PK: locally-created records exist before the server
-// has assigned a serial. The PK is filled in when a pull merges the
-// server's response back. Lookup by `externalId` (UUID) is canonical;
-// `id` is just a cache.
+// SwiftData @Model classes mirroring the Supabase schema. `serverId` is nil until
+// a pull assigns it; `externalId` is the canonical lookup key used for sync dedup.
 
 @Model
 public final class LocalUser {
@@ -77,8 +66,7 @@ public final class LocalCourse {
         guard let externalString = row.courseExternalId,
               let externalId = UUID(uuidString: externalString)
         else {
-            // Pre-Phase-C historical rows lack `course_external_id`. Skip
-            // them in the local cache; they're still server-readable.
+            // Historical rows without `course_external_id` are skipped locally but still server-readable.
             return nil
         }
         self.init(
@@ -231,15 +219,9 @@ public final class LocalRound {
     public var totalScore: Int?
     public var whsDifferential: Decimal?
     public var createdAt: Date
-    /// Drafts skip sync until the user hits "save round". The SyncEngine
-    /// honours this by not enqueueing outbox entries for `isDraft == true`.
-    /// Phase Z3 (round in-progress safety net) replaces v1's UserDefaults
-    /// snapshot via this flag.
+    /// Drafts skip sync until the user saves the round.
     public var isDraft: Bool
-    /// JSON-encoded `[RoundPlayer]` (name + handicap snapshot at setup
-    /// time). Optional column — pre-Phase-D rows lack it. Stored as `Data`
-    /// because SwiftData has no native JSON column type; the repo layer
-    /// decodes back to `[RoundPlayer]` on read.
+    /// JSON-encoded `[RoundPlayer]`; decoded by the repo layer on read.
     public var players: Data?
 
     // swiftlint:disable:next function_default_parameter_at_end
@@ -314,22 +296,12 @@ public final class LocalHoleStat {
     public var approachDistance: Int?
     public var pinPosition: String?
 
-    /// JSON array of `PenaltyEvent` objects (kind + optional
-    /// direction). Replaces the v1 / v2 pattern of ten separate
-    /// counter columns (`outOfBoundsLeft`, `hazardLong`, …). SwiftData
-    /// migrates existing rows by treating the dropped columns as
-    /// absent; a one-time backfill in `RoundsRepositoryLive` reads any
-    /// legacy fields the in-memory snapshot still has and folds them
-    /// into the JSON on next save.
+    /// JSON array of `PenaltyEvent` (kind + optional direction).
     public var penaltyEventsJSON: String?
 
-    /// SG chip-phase fields. All additive optionals so existing rounds
-    /// load through SwiftData migration with nil values (which the SG
-    /// calculator handles via lie-based defaults).
+    /// Additive optionals so existing rounds load with nil via SwiftData migration.
     public var approachLandingDistance: Int?
-    /// `[ARGShot]` JSON-encoded so SwiftData can persist it as a
-    /// single attribute. The data layer encodes / decodes; the domain
-    /// type stays clean.
+    /// `[ARGShot]` JSON-encoded for storage; decoded by the data layer.
     public var argShotsJSON: String?
     public var layupLie: String?
     public var layupDistance: Int?
@@ -398,9 +370,7 @@ public final class LocalGoal {
     public var userId: UUID
     public var title: String
     public var notes: String?
-    /// JSON encoding of the `GoalKind` enum (with discriminator + payload).
-    /// Stored as `Data` because SwiftData has no enum-with-associated-values
-    /// support. The `GoalsRepository` decodes back to `GoalKind` on read.
+    /// JSON encoding of `GoalKind`; decoded by `GoalsRepository` on read.
     public var kindData: Data
     public var createdAt: Date
     public var deadline: Date?
@@ -430,10 +400,7 @@ public final class LocalGoal {
     }
 }
 
-/// One paused round per user. Holds the raw `HoleEntry[]` payload as
-/// JSON so the live-play UI can rehydrate exactly. Never enters the
-/// outbox — filing the round through `RoundsRepository.save` is the only
-/// path to Supabase.
+/// One paused round per user, holding the raw `HoleEntry[]` JSON for rehydration. Never syncs directly.
 @Model
 public final class LocalRoundDraft {
     @Attribute(.unique)
@@ -476,8 +443,7 @@ public final class LocalRoundDraft {
 // MARK: - Container factory
 
 public enum LocalSchema {
-    /// Every `@Model` in the data layer. Pass to `ModelContainer` so a
-    /// single registration covers the whole app.
+    /// Every `@Model` in the data layer, for `ModelContainer` registration.
     public static let allModels: [any PersistentModel.Type] = [
         LocalUser.self,
         LocalCourse.self,
@@ -491,8 +457,7 @@ public enum LocalSchema {
         OutboxEntry.self,
     ]
 
-    /// In-memory container — used by tests and by previews. Real apps
-    /// build a disk-backed `ModelContainer` via `makeContainer()` below.
+    /// In-memory container for tests and previews.
     public static func makeInMemoryContainer() throws -> ModelContainer {
         let schema = Schema(allModels)
         let configuration = ModelConfiguration(
@@ -502,10 +467,8 @@ public enum LocalSchema {
         return try ModelContainer(for: schema, configurations: [configuration])
     }
 
-    /// Disk-backed container for the running app. Built once in
-    /// `ScorlyApp.init` (Phase H) and shared between SwiftUI's
-    /// `.modelContainer(_:)` modifier and the `SyncEngine`. CloudKit is
-    /// disabled — Scorly's sync goes through Supabase via the outbox.
+    /// Disk-backed container shared between SwiftUI's `.modelContainer` and the `SyncEngine`.
+    /// CloudKit is disabled — sync goes through Supabase via the outbox.
     public static func makeContainer() throws -> ModelContainer {
         let schema = Schema(allModels)
         let configuration = ModelConfiguration(

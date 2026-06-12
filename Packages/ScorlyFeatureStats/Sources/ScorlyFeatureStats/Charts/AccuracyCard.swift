@@ -2,10 +2,8 @@ import Foundation
 import ScorlyDesignSystem
 import SwiftUI
 
-/// Trends-tab accuracy card. Wraps the shared `AccuracyTrendCard`
-/// primitive — adapts `WindRoseData` → `AccuracyRoseValues` and pairs
-/// each per-round hit-rate sample with its date so the bottom-half
-/// line graph can label its x-axis.
+/// Trends-tab accuracy card, wrapping the shared `AccuracyTrendCard`
+/// primitive with `WindRoseData` → `AccuracyRoseValues` data.
 struct AccuracyCard: View {
     enum Kind {
         case fairway
@@ -34,8 +32,7 @@ struct AccuracyCard: View {
         )
     }
 
-    /// Bridges `WindRoseData` → `AccuracyRoseValues` (the design
-    /// primitive's input shape).
+    /// Bridges `WindRoseData` → `AccuracyRoseValues`.
     private var sharedValues: AccuracyRoseValues {
         AccuracyRoseValues(
             hitRate: data.hitRate,
@@ -52,9 +49,8 @@ struct AccuracyCard: View {
         )
     }
 
-    /// Pairs every series sample with its round date. If the caller
-    /// supplied mismatched counts we trim to the shorter side rather
-    /// than render a misaligned chart.
+    /// Pairs each series sample with its round date, trimming to the
+    /// shorter side if counts don't match.
     private var trendPoints: [AccuracyTrendPoint] {
         let count = min(series.count, dates.count)
         return (0..<count).map { i in

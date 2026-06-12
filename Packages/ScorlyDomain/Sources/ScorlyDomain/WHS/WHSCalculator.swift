@@ -1,31 +1,13 @@
 import Foundation
 
-/// World Handicap System math. Pure, decimal-precise, side-effect free.
-///
-/// Two operations:
-/// - `differential(score:rating:slope:holesPlayed:)` — per-round score
-///   differential, defined only for 18-hole rounds with a valid course
-///   rating and slope.
-/// - `handicapIndex(from:)` — overall handicap index from a list of
-///   differentials. Uses the USGA short-history table for fewer than 20
-///   rounds; for 20+ rounds, takes the most-recent 20 and averages the
-///   lowest 8 with a × 0.96 multiplier.
-///
-/// All arithmetic uses `Decimal` to avoid binary-float drift on rounding.
-/// Inputs and outputs are rounded to one decimal place at the boundary,
-/// matching the precision the DB stores (`NUMERIC(4,1)`).
+/// World Handicap System math. Uses `Decimal` throughout and rounds to one
+/// decimal place at the boundary, matching the DB's `NUMERIC(4,1)` columns.
 public enum WHSCalculator {
     // MARK: - Public API
 
-    /// Per-round score differential.
-    ///
-    /// Formula: `(113 / slope) × (score − rating)`, rounded to one decimal.
-    ///
-    /// Returns `nil` unless **all** of:
-    /// - `holesPlayed == .eighteen` (9-hole rounds aren't WHS-eligible
-    ///   without a separate combine step we don't yet implement)
-    /// - `rating > 0`
-    /// - `slope > 0`
+    /// `(113 / slope) × (score - rating)`, rounded to one decimal.
+    /// `nil` unless 18 holes with a positive rating and slope (9-hole
+    /// rounds aren't WHS-eligible without a combine step we don't implement).
     public static func differential(
         score: Int,
         rating: Decimal,
@@ -41,19 +23,10 @@ public enum WHSCalculator {
         return roundedToOneDecimal(raw)
     }
 
-    /// Handicap index from a chronologically-ordered list of differentials.
-    ///
-    /// Caller passes **all** eligible differentials (oldest first). This
-    /// function takes `suffix(20)` and applies:
-    /// - **20 rounds:** average of the lowest 8, multiplied by 0.96.
-    /// - **3–19 rounds:** the USGA short-history table — see
-    ///   `partialHistoryRule(for:)` for the exact lowest-N + adjustment
-    ///   per row.
-    /// - **< 3 rounds:** `nil` (insufficient history).
-    ///
-    /// The 0.96 multiplier matches v1's behaviour (the WHS 96% adjustment
-    /// is officially deprecated as of 2024 but v1 applied it; we keep
-    /// parity until an explicit migration ticket says otherwise).
+    /// Caller passes all eligible differentials, oldest first. Uses the most
+    /// recent 20: full history averages the lowest 8 with a 0.96 multiplier
+    /// (officially deprecated since 2024, kept for parity), 3-19 rounds use
+    /// the USGA short-history table, fewer than 3 returns `nil`.
     public static func handicapIndex(from differentials: [Decimal]) -> Decimal? {
         let recent = Array(differentials.suffix(maxRoundsConsidered))
         let count = recent.count
@@ -66,23 +39,19 @@ public enum WHSCalculator {
 
     // MARK: - Internals
 
-    /// We never look further back than the most recent 20 rounds.
     private static let maxRoundsConsidered = 20
 
-    /// 96% multiplier applied only to the full-history (20-round) case.
     /// Stored as 96/100 to avoid Double-literal precision drift.
     private static let ninetySixPercent = Decimal(96) / Decimal(100)
 
-    /// Average of the lowest 8 of the supplied 20 differentials, × 0.96,
-    /// rounded to one decimal. Caller has already clipped to 20.
+    /// Caller has already clipped to 20.
     private static func fullHistoryIndex(from differentials: [Decimal]) -> Decimal {
         let lowest = differentials.sorted().prefix(8)
         let avg = average(of: Array(lowest))
         return roundedToOneDecimal(avg * ninetySixPercent)
     }
 
-    /// USGA short-history index for 3–19 rounds.
-    /// Returns `nil` for fewer than 3.
+    /// `nil` for fewer than 3 rounds.
     private static func partialHistoryIndex(from differentials: [Decimal]) -> Decimal? {
         guard let rule = partialHistoryRule(for: differentials.count) else {
             return nil
@@ -97,8 +66,7 @@ public enum WHSCalculator {
         let adjustment: Decimal
     }
 
-    /// USGA short-history table — verbatim from the WHS Rules of Handicapping.
-    /// Counts ≤ 2 yield `nil`; counts ≥ 20 are handled by `fullHistoryIndex`.
+    /// Verbatim from the WHS Rules of Handicapping.
     private static func partialHistoryRule(for count: Int) -> PartialHistoryRule? {
         switch count {
         case 3: PartialHistoryRule(usedCount: 1, adjustment: 2)
@@ -121,9 +89,7 @@ public enum WHSCalculator {
         return sum / Decimal(values.count)
     }
 
-    /// Rounds to one decimal place, banker's-rounding tied half. `.plain`
-    /// matches v1's display rounding and the DB column's `NUMERIC(4,1)`
-    /// scale.
+    /// `.plain` matches the DB column's `NUMERIC(4,1)` rounding.
     private static func roundedToOneDecimal(_ value: Decimal) -> Decimal {
         var input = value
         var output = Decimal.zero

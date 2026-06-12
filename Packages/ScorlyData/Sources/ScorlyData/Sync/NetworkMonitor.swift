@@ -1,19 +1,12 @@
 import Foundation
 import Network
 
-/// Wraps `NWPathMonitor` as a tiny actor with an `AsyncStream<Bool>` of
-/// "is the network available right now?" updates. The SyncEngine subscribes
-/// to that stream and drains the outbox whenever the answer flips to true.
-///
-/// Tests inject a `MockNetworkMonitor` instead — the protocol abstracts the
-/// stream so the engine doesn't reach for the real `NWPathMonitor` (which
-/// can't be controlled deterministically from a test).
+/// Abstracts connectivity so the SyncEngine can drain the outbox on offline -> online
+/// transitions; tests use `MockNetworkMonitor` instead of `NWPathMonitor`.
 public protocol NetworkMonitor: Sendable {
-    /// Current best-effort guess at connectivity. Cheap and synchronous;
-    /// callers can short-circuit a drain if it returns false.
+    /// Best-effort current connectivity, for short-circuiting a drain.
     func isOnline() async -> Bool
-    /// Async stream of online/offline transitions. The first emission is
-    /// the current state; subsequent emissions are deltas.
+    /// Online/offline transitions; first emission is the current state.
     func updates() async -> AsyncStream<Bool>
 }
 
@@ -70,8 +63,7 @@ public actor LiveNetworkMonitor: NetworkMonitor {
     }
 }
 
-/// Test fake — flips `setOnline(_:)` from the test, all subscribers get
-/// the new value. Deterministic, no NWPathMonitor.
+/// Test fake: `setOnline(_:)` notifies all subscribers deterministically, no NWPathMonitor.
 public actor MockNetworkMonitor: NetworkMonitor {
     private var current: Bool
     private var continuations: [UUID: AsyncStream<Bool>.Continuation] = [:]

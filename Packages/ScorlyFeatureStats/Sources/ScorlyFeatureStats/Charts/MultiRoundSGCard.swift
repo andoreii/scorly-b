@@ -2,13 +2,8 @@ import ScorlyDesignSystem
 import ScorlyDomain
 import SwiftUI
 
-/// Multi-round Strokes Gained card. Reuses the existing
-/// `StrokesGainedCard` design-system primitive with the compact Trends
-/// summary presentation and averaged-per-round category values.
-///
-/// Caller hands us the eligible filtered rounds; we do the averaging
-/// and cumulative math here. Boundary mapping (`SGTotals` →
-/// `SGCardValues`) mirrors the convention in Round Detail.
+/// Multi-round Strokes Gained card. Reuses `StrokesGainedCard` with the
+/// compact Trends summary and averaged-per-round category values.
 struct MultiRoundSGCard: View {
     let rounds: [CompletedRound]
     let baselineRounds: [CompletedRound]
@@ -21,10 +16,7 @@ struct MultiRoundSGCard: View {
             holes: nil,
             baselineRounds: baselineRounds
         )
-        // The cumulative timeline section is intentionally omitted on
-        // the Trend page — multi-round cumulative SG doesn't read as
-        // well as the same chart does intra-round on Round Detail.
-        // Hero + 4 category rows + summary footer only.
+        // No cumulative timeline here — it only reads well intra-round.
         StrokesGainedCard(
             meta: "LAST \(eligibleCount) ROUNDS · 4 CATEGORIES",
             total: projection.totals.map(cardValues),
@@ -40,9 +32,7 @@ struct MultiRoundSGCard: View {
         rounds.compactMap(\.sgTotals).count
     }
 
-    /// Average each SG category across every round that recorded SG.
-    /// Returns nil when the window has no SG-enabled rounds — that
-    /// fires the design-system card's placeholder branch.
+    /// Averages each SG category across rounds that recorded SG; nil if none did.
     private func averagedTotals() -> SGTotals? {
         let totals = rounds.compactMap(\.sgTotals)
         guard !totals.isEmpty else { return nil }

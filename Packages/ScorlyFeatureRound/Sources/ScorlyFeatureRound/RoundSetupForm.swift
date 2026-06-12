@@ -1,14 +1,9 @@
 import Foundation
 import ScorlyDomain
 
-/// Mutable presentation-layer model for the Round Setup screen. The
-/// form is the source of truth while the user is filling it in;
-/// `RoundDraft` is built from this only at the end of the round
-/// (after Play / Confirm).
-///
-/// `courseId` and `teeId` are optional during setup — the form
-/// gates the "Tee off" button on whether enough is filled in via
-/// `isReady`.
+/// Mutable presentation-layer model for the Round Setup screen. Source of
+/// truth while filling in the form; `RoundDraft` is built from this at the
+/// end of the round. `courseId` / `teeId` are optional until `isReady`.
 public struct RoundSetupForm: Sendable, Equatable {
     public var courseId: UUID?
     public var teeId: UUID?
@@ -26,10 +21,7 @@ public struct RoundSetupForm: Sendable, Equatable {
     public struct Player: Sendable, Equatable, Identifiable {
         public let id: UUID
         public var name: String
-        /// `nil` means "no handicap entered". For the "You" slot this is the
-        /// calculated WHS index (or nil if there aren't enough qualifying
-        /// rounds yet). Guest players start as nil and stay nil unless the
-        /// user types one in.
+        /// `nil` means "no handicap entered" (for "You", the WHS index once enough rounds qualify).
         public var handicap: Decimal?
 
         public init(id: UUID = UUID(), name: String, handicap: Decimal? = nil) {

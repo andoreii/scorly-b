@@ -2,9 +2,7 @@ import Foundation
 import ScorlyDomain
 import SwiftData
 
-/// SwiftData-backed `UsersRepository`. Tiny — the table only carries the
-/// auth UUID, current handicap, and createdAt. Mirrors v1's
-/// `AuthService.ensureUserProfile()`.
+/// SwiftData-backed `UsersRepository`. Table only carries the auth UUID, handicap, and createdAt.
 public actor UsersRepositoryLive: UsersRepository {
     nonisolated let userId: UUID
     nonisolated let syncEngine: SyncEngine

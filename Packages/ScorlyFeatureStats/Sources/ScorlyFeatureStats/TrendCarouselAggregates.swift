@@ -1,17 +1,14 @@
 import Foundation
 import ScorlyDomain
 
-// Pure aggregates that the new Trend-page carousels need on top of the
-// existing `TrendsModel`. Computed from a filtered + chronologically
-// ordered `[CompletedRound]`. Nothing UI-shaped — every type here is
-// stride-stable, Sendable, and tested in isolation.
+// Pure aggregates the Trend-page carousels need on top of `TrendsModel`.
+// Computed from a filtered, chronologically ordered `[CompletedRound]`.
 
 // MARK: - Wind rose
 
 /// Counts grouped by miss direction (left / right / long / short) and
-/// severity (clean / bunker / water / OB). All counts are accumulated
-/// across every hole in the window. Percentages are derived from the
-/// total miss count, not from total holes — the center bubble carries
+/// severity (clean / bunker / water / OB). Percentages are derived from
+/// the total miss count, not total holes — the center bubble carries
 /// the hit-rate separately.
 public struct WindRoseData: Sendable, Equatable {
     /// Per-direction breakdown of miss severity.
@@ -86,9 +83,8 @@ public struct WindRoseData: Sendable, Equatable {
 
 // MARK: - Putt make-percentage
 
-/// Inclusive distance bucket in feet. Bands chosen to mirror the
-/// scratch-vs-amateur tour buckets without over-segmenting at long
-/// range, where amateur sample sizes are thin.
+/// Inclusive distance bucket in feet, chosen to avoid over-segmenting
+/// at long range where amateur sample sizes are thin.
 public enum PuttBucket: String, CaseIterable, Sendable, Identifiable {
     case feet0to3 = "0–3"
     case feet4to6 = "4–6"
@@ -168,9 +164,8 @@ public struct HoleHeatRow: Sendable, Equatable, Identifiable {
     }
 }
 
-/// Four-bucket score-outcome distribution used by the new Trend page
-/// scoring carousel. Mirrors the heat-grid color mapping (birdie+, par,
-/// bogey, double-or-worse) so both surfaces share one vocabulary.
+/// Four-bucket score-outcome distribution for the scoring carousel.
+/// Mirrors the heat-grid color mapping (birdie+, par, bogey, double+).
 public enum HoleOutcome: String, CaseIterable, Sendable, Identifiable {
     case birdiePlus
     case par
@@ -233,11 +228,9 @@ public struct TrendCarouselAggregates: Sendable, Equatable {
         holeHeatLast20: []
     )
 
-    /// Compute against the post-filter eligible set `eligible` (used for
-    /// the rose, putt buckets, and 4-bucket outcomes) plus the full
-    /// `allRounds` archive (used for the last-20 heat grid, which
-    /// deliberately ignores the aggregate filter so it stays stable
-    /// while the user toggles filters).
+    /// `eligible` (post-filter) feeds the rose/putt/outcome stats;
+    /// `allRounds` feeds the last-20 heat grid, which deliberately
+    /// ignores the filter so it stays stable as the user toggles it.
     public static func build(
         eligible: [CompletedRound],
         allRounds: [CompletedRound]
@@ -267,9 +260,7 @@ private extension TrendCarouselAggregates {
                 hits += 1
                 continue
             }
-            // Miss — bucket the directional severity. Fairway-leg roses
-            // only meaningfully track L/R (long/short don't apply off
-            // the tee on par 4+).
+            // Fairway-leg roses only meaningfully track L/R.
             let directionFromLie = lieDirection(hole.teeShotLie) ?? .left
             var stack = byDirection[directionFromLie] ?? .init()
             switch hole.teeShotLie {
@@ -280,11 +271,7 @@ private extension TrendCarouselAggregates {
             case .roughLeft, .roughRight, .fairway, .green, .none:
                 stack.clean += 1
             }
-            // Directional hazards from tee — only L/R make sense here,
-            // long/short would be on the approach. Bucket Left/Right
-            // counts into their direction; ignore the Long/Short
-            // counts off the tee (still summed into hazardCount /
-            // outOfBoundsCount via the aggregate).
+            // Only L/R OB makes sense off the tee; long/short belongs to the approach.
             stack.ob += hole.outOfBoundsLeft + hole.outOfBoundsRight + hole.outOfBoundsLong + hole.outOfBoundsShort > 0
                 ? hole.outOfBoundsCount
                 : 0
@@ -314,8 +301,7 @@ private extension TrendCarouselAggregates {
                 hits += 1
                 continue
             }
-            // The relevant lie for green misses is the approach lie on
-            // par 4 / par 5, the tee lie on par 3.
+            // Relevant lie is the approach lie on par 4/5, the tee lie on par 3.
             let missLie: Lie? = hole.par == 3 ? hole.teeShotLie : hole.approachLie
             let direction = lieDirection(missLie) ?? .short
             var stack = byDirection[direction] ?? .init()
@@ -327,9 +313,6 @@ private extension TrendCarouselAggregates {
             case .roughLeft, .roughRight, .fairway, .green, .none:
                 stack.clean += 1
             }
-            // Aggregate directional OB / water for this hole into the
-            // miss direction. If per-direction counts exist, use them;
-            // otherwise fall back to the aggregate as a single bucket.
             let dirOB = directionalOB(hole, for: direction)
             let dirWater = directionalHazard(hole, for: direction)
             stack.ob += dirOB
@@ -356,10 +339,7 @@ private extension TrendCarouselAggregates {
                 let bucket = PuttBucket.bucket(forFeet: feet)
                 var entry = tally[bucket] ?? (made: 0, attempted: 0)
                 entry.attempted += 1
-                // Made iff this is the last putt logged AND the hole
-                // ended on the green (strokes > 0 with this putt as
-                // last). The simpler heuristic: it's a make if it's the
-                // last entry, otherwise it's a missed first/middle putt.
+                // Heuristic: the last logged putt is the make.
                 if index == distances.count - 1 {
                     entry.made += 1
                 }
@@ -393,10 +373,8 @@ private extension TrendCarouselAggregates {
 
 // MARK: - Lie → direction
 
-/// Maps a `Lie` to the rose's miss direction. Bunker / recovery cases
-/// expose the suffix (`Left`, `Right`, `Short`, `Long`). Rough cases
-/// only carry L/R. Anything else returns `nil` so the caller can fall
-/// back to a default.
+/// Maps a `Lie` to the rose's miss direction; `nil` lets the caller
+/// fall back to a default.
 private func lieDirection(_ lie: Lie?) -> WindRoseData.Direction? {
     switch lie {
     case .roughLeft, .bunkerLeft, .recoveryLeft:
@@ -412,10 +390,8 @@ private func lieDirection(_ lie: Lie?) -> WindRoseData.Direction? {
     }
 }
 
-/// Pulls directional OB counts off `HoleStat`. Falls back to bucketing
-/// the aggregate `outOfBoundsCount` into the miss direction when no
-/// per-direction counts were recorded (legacy rounds). This is the
-/// "don't lie about direction, but don't drop the data" compromise.
+/// Pulls directional OB counts off `HoleStat`, falling back to the
+/// aggregate `outOfBoundsCount` for legacy rounds without per-direction data.
 private func directionalOB(_ hole: HoleStat, for direction: WindRoseData.Direction) -> Int {
     let perDirectionSum = hole.outOfBoundsLeft + hole.outOfBoundsRight
         + hole.outOfBoundsLong + hole.outOfBoundsShort

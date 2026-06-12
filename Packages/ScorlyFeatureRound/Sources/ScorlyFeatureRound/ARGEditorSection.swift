@@ -102,9 +102,8 @@ struct ARGEditorSection: View {
         return entries.indices.contains(index) ? entries[index] : nil
     }
 
-    /// Mutates the ARG entry at `index`, lazily growing the array so
-    /// the user can fill slots in any order. The array is normalized
-    /// to the inferred count so stale slots vanish when strokes drop.
+    /// Lazily grows the array so slots can be filled in any order, then
+    /// trims to the inferred count so stale slots vanish if strokes drop.
     private func mutateEntry(at index: Int, _ apply: (inout ARGShotEntry) -> Void) {
         guard state.entries.indices.contains(holeIndex) else { return }
         var current = state.entries[holeIndex].argShots ?? []
