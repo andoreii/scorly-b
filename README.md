@@ -41,4 +41,5 @@ GIR, accuracy trends, etc).
 - `supabase/` — database migrations and seed data
 
 Still very much a work in progress — mostly building this for myself to use
-on the course.
+on the course. A good chunk of it is vibe coded, so expect some rough edges
+here and there.
