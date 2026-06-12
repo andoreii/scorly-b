@@ -76,4 +76,5 @@ jobs:
           git config user.email "andrei191539112@gmail.com"
           git add docs/screenshots
           git diff --cached --quiet || git commit -m "update screenshots"
+          git pull --rebase origin main
           git push
