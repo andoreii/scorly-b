@@ -8,13 +8,10 @@ permissions:
 
 jobs:
   screenshots:
-    runs-on: macos-15
+    runs-on: macos-26
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: sudo xcode-select -switch /Applications/Xcode.app
 
       - name: Install XcodeGen
         run: brew install xcodegen
