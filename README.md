@@ -4,6 +4,15 @@ A little iOS app I'm building to track my golf rounds — scorecard, shot-by-sho
 tracking, putting, penalties, and some basic stats afterwards (strokes gained,
 GIR, accuracy trends, etc).
 
+## Screens
+
+<p>
+  <img src="docs/screenshots/01-home.png" width="200" alt="Home screen">
+  <img src="docs/screenshots/02-history.png" width="200" alt="Round history">
+  <img src="docs/screenshots/03-trends.png" width="200" alt="Trends / stats">
+  <img src="docs/screenshots/04-courses.png" width="200" alt="Courses">
+</p>
+
 ## What it does
 
 - Set up a round (course, tees, players, conditions) and play it hole by hole
