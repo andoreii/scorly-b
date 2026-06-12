@@ -40,5 +40,4 @@ GIR, accuracy trends, etc).
 - `Packages/ScorlyFeature*` — one package per feature (round, history, stats, settings, courses, auth)
 - `supabase/` — database migrations and seed data
 
-Still very much a work in progress, and pretty heavily vibe coded — mostly
-building this for myself to use on the course.
+vibe coded, mostly building this for myself to use on the course.
