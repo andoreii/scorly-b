@@ -108,4 +108,46 @@ struct ScoreTraceTrendsSummaryTests {
         #expect(summary.averageLabel == "LAST 20 AVG")
         #expect(summary.average == 15.5)
     }
+
+    @Test("Score trace average trend treats lower scoring as improving")
+    func averageTrendMapsScoreMovementToForm() {
+        #expect(ScoreTraceAverageTrend(delta: -1.4) == .improving)
+        #expect(ScoreTraceAverageTrend(delta: 1.4) == .worsening)
+        #expect(ScoreTraceAverageTrend(delta: 0) == nil)
+        #expect(ScoreTraceAverageTrend(delta: nil) == nil)
+        #expect(ScoreTraceAverageTrend(delta: -1.4)?.pointsUp == false)
+        #expect(ScoreTraceAverageTrend(delta: 1.4)?.pointsUp == true)
+    }
+
+    @Test("Score trace draw progress clamps and reveals dots as the line advances")
+    func drawProgressClampsAndRevealsDots() {
+        #expect(ScoreTraceDrawProgress(-0.5).value == 0)
+        #expect(ScoreTraceDrawProgress(1.5).value == 1)
+        #expect(ScoreTraceDrawProgress(0).visibleDotCount(totalPoints: 5) == 0)
+        #expect(ScoreTraceDrawProgress(0.25).visibleDotCount(totalPoints: 5) == 2)
+        #expect(ScoreTraceDrawProgress(0.5).visibleDotCount(totalPoints: 5) == 3)
+        #expect(ScoreTraceDrawProgress(1).visibleDotCount(totalPoints: 5) == 5)
+    }
+
+    @Test("Delayed score traces begin undrawn")
+    func delayedScoreTraceBeginsUndrawn() {
+        #expect(ScoreTraceDrawProgress.initial(drawDelay: 0.18).value == 0)
+        #expect(ScoreTraceDrawProgress.initial(drawDelay: nil).value == 1)
+    }
+
+    @Test("Score trace draw progress advances continuously over elapsed time")
+    func scoreTraceDrawProgressAdvancesWithElapsedTime() {
+        #expect(ScoreTraceDrawProgress.elapsed(-0.1, duration: 0.72).value == 0)
+        #expect(ScoreTraceDrawProgress.elapsed(0.36, duration: 0.72).value == 0.5)
+        #expect(ScoreTraceDrawProgress.elapsed(0.72, duration: 0.72).value == 1)
+        #expect(ScoreTraceDrawProgress.elapsed(1, duration: 0.72).value == 1)
+    }
+
+    @Test("Animated numbers preserve target formatting at zero")
+    func animatedNumberInitialValues() {
+        #expect(AnimatedNumericText.initialValue(for: "+4.2") == "+0.0")
+        #expect(AnimatedNumericText.initialValue(for: "31.3") == "0.0")
+        #expect(AnimatedNumericText.initialValue(for: "62") == "0")
+        #expect(AnimatedNumericText.initialValue(for: "-") == "-")
+    }
 }

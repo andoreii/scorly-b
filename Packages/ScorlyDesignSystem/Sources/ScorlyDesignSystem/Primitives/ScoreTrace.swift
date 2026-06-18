@@ -28,147 +28,162 @@ public struct ScoreTraceChart: View {
     let showAxis: Bool
     let showRollingAvg: Bool
     let showParLine: Bool
+    let drawTrigger: Int
+    let drawDelay: Double?
+    @State private var drawStartedAt: Date?
+    @State private var isDrawing = false
+    @State private var hasCompletedDraw: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private static let drawDuration = 0.72
 
     public init(
         points: [ScoreTracePoint],
         showAxis: Bool = true,
         showRollingAvg: Bool = false,
-        showParLine: Bool = true
+        showParLine: Bool = true,
+        drawTrigger: Int = 0,
+        drawDelay: Double? = nil
     ) {
         self.points = points
         self.showAxis = showAxis
         self.showRollingAvg = showRollingAvg
         self.showParLine = showParLine
+        self.drawTrigger = drawTrigger
+        self.drawDelay = drawDelay
+        _hasCompletedDraw = State(initialValue: drawDelay == nil)
     }
 
     public var body: some View {
-        Canvas { ctx, size in
-            guard points.count >= 1 else { return }
-            let scores = points.map { Double($0.score) }
-            let pars = points.map { Double($0.par) }
-            let lo = min(scores.min() ?? 70, pars.min() ?? 70)
-            let hi = max(scores.max() ?? 90, pars.max() ?? 90)
-            let yMin = lo - 2
-            let yMax = hi + 2
+        TimelineView(.animation(paused: !isDrawing)) { timeline in
+            Canvas { ctx, size in
+                guard points.count >= 1 else { return }
+                let draw = currentDrawProgress(at: timeline.date)
+                let scores = points.map { Double($0.score) }
+                let pars = points.map { Double($0.par) }
+                let lo = min(scores.min() ?? 70, pars.min() ?? 70)
+                let hi = max(scores.max() ?? 90, pars.max() ?? 90)
+                let yMin = lo - 2
+                let yMax = hi + 2
 
-            let padL: CGFloat = showAxis ? 30 : 8
-            let padR: CGFloat = 10
-            let padT: CGFloat = 14
-            let padB: CGFloat = showAxis ? 26 : 12
-            let iw = size.width - padL - padR
-            let ih = size.height - padT - padB
-            let denom = max(CGFloat(points.count - 1), 1)
-            let xFor: (Int) -> CGFloat = { idx in padL + iw * CGFloat(idx) / denom }
-            let yFor: (Double) -> CGFloat = { v in
-                padT + ih * CGFloat(1 - (v - yMin) / (yMax - yMin))
-            }
+                let padL: CGFloat = showAxis ? 30 : 8
+                let padR: CGFloat = 10
+                let padT: CGFloat = 14
+                let padB: CGFloat = showAxis ? 26 : 12
+                let iw = size.width - padL - padR
+                let ih = size.height - padT - padB
+                let denom = max(CGFloat(points.count - 1), 1)
+                let xFor: (Int) -> CGFloat = { idx in padL + iw * CGFloat(idx) / denom }
+                let yFor: (Double) -> CGFloat = { v in
+                    padT + ih * CGFloat(1 - (v - yMin) / (yMax - yMin))
+                }
 
-            // 1) Y-grid: dashed hairline every 2 strokes.
-            let lowTick = Int((yMin / 2).rounded(.up)) * 2
-            let highTick = Int(yMax)
-            for t in stride(from: lowTick, through: highTick, by: 2) {
-                let y = yFor(Double(t))
-                var p = Path()
-                p.move(to: CGPoint(x: padL, y: y))
-                p.addLine(to: CGPoint(x: size.width - padR, y: y))
-                ctx.stroke(
-                    p,
-                    with: .color(BrutalistColor.hair),
-                    style: StrokeStyle(lineWidth: 0.6, dash: [2, 3])
-                )
-                if showAxis {
-                    let label = Text("\(t)")
-                        .font(BrutalistType.mono(.medium, size: 9))
+                // 1) Y-grid: dashed hairline every 2 strokes.
+                let lowTick = Int((yMin / 2).rounded(.up)) * 2
+                let highTick = Int(yMax)
+                for t in stride(from: lowTick, through: highTick, by: 2) {
+                    let y = yFor(Double(t))
+                    var p = Path()
+                    p.move(to: CGPoint(x: padL, y: y))
+                    p.addLine(to: CGPoint(x: size.width - padR, y: y))
+                    ctx.stroke(
+                        p,
+                        with: .color(BrutalistColor.hair),
+                        style: StrokeStyle(lineWidth: 0.6, dash: [2, 3])
+                    )
+                    if showAxis {
+                        let label = Text("\(t)")
+                            .font(BrutalistType.mono(.medium, size: 9))
+                            .foregroundStyle(BrutalistColor.muted)
+                        ctx.draw(label, at: CGPoint(x: padL - 5, y: y), anchor: .trailing)
+                    }
+                }
+
+                // 2) Par reference line — single dashed horizontal at the
+                //    most common par. Most rounds are par-72; if pars vary
+                //    the line still gives the eye a stable anchor.
+                if showParLine {
+                    let parRef = modePar(of: points.map(\.par))
+                    let parY = yFor(Double(parRef))
+                    var line = Path()
+                    line.move(to: CGPoint(x: padL, y: parY))
+                    line.addLine(to: CGPoint(x: size.width - padR, y: parY))
+                    ctx.stroke(
+                        line,
+                        with: .color(BrutalistColor.muted),
+                        style: StrokeStyle(lineWidth: 1, dash: [4, 3])
+                    )
+                    let tag = Text("PAR \(parRef)")
+                        .font(BrutalistType.mono(.medium, size: 8))
+                        .kerning(0.6)
                         .foregroundStyle(BrutalistColor.muted)
-                    ctx.draw(label, at: CGPoint(x: padL - 5, y: y), anchor: .trailing)
+                    ctx.draw(tag, at: CGPoint(x: size.width - padR - 2, y: parY - 7), anchor: .trailing)
                 }
-            }
 
-            // 2) Par reference line — single dashed horizontal at the
-            //    most common par. Most rounds are par-72; if pars vary
-            //    the line still gives the eye a stable anchor.
-            if showParLine {
-                let parRef = modePar(of: points.map(\.par))
-                let parY = yFor(Double(parRef))
-                var line = Path()
-                line.move(to: CGPoint(x: padL, y: parY))
-                line.addLine(to: CGPoint(x: size.width - padR, y: parY))
+                // 3) 5-round rolling average — thin dotted ink overlay.
+                if showRollingAvg, points.count >= 2 {
+                    let avg = rollingAvg(scores, window: 5)
+                    let path = progressiveLinePath(
+                        points: avg.enumerated().map { i, v in CGPoint(x: xFor(i), y: yFor(v)) },
+                        progress: draw
+                    )
+                    ctx.stroke(
+                        path,
+                        with: .color(BrutalistColor.muted),
+                        style: StrokeStyle(lineWidth: 1, dash: [2, 2])
+                    )
+                }
+
+                // 4) Score line — solid ink, primary.
+                let scorePoints = scores.enumerated().map { i, s in CGPoint(x: xFor(i), y: yFor(s)) }
+                let scoreLine = progressiveLinePath(points: scorePoints, progress: draw)
                 ctx.stroke(
-                    line,
-                    with: .color(BrutalistColor.muted),
-                    style: StrokeStyle(lineWidth: 1, dash: [4, 3])
+                    scoreLine,
+                    with: .color(BrutalistColor.fg),
+                    style: StrokeStyle(lineWidth: 1.8, lineJoin: .round)
                 )
-                let tag = Text("PAR \(parRef)")
-                    .font(BrutalistType.mono(.medium, size: 8))
-                    .kerning(0.6)
-                    .foregroundStyle(BrutalistColor.muted)
-                ctx.draw(tag, at: CGPoint(x: size.width - padR - 2, y: parY - 7), anchor: .trailing)
-            }
 
-            // 3) 5-round rolling average — thin dotted ink overlay.
-            if showRollingAvg, points.count >= 2 {
-                let avg = rollingAvg(scores, window: 5)
-                var path = Path()
-                for (i, v) in avg.enumerated() {
-                    let p = CGPoint(x: xFor(i), y: yFor(v))
-                    if i == 0 { path.move(to: p) } else { path.addLine(to: p) }
+                // 5) Per-round dots. Hollow bone with ink ring; the last
+                //    round flips to solid ink so the latest reads as the
+                //    current state.
+                let visibleDotCount = draw.visibleDotCount(totalPoints: scores.count)
+                for i in scores.indices.prefix(visibleDotCount) {
+                    let cx = xFor(i)
+                    let cy = yFor(scores[i])
+                    let last = i == scores.count - 1
+                    let r: CGFloat = last ? 3.6 : 2.6
+                    let rect = CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2)
+                    let ring = Path(ellipseIn: rect)
+                    ctx.fill(ring, with: .color(last ? BrutalistColor.fg : BrutalistColor.bg))
+                    ctx.stroke(ring, with: .color(BrutalistColor.fg), lineWidth: 1.4)
                 }
-                ctx.stroke(
-                    path,
-                    with: .color(BrutalistColor.muted),
-                    style: StrokeStyle(lineWidth: 1, dash: [2, 2])
-                )
-            }
 
-            // 4) Score line — solid ink, primary.
-            var scoreLine = Path()
-            for (i, s) in scores.enumerated() {
-                let p = CGPoint(x: xFor(i), y: yFor(s))
-                if i == 0 { scoreLine.move(to: p) } else { scoreLine.addLine(to: p) }
-            }
-            ctx.stroke(
-                scoreLine,
-                with: .color(BrutalistColor.fg),
-                style: StrokeStyle(lineWidth: 1.8, lineJoin: .round)
-            )
-
-            // 5) Per-round dots. Hollow bone with ink ring; the last
-            //    round flips to solid ink so the latest reads as the
-            //    current state.
-            for i in scores.indices {
-                let cx = xFor(i)
-                let cy = yFor(scores[i])
-                let last = i == scores.count - 1
-                let r: CGFloat = last ? 3.6 : 2.6
-                let rect = CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2)
-                let ring = Path(ellipseIn: rect)
-                ctx.fill(ring, with: .color(last ? BrutalistColor.fg : BrutalistColor.bg))
-                ctx.stroke(ring, with: .color(BrutalistColor.fg), lineWidth: 1.4)
-            }
-
-            // 6) X-axis date labels at four anchor positions.
-            if showAxis, points.count >= 2 {
-                let idxs = [
-                    0,
-                    points.count / 3,
-                    (points.count * 2) / 3,
-                    points.count - 1,
-                ]
-                let fmt = DateFormatter()
-                fmt.locale = Locale(identifier: "en_US_POSIX")
-                fmt.dateFormat = "dd MMM"
-                for (k, i) in idxs.enumerated() {
-                    let raw = fmt.string(from: points[i].date).uppercased()
-                    let label = Text(raw)
-                        .font(BrutalistType.mono(.medium, size: 9))
-                        .kerning(0.4)
-                        .foregroundStyle(BrutalistColor.muted)
-                    let anchor: UnitPoint = k == 0 ? .leading
-                        : k == idxs.count - 1 ? .trailing
-                        : .center
-                    ctx.draw(label, at: CGPoint(x: xFor(i), y: size.height - 8), anchor: anchor)
+                // 6) X-axis date labels at four anchor positions.
+                if showAxis, points.count >= 2 {
+                    let idxs = [
+                        0,
+                        points.count / 3,
+                        (points.count * 2) / 3,
+                        points.count - 1,
+                    ]
+                    let fmt = DateFormatter()
+                    fmt.locale = Locale(identifier: "en_US_POSIX")
+                    fmt.dateFormat = "dd MMM"
+                    for (k, i) in idxs.enumerated() {
+                        let raw = fmt.string(from: points[i].date).uppercased()
+                        let label = Text(raw)
+                            .font(BrutalistType.mono(.medium, size: 9))
+                            .kerning(0.4)
+                            .foregroundStyle(BrutalistColor.muted)
+                        let anchor: UnitPoint = k == 0 ? .leading
+                            : k == idxs.count - 1 ? .trailing
+                            : .center
+                        ctx.draw(label, at: CGPoint(x: xFor(i), y: size.height - 8), anchor: anchor)
+                    }
                 }
             }
+        }
+        .task(id: drawTrigger) {
+            await drawLine()
         }
     }
 
@@ -187,6 +202,94 @@ public struct ScoreTraceChart: View {
             let slice = arr[start...i]
             return slice.reduce(0, +) / Double(slice.count)
         }
+    }
+
+    private func progressiveLinePath(points: [CGPoint], progress: ScoreTraceDrawProgress) -> Path {
+        guard points.count >= 2, progress.value > 0 else { return Path() }
+        let segmentCount = points.count - 1
+        let scaledProgress = progress.value * Double(segmentCount)
+        let completeSegments = min(Int(scaledProgress.rounded(.down)), segmentCount)
+        let partialProgress = scaledProgress - Double(completeSegments)
+
+        var path = Path()
+        path.move(to: points[0])
+
+        if completeSegments > 0 {
+            for index in 1...completeSegments {
+                path.addLine(to: points[index])
+            }
+        }
+
+        if completeSegments < segmentCount, partialProgress > 0 {
+            let start = points[completeSegments]
+            let end = points[completeSegments + 1]
+            path.addLine(to: CGPoint(
+                x: start.x + (end.x - start.x) * partialProgress,
+                y: start.y + (end.y - start.y) * partialProgress
+            ))
+        }
+
+        return path
+    }
+
+    private func currentDrawProgress(at date: Date) -> ScoreTraceDrawProgress {
+        guard !reduceMotion, !hasCompletedDraw else { return ScoreTraceDrawProgress(1) }
+        guard let drawStartedAt else { return ScoreTraceDrawProgress(0) }
+        return ScoreTraceDrawProgress.elapsed(
+            date.timeIntervalSince(drawStartedAt),
+            duration: Self.drawDuration
+        )
+    }
+
+    @MainActor
+    private func drawLine() async {
+        guard let drawDelay, !reduceMotion else {
+            hasCompletedDraw = true
+            isDrawing = false
+            drawStartedAt = nil
+            return
+        }
+
+        hasCompletedDraw = false
+        isDrawing = false
+        drawStartedAt = nil
+
+        try? await Task.sleep(for: .seconds(drawDelay))
+        guard !Task.isCancelled else { return }
+
+        drawStartedAt = Date()
+        isDrawing = true
+
+        try? await Task.sleep(for: .seconds(Self.drawDuration))
+        guard !Task.isCancelled else { return }
+
+        hasCompletedDraw = true
+        isDrawing = false
+        drawStartedAt = nil
+    }
+}
+
+struct ScoreTraceDrawProgress: Equatable {
+    let value: Double
+
+    init(_ value: Double) {
+        self.value = min(max(value, 0), 1)
+    }
+
+    static func initial(drawDelay: Double?) -> ScoreTraceDrawProgress {
+        ScoreTraceDrawProgress(drawDelay == nil ? 1 : 0)
+    }
+
+    static func elapsed(_ elapsed: Double, duration: Double) -> ScoreTraceDrawProgress {
+        guard duration > 0 else { return ScoreTraceDrawProgress(1) }
+        return ScoreTraceDrawProgress(elapsed / duration)
+    }
+
+    func visibleDotCount(totalPoints: Int) -> Int {
+        guard totalPoints > 0, value > 0 else { return 0 }
+        guard value < 1 else { return totalPoints }
+        let segmentCount = max(totalPoints - 1, 1)
+        return min(totalPoints, Int((value * Double(segmentCount)).rounded(.down)) + 1)
     }
 }
 
@@ -339,15 +442,103 @@ struct ScoreTraceTrendsSummary {
     }
 }
 
+public enum ScoreTraceTrendsCardMode {
+    case full
+    case dashboard
+}
+
+private struct ScoreTraceDirectionArrow: Shape {
+    let pointsUp: Bool
+
+    func path(in rect: CGRect) -> Path {
+        let scale = min(rect.width, rect.height) / 24
+        let xOffset = rect.midX - 12 * scale
+        let yOffset = rect.midY - 12 * scale
+
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: xOffset + x * scale, y: yOffset + y * scale)
+        }
+
+        var path = Path()
+        if pointsUp {
+            path.move(to: point(4.5, 19.5))
+            path.addLine(to: point(19.5, 4.5))
+            path.move(to: point(19.5, 4.5))
+            path.addLine(to: point(8.25, 4.5))
+            path.move(to: point(19.5, 4.5))
+            path.addLine(to: point(19.5, 15.75))
+        } else {
+            path.move(to: point(4.5, 4.5))
+            path.addLine(to: point(19.5, 19.5))
+            path.move(to: point(19.5, 19.5))
+            path.addLine(to: point(19.5, 8.25))
+            path.move(to: point(19.5, 19.5))
+            path.addLine(to: point(8.25, 19.5))
+        }
+        return path
+    }
+}
+
+enum ScoreTraceAverageTrend: Equatable {
+    case improving
+    case worsening
+
+    init?(delta: Double?) {
+        guard let delta, delta != 0 else {
+            return nil
+        }
+        self = delta < 0 ? .improving : .worsening
+    }
+
+    var pointsUp: Bool {
+        switch self {
+        case .improving:
+            false
+        case .worsening:
+            true
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .improving:
+            "IMPROVING"
+        case .worsening:
+            "WORSENING"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .improving:
+            BrutalistColor.sgPos
+        case .worsening:
+            BrutalistColor.sgNeg
+        }
+    }
+}
+
 public struct ScoreTraceTrendsCard: View {
     let points: [ScoreTracePoint]
     /// Distinct course count for the footer. Caller computes from the
     /// underlying round set so the card stays UI-only.
     let courseCount: Int
+    private let mode: ScoreTraceTrendsCardMode
+    private let graphDrawTrigger: Int
+    private let graphDrawDelay: Double?
 
-    public init(points: [ScoreTracePoint], courseCount: Int) {
+    public init(
+        points: [ScoreTracePoint],
+        courseCount: Int,
+        mode: ScoreTraceTrendsCardMode = .full,
+        graphDrawTrigger: Int = 0,
+        graphDrawDelay: Double? = nil
+    ) {
         self.points = points
         self.courseCount = courseCount
+        self.mode = mode
+        self.graphDrawTrigger = graphDrawTrigger
+        self.graphDrawDelay = graphDrawDelay
     }
 
     public var body: some View {
@@ -361,57 +552,73 @@ public struct ScoreTraceTrendsCard: View {
     private var content: some View {
         let scores = points.map { Double($0.score) }
         let diffs = points.map { Double($0.score - $0.par) }
-        let avgScore = scores.reduce(0, +) / Double(scores.count)
         let avgDiff = diffs.reduce(0, +) / Double(diffs.count)
         let best = points.min(by: { ($0.score - $0.par) < ($1.score - $1.par) })!
         let summary = ScoreTraceTrendsSummary(scores: points.map(\.score))
+        let dashboardWindow = min(5, points.count)
+        let dashboardAverage = scores.suffix(dashboardWindow).reduce(0, +) / Double(dashboardWindow)
         let trendDelta = trailingDelta(of: scores, window: 5)
-        let improving = (trendDelta ?? 0) < 0
+        let averageTrend = ScoreTraceAverageTrend(delta: trendDelta)
+        let avgVsParText = signed(avgDiff, places: 1)
 
         return ZStack(alignment: .topLeading) {
             BrutalistColor.bg
             CornerMarks(size: 8, inset: 6)
             VStack(alignment: .leading, spacing: 0) {
-                // Header
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("SCORING · LAST \(points.count) ROUNDS")
                             .font(BrutalistType.monoLabel)
                             .kerning(1.0)
                             .foregroundStyle(BrutalistColor.muted)
-                        Text("Score trend")
-                            .font(BrutalistType.sans(.bold, size: 22))
-                            .kerning(-0.6)
-                            .foregroundStyle(BrutalistColor.fg)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        Spacer(minLength: 6)
                         Text("AVG VS PAR")
                             .font(BrutalistType.mono(.medium, size: 9))
                             .kerning(0.8)
                             .foregroundStyle(BrutalistColor.dim)
-                        Text(signed(avgDiff, places: 1))
-                            .font(BrutalistType.sans(.bold, size: 32))
-                            .kerning(-1.2)
-                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
+                    }
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text("Score trend")
+                            .font(BrutalistType.sans(.bold, size: 28))
+                            .kerning(-1.0)
                             .foregroundStyle(BrutalistColor.fg)
-                        Text("\(String(format: "%.1f", avgScore)) STROKES")
-                            .font(BrutalistType.mono(.medium, size: 9))
-                            .kerning(0.6)
-                            .foregroundStyle(BrutalistColor.muted)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                        Spacer(minLength: 6)
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            AnimatedNumericText(
+                                value: avgVsParText,
+                                trigger: graphDrawTrigger,
+                                delay: graphDrawDelay ?? 0
+                            )
+                            .font(BrutalistType.sans(.bold, size: 38))
+                            .kerning(-1.4)
+                            .foregroundStyle(BrutalistColor.fg)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.55)
+                        }
                     }
                 }
 
                 Rectangle()
                     .fill(BrutalistColor.rule)
                     .frame(height: 1)
-                    .padding(.top, 12)
+                    .padding(.top, mode == .dashboard ? 10 : 12)
 
                 // KPI strip
                 HStack(spacing: 0) {
                     kpi(
-                        label: summary.averageLabel,
-                        value: summary.average.map { String(format: "%.1f", $0) } ?? "—",
+                        label: mode == .dashboard ? "LAST 5 AVG" : summary.averageLabel,
+                        value: mode == .dashboard
+                            ? String(format: "%.1f", dashboardAverage)
+                            : summary.average.map { String(format: "%.1f", $0) } ?? "—",
+                        valueArrowPointsUp: averageTrend?.pointsUp,
+                        valueArrowColor: averageTrend?.color,
+                        valueArrowAccessibilityLabel: averageTrend?.label,
                         sub: trendDelta.map { "\(signed($0, places: 1)) VS PREV 5" },
                         subColor: trendDelta.map(perfColor) ?? BrutalistColor.muted,
                         border: false
@@ -419,15 +626,15 @@ public struct ScoreTraceTrendsCard: View {
                     kpi(
                         label: "BEST",
                         value: "\(best.score)",
-                        sub: "\(signed(best.score - best.par)) · \(monthDay(best.date))",
+                        sub: nil,
                         subColor: BrutalistColor.muted,
                         border: true
                     )
                     kpi(
                         label: "FORM",
-                        value: improving ? "↗ UP" : "↘ DOWN",
-                        valueColor: trendDelta.map(perfColor) ?? BrutalistColor.fg,
-                        sub: improving ? "SCORING LOWER" : "SCORING HIGHER",
+                        value: averageTrend?.label ?? "NORMAL",
+                        valueColor: averageTrend?.color ?? BrutalistColor.muted,
+                        sub: nil,
                         subColor: BrutalistColor.muted,
                         border: true
                     )
@@ -450,6 +657,8 @@ public struct ScoreTraceTrendsCard: View {
                         .font(BrutalistType.mono(.medium, size: 9))
                         .kerning(0.6)
                         .foregroundStyle(BrutalistColor.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.55)
                 }
                 .padding(.top, 14)
                 .padding(.bottom, 6)
@@ -458,24 +667,28 @@ public struct ScoreTraceTrendsCard: View {
                     points: points,
                     showAxis: true,
                     showRollingAvg: true,
-                    showParLine: true
+                    showParLine: true,
+                    drawTrigger: graphDrawTrigger,
+                    drawDelay: graphDrawDelay
                 )
-                .frame(height: 240)
+                .frame(height: mode == .dashboard ? 300 : 240)
 
-                // Footer
-                HStack {
-                    Text(monthYear(points.first!.date))
-                    Spacer()
-                    Text("\(points.count) ROUNDS · \(courseCount) COURSE\(courseCount == 1 ? "" : "S")")
-                    Spacer()
-                    Text(monthYear(points.last!.date))
+                if mode == .full {
+                    // Footer
+                    HStack {
+                        Text(monthYear(points.first!.date))
+                        Spacer()
+                        Text("\(points.count) ROUNDS · \(courseCount) COURSE\(courseCount == 1 ? "" : "S")")
+                        Spacer()
+                        Text(monthYear(points.last!.date))
+                    }
+                    .font(BrutalistType.mono(.medium, size: 9))
+                    .kerning(0.6)
+                    .foregroundStyle(BrutalistColor.dim)
+                    .padding(.top, 10)
                 }
-                .font(BrutalistType.mono(.medium, size: 9))
-                .kerning(0.6)
-                .foregroundStyle(BrutalistColor.dim)
-                .padding(.top, 10)
             }
-            .padding(16)
+            .padding(mode == .dashboard ? 12 : 16)
         }
         .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
     }
@@ -484,6 +697,9 @@ public struct ScoreTraceTrendsCard: View {
         label: String,
         value: String,
         valueColor: Color = BrutalistColor.fg,
+        valueArrowPointsUp: Bool? = nil,
+        valueArrowColor: Color? = nil,
+        valueArrowAccessibilityLabel: String? = nil,
         sub: String?,
         subColor: Color,
         border: Bool
@@ -493,11 +709,25 @@ public struct ScoreTraceTrendsCard: View {
                 .font(BrutalistType.monoMicro)
                 .kerning(0.8)
                 .foregroundStyle(BrutalistColor.muted)
-            Text(value)
+            HStack(alignment: .center, spacing: 4) {
+                AnimatedNumericText(
+                    value: value,
+                    trigger: graphDrawTrigger,
+                    delay: graphDrawDelay ?? 0
+                )
                 .font(BrutalistType.mono(.semibold, size: 18))
-                .monospacedDigit()
                 .foregroundStyle(valueColor)
-                .padding(.top, 4)
+                if let valueArrowPointsUp {
+                    ScoreTraceDirectionArrow(pointsUp: valueArrowPointsUp)
+                        .stroke(
+                            valueArrowColor ?? valueColor,
+                            style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round)
+                        )
+                        .frame(width: 17, height: 17)
+                        .accessibilityLabel(valueArrowAccessibilityLabel ?? "")
+                }
+            }
+            .padding(.top, 4)
             if let sub {
                 Text(sub)
                     .font(BrutalistType.mono(.medium, size: 9))

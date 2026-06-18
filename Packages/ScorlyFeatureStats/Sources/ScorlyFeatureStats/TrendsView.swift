@@ -3,10 +3,9 @@ import ScorlyDesignSystem
 import ScorlyDomain
 import SwiftUI
 
-/// Trends — the brutalist statistical instrument. Loads completed
-/// rounds from the repository, lets the player pick a sample window
-/// (10 or 20), composes a ledger of charts on top of the resulting
-/// `TrendsModel`. Read-only.
+/// Trends dashboard and section drill-ins. Loads completed rounds,
+/// applies the current hidden filter/window state, and renders a
+/// fixed-height dashboard before letting the player drill into detail.
 public struct TrendsView: View {
     let roundsRepository: any RoundsRepository
     let comparisonReference: SGComparisonReference
@@ -16,9 +15,13 @@ public struct TrendsView: View {
     @State private var window: TrendsWindow = .twenty
     @State private var filter: AggregateRoundFilter = .default
     @State private var sheetState: TrendsFilterEditState?
+    @State private var selectedSection: TrendsSection?
     @State private var didLoad = false
     @State private var isRefreshing = false
+    @State private var hasEntered = false
+    @State private var dashboardAnimationToken = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private static let graphDrawDelay = 0.18
 
     public init(
         roundsRepository: any RoundsRepository,
@@ -31,40 +34,27 @@ public struct TrendsView: View {
     }
 
     public var body: some View {
-        // Eligibility runs before the window so LAST 10 / LAST 20 always
-        // samples from the filtered subset, not the raw archive.
         let eligible = allRounds.eligible(for: filter)
         let model = TrendsModel.build(rounds: eligible, window: window)
-        // Last-20 heat grid always samples the raw archive — staying
-        // filter-stable is the whole point of the grid.
-        let carouselAggregates = TrendCarouselAggregates.build(
+        let carousel = TrendCarouselAggregates.build(
             eligible: eligible,
             allRounds: allRounds
         )
-        ScreenShell {
-            TopBar(left: "TREND ANALYSIS", right: "SCORLY/B  ®")
-            HairlineProgress(isLoading: isRefreshing)
-                .padding(.top, BrutalistSpacing.s)
-            backRow(model: model, eligibleCount: eligible.count)
-                .padding(.top, BrutalistSpacing.m)
-            hero
-                .padding(.top, BrutalistSpacing.m)
-            tagline
-            filterRow
-                .padding(.top, BrutalistSpacing.l)
 
-            if eligible.isEmpty {
-                emptyState
-                    .padding(.top, BrutalistSpacing.l)
+        Group {
+            if let selectedSection {
+                sectionScreen(
+                    selectedSection,
+                    model: model,
+                    carousel: carousel,
+                    eligible: eligible
+                )
             } else {
-                content(model: model, carousel: carouselAggregates, eligible: eligible)
-                    .padding(.top, BrutalistSpacing.l)
+                dashboard(model: model, eligible: eligible)
             }
-
-            footerLine
-                .padding(.top, BrutalistSpacing.l)
-                .padding(.bottom, BrutalistSpacing.xl)
         }
+        .opacity(hasEntered ? 1 : 0)
+        .offset(x: reduceMotion || hasEntered ? 0 : 32)
         .animation(
             Motion.adaptive(Motion.easeOutQuart, reduceMotion: reduceMotion),
             value: window
@@ -73,10 +63,16 @@ public struct TrendsView: View {
             Motion.adaptive(Motion.easeOutQuart, reduceMotion: reduceMotion),
             value: filter
         )
+        .animation(
+            Motion.adaptive(Motion.easeOutQuart, reduceMotion: reduceMotion),
+            value: selectedSection
+        )
         .task {
             guard !didLoad else { return }
             didLoad = true
             await load()
+            playEntrance()
+            triggerDashboardAnimation()
         }
         .refreshable { await load() }
         .sheet(item: $sheetState) { _ in
@@ -101,30 +97,241 @@ public struct TrendsView: View {
         }
     }
 
-    // MARK: - Composition
+    // MARK: - Dashboard
 
-    private func backRow(model: TrendsModel, eligibleCount: Int) -> some View {
-        HStack {
-            Text("← HOME")
-                .font(BrutalistType.monoLabel)
-                .kerning(1.0)
-                .foregroundStyle(BrutalistColor.fg)
-                .brutalistTap(action: onBack)
-            Spacer()
-            Text(sampleSubtitle(model: model, eligibleCount: eligibleCount))
-                .font(BrutalistType.monoMicro)
-                .kerning(1.0)
-                .foregroundStyle(BrutalistColor.muted)
+    private func dashboard(model: TrendsModel, eligible: [CompletedRound]) -> some View {
+        ScreenShell(scrollable: false) {
+            navigationRow(label: "← HOME", action: onBack)
+            HairlineProgress(isLoading: isRefreshing)
+                .padding(.top, BrutalistSpacing.xs)
+            pageTitle("Trends")
+                .padding(.top, BrutalistSpacing.xs)
+            tagline
+                .padding(.top, BrutalistSpacing.xs)
+            filterRow
+                .padding(.top, BrutalistSpacing.m)
+
+            if eligible.isEmpty {
+                emptyState
+                    .padding(.top, BrutalistSpacing.l)
+            } else {
+                GeometryReader { proxy in
+                    dashboardLayout(
+                        width: proxy.size.width,
+                        model: model,
+                        metrics: TrendsDashboardMetric.sectionCards(from: model),
+                        courseCount: distinctCourseCount(in: eligible)
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                }
+                .padding(.top, BrutalistSpacing.sm)
+            }
         }
     }
 
-    private var hero: some View {
-        Text("Trends")
-            .font(BrutalistType.sans(.bold, size: 44))
-            .kerning(-1.8)
-            .foregroundStyle(BrutalistColor.fg)
-            .padding(.bottom, BrutalistSpacing.xs)
+    @ViewBuilder
+    private func dashboardLayout(
+        width: CGFloat,
+        model: TrendsModel,
+        metrics: [TrendsDashboardMetric],
+        courseCount: Int
+    ) -> some View {
+        let scoreCard = ScoreTraceTrendsCard(
+            points: scoreTracePoints(from: model),
+            courseCount: courseCount,
+            mode: .dashboard,
+            graphDrawTrigger: dashboardAnimationToken,
+            graphDrawDelay: Self.graphDrawDelay
+        )
+
+        if width >= 330 {
+            VStack(alignment: .leading, spacing: BrutalistSpacing.md) {
+                scoreCard
+                HStack(spacing: BrutalistSpacing.sm) {
+                    ForEach(metrics) { metric in
+                        sectionMetricCard(metric)
+                    }
+                }
+            }
+        } else {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: BrutalistSpacing.sm),
+                    GridItem(.flexible(), spacing: BrutalistSpacing.sm),
+                ],
+                alignment: .leading,
+                spacing: BrutalistSpacing.sm
+            ) {
+                scoreCard
+                    .gridCellColumns(2)
+                ForEach(metrics) { metric in
+                    sectionMetricCard(metric)
+                }
+            }
+        }
     }
+
+    private func sectionMetricCard(_ metric: TrendsDashboardMetric) -> some View {
+        ZStack(alignment: .topLeading) {
+            BrutalistColor.bg
+            CornerMarks(size: 6, inset: 5)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(metric.title)
+                        .font(BrutalistType.monoLabel)
+                        .kerning(0.8)
+                        .foregroundStyle(BrutalistColor.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.55)
+                    Spacer(minLength: 6)
+                    Text("OPEN")
+                        .font(BrutalistType.monoMicro)
+                        .kerning(0.6)
+                        .foregroundStyle(BrutalistColor.dim)
+                }
+                Spacer(minLength: BrutalistSpacing.s)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    AnimatedNumericText(
+                        value: metric.value,
+                        trigger: dashboardAnimationToken,
+                        delay: Self.graphDrawDelay
+                    )
+                    .font(BrutalistType.sans(.bold, size: 38))
+                    .kerning(-1.4)
+                    .foregroundStyle(BrutalistColor.fg)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+                    if !metric.unit.isEmpty {
+                        Text(metric.unit)
+                            .font(BrutalistType.mono(.semibold, size: 15))
+                            .foregroundStyle(BrutalistColor.muted)
+                    }
+                    if let trend = metric.trend {
+                        TrendDirectionChevron(pointsUp: trend.pointsUp)
+                            .stroke(
+                                trend.isImproving ? BrutalistColor.sgPos : BrutalistColor.sgNeg,
+                                style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round)
+                            )
+                            .frame(width: 19, height: 19)
+                            .padding(.leading, 2)
+                            .accessibilityHidden(true)
+                    }
+                }
+                Text(metric.detail)
+                    .font(BrutalistType.monoMicro)
+                    .kerning(0.7)
+                    .foregroundStyle(BrutalistColor.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+                    .padding(.top, BrutalistSpacing.xs)
+            }
+            .padding(BrutalistSpacing.md)
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
+        .brutalistTap {
+            Haptics.light()
+            selectedSection = TrendsSection(metric.kind)
+        }
+        .accessibilityLabel(metric.detail)
+    }
+
+    // MARK: - Section pages
+
+    private func sectionScreen(
+        _ section: TrendsSection,
+        model: TrendsModel,
+        carousel: TrendCarouselAggregates,
+        eligible: [CompletedRound]
+    ) -> some View {
+        ScreenShell {
+            navigationRow(label: "← TRENDS") {
+                selectedSection = nil
+            }
+            HairlineProgress(isLoading: isRefreshing)
+                .padding(.top, BrutalistSpacing.xs)
+            pageTitle(section.title)
+                .padding(.top, BrutalistSpacing.xs)
+
+            if eligible.isEmpty {
+                emptyState
+                    .padding(.top, BrutalistSpacing.l)
+            } else {
+                sectionContent(
+                    section,
+                    model: model,
+                    carousel: carousel,
+                    eligible: eligible
+                )
+                .padding(.top, BrutalistSpacing.l)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sectionContent(
+        _ section: TrendsSection,
+        model: TrendsModel,
+        carousel: TrendCarouselAggregates,
+        eligible: [CompletedRound]
+    ) -> some View {
+        let courseCount = distinctCourseCount(in: eligible)
+        switch section {
+        case .fairways:
+            AccuracyCard(
+                kind: .fairway,
+                data: carousel.fairwayRose,
+                series: model.firSeries,
+                dates: model.accuracyDates,
+                courseCount: courseCount
+            )
+        case .greens:
+            AccuracyCard(
+                kind: .green,
+                data: carousel.greenRose,
+                series: model.girSeries,
+                dates: model.accuracyDates,
+                courseCount: courseCount
+            )
+        case .putting:
+            PuttsTouchCard(
+                avgPuttsPerRound: model.puttsPerRound,
+                onePuttRate: model.onePuttRate,
+                threePuttRate: model.threePuttRate,
+                puttsSeries: model.puttsSeries,
+                threePuttSeries: model.threePuttSeries
+            )
+            MakePctByDistanceCard(stats: carousel.makePctByDistance)
+                .padding(.top, BrutalistSpacing.l)
+        }
+    }
+
+    // MARK: - Filter wiring
+
+    private var availableTeeNames: [String] {
+        Array(Set(allRounds.compactMap(\.teeName))).sorted()
+    }
+
+    private var previewRecordCount: Int {
+        guard let sheetState else { return allRounds.eligible(for: filter).count }
+        return allRounds.eligible(for: sheetState.toFilter()).count
+    }
+
+    private func applyFromSheet() {
+        guard let sheetState else { return }
+        filter = sheetState.toFilter()
+        if let chosen = TrendsFilterEditState.window(for: sheetState.window) {
+            window = chosen
+        }
+        self.sheetState = nil
+        triggerDashboardAnimation()
+    }
+
+    private func resetSheet() {
+        sheetState = TrendsFilterEditState(filter: .default, window: .twenty)
+    }
+
+    // MARK: - Shared view pieces
 
     private var tagline: some View {
         Text("ROLLING WINDOWS · NO STORYTELLING")
@@ -134,12 +341,12 @@ public struct TrendsView: View {
     }
 
     private var filterRow: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: BrutalistSpacing.xs) {
             Text(filterButtonLabel)
                 .font(BrutalistType.monoCaption)
                 .kerning(0.8)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
+                .padding(.vertical, BrutalistSpacing.sm)
                 .background(filterIsDefault ? .clear : BrutalistColor.fg)
                 .foregroundStyle(filterIsDefault ? BrutalistColor.fg : BrutalistColor.bg)
                 .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
@@ -159,199 +366,47 @@ public struct TrendsView: View {
         filter == .default
     }
 
-    private var availableTeeNames: [String] {
-        Array(Set(allRounds.compactMap(\.teeName))).sorted()
-    }
-
-    private var previewRecordCount: Int {
-        guard let sheetState else { return allRounds.eligible(for: filter).count }
-        return allRounds.eligible(for: sheetState.toFilter()).count
-    }
-
-    private func applyFromSheet() {
-        guard let sheetState else { return }
-        filter = sheetState.toFilter()
-        if let chosen = TrendsFilterEditState.window(for: sheetState.window) {
-            window = chosen
-        }
-        self.sheetState = nil
-    }
-
-    private func resetSheet() {
-        sheetState = TrendsFilterEditState(filter: .default, window: .twenty)
-    }
-
-    @ViewBuilder
-    private func content(
-        model: TrendsModel,
-        carousel: TrendCarouselAggregates,
-        eligible: [CompletedRound]
-    ) -> some View {
-        ScoreTraceTrendsCard(
-            points: scoreTracePoints(from: model),
-            courseCount: distinctCourseCount(in: eligible)
-        )
-
-        // Each carousel sets its own minHeight so the page lays out
-        // sensibly before the slide measurement preference arrives.
-        // Heights are *minimums* — the PreferenceKey in TrendCarousel
-        // grows the frame to fit a taller slide if needed.
-        TrendCarousel(
-            title: "OVERALL GAME",
-            slides: overallGameSlides(model: model, eligible: eligible),
-            minHeight: 570
-        ) { slide in
-            slide.view
-        }
-        .padding(.top, BrutalistSpacing.l)
-
-        TrendCarousel(
-            title: "ACCURACY",
-            slides: accuracySlides(model: model, carousel: carousel, eligible: eligible),
-            minHeight: 700
-        ) { slide in
-            slide.view
-        }
-        .padding(.top, BrutalistSpacing.l)
-
-        TrendCarousel(
-            title: "TOUCH",
-            slides: touchSlides(model: model, carousel: carousel),
-            minHeight: 440
-        ) { slide in
-            slide.view
-        }
-        .padding(.top, BrutalistSpacing.l)
-
-        TrendCarousel(
-            title: "SCORING",
-            slides: scoringSlides(carousel: carousel),
-            minHeight: 420
-        ) { slide in
-            slide.view
-        }
-        .padding(.top, BrutalistSpacing.l)
-    }
-
-    // MARK: - Carousel slide assembly
-
-    /// Lightweight identifiable wrapper. Each carousel slide is built
-    /// once per render; the stable integer id keeps the diff identity
-    /// even though the AnyView inside changes between renders. Equatable
-    /// + Hashable conformance compares ids only — the AnyView payload
-    /// is intentionally excluded so SwiftUI's scroll-position binding
-    /// has a stable identity across rerenders.
-    struct CarouselSlide: Identifiable, Hashable {
-        let id: Int
-        let view: AnyView
-
-        static func == (lhs: CarouselSlide, rhs: CarouselSlide) -> Bool {
-            lhs.id == rhs.id
-        }
-
-        func hash(into hasher: inout Hasher) {
-            hasher.combine(id)
+    private func navigationRow(label: String, action: @escaping () -> Void) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(BrutalistType.monoLabel)
+                .kerning(1.0)
+                .foregroundStyle(BrutalistColor.fg)
+                .brutalistTap(action: action)
+            Spacer()
+            Text("SCORLY/B  ®")
+                .font(BrutalistType.monoLabel)
+                .kerning(1.0)
+                .foregroundStyle(BrutalistColor.muted)
         }
     }
 
-    private func overallGameSlides(
-        model: TrendsModel,
-        eligible: [CompletedRound]
-    ) -> [CarouselSlide] {
-        [
-            .init(id: 0, view: AnyView(SkillsRadarCard(axes: model.radarAxes))),
-            .init(
-                id: 1,
-                view: AnyView(MultiRoundSGCard(
-                    rounds: eligible,
-                    baselineRounds: allRounds,
-                    comparisonReference: comparisonReference
-                ))
-            ),
-        ]
+    private func pageTitle(_ title: String) -> some View {
+        Text(title)
+            .font(BrutalistType.sans(.bold, size: 44))
+            .kerning(-1.8)
+            .foregroundStyle(BrutalistColor.fg)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func accuracySlides(
-        model: TrendsModel,
-        carousel: TrendCarouselAggregates,
-        eligible: [CompletedRound]
-    ) -> [CarouselSlide] {
-        let courseCount = distinctCourseCount(in: eligible)
-        return [
-            .init(
-                id: 0,
-                view: AnyView(
-                    AccuracyCard(
-                        kind: .fairway,
-                        data: carousel.fairwayRose,
-                        series: model.firSeries,
-                        dates: model.accuracyDates,
-                        courseCount: courseCount
-                    )
-                )
-            ),
-            .init(
-                id: 1,
-                view: AnyView(
-                    AccuracyCard(
-                        kind: .green,
-                        data: carousel.greenRose,
-                        series: model.girSeries,
-                        dates: model.accuracyDates,
-                        courseCount: courseCount
-                    )
-                )
-            ),
-        ]
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: BrutalistSpacing.s) {
+            Text("NO ROUNDS YET")
+                .font(BrutalistType.monoLabel)
+                .kerning(1.0)
+                .foregroundStyle(BrutalistColor.muted)
+            Text("File a few scorecards from the round flow. Trends activates after the first signed card.")
+                .font(BrutalistType.inputBody)
+                .foregroundStyle(BrutalistColor.fg)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
     }
 
-    private func touchSlides(
-        model: TrendsModel,
-        carousel: TrendCarouselAggregates
-    ) -> [CarouselSlide] {
-        [
-            .init(
-                id: 0,
-                view: AnyView(
-                    PuttsTouchCard(
-                        avgPuttsPerRound: model.puttsPerRound,
-                        onePuttRate: model.onePuttRate,
-                        threePuttRate: model.threePuttRate,
-                        puttsSeries: model.puttsSeries,
-                        threePuttSeries: model.threePuttSeries
-                    )
-                )
-            ),
-            .init(
-                id: 1,
-                view: AnyView(
-                    MakePctByDistanceCard(stats: carousel.makePctByDistance)
-                )
-            ),
-        ]
-    }
-
-    private func scoringSlides(carousel: TrendCarouselAggregates) -> [CarouselSlide] {
-        [
-            .init(
-                id: 0,
-                view: AnyView(
-                    HoleOutcomeDistribution(
-                        counts: carousel.outcomes,
-                        total: carousel.outcomesTotal
-                    )
-                )
-            ),
-            .init(
-                id: 1,
-                view: AnyView(
-                    HoleHeatGrid(rows: carousel.holeHeatLast20)
-                )
-            ),
-        ]
-    }
-
-    // MARK: - Score trace inputs
+    // MARK: - Helpers
 
     private func scoreTracePoints(from model: TrendsModel) -> [ScoreTracePoint] {
         model.timeline.map { point in
@@ -371,59 +426,57 @@ public struct TrendsView: View {
         return rounds.count
     }
 
-    // MARK: - Empty + footer
-
-    private var emptyState: some View {
-        VStack(alignment: .leading, spacing: BrutalistSpacing.s) {
-            Text("NO ROUNDS YET")
-                .font(BrutalistType.monoLabel)
-                .kerning(1.0)
-                .foregroundStyle(BrutalistColor.muted)
-            Text("File a few scorecards from the round flow. Trends activates after the first signed card.")
-                .font(BrutalistType.inputBody)
-                .foregroundStyle(BrutalistColor.fg)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .overlay(Rectangle().stroke(BrutalistColor.rule, lineWidth: 1))
-    }
-
-    private var footerLine: some View {
-        HStack {
-            Text("END OF ANALYSIS")
-                .font(BrutalistType.monoMicro)
-                .kerning(0.8)
-                .foregroundStyle(BrutalistColor.dim)
-            Spacer()
-            Text("SCORLY/B · 2026")
-                .font(BrutalistType.monoMicro)
-                .kerning(0.8)
-                .foregroundStyle(BrutalistColor.dim)
-        }
-    }
-
-    // MARK: - Helpers
-
-    private func sampleSubtitle(model: TrendsModel, eligibleCount: Int) -> String {
-        guard let span = model.dateSpan, model.sampleCount > 0 else {
-            return "\(eligibleCount) ROUNDS ELIGIBLE"
-        }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "dd MMM yy"
-        let start = formatter.string(from: span.lowerBound).uppercased()
-        let end = formatter.string(from: span.upperBound).uppercased()
-        return "N=\(model.sampleCount) · \(start) → \(end)"
-    }
-
     @MainActor
     private func load() async {
         isRefreshing = true
         defer { isRefreshing = false }
         if let fetched = try? await roundsRepository.fetchAllCompleted() {
-            withAnimation(Motion.adaptive(Motion.easeOutQuart, reduceMotion: reduceMotion)) {
+            if hasEntered {
+                withAnimation(Motion.adaptive(Motion.easeOutQuart, reduceMotion: reduceMotion)) {
+                    allRounds = fetched
+                }
+            } else {
                 allRounds = fetched
             }
+        }
+    }
+
+    private func playEntrance() {
+        guard !hasEntered else { return }
+        withAnimation(Motion.adaptive(Motion.easeOutQuart(0.32), reduceMotion: reduceMotion)) {
+            hasEntered = true
+        }
+    }
+
+    private func triggerDashboardAnimation() {
+        dashboardAnimationToken += 1
+    }
+}
+
+private enum TrendsSection: Hashable {
+    case fairways
+    case greens
+    case putting
+
+    init(_ kind: TrendsDashboardMetric.Kind) {
+        switch kind {
+        case .fairways:
+            self = .fairways
+        case .greens:
+            self = .greens
+        case .putting:
+            self = .putting
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .fairways:
+            "Fairways Accuracy"
+        case .greens:
+            "Greens Accuracy"
+        case .putting:
+            "Putting"
         }
     }
 }
