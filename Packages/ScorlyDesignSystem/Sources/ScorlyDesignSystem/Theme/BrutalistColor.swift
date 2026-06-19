@@ -65,4 +65,23 @@ public enum BrutalistColor {
     public static let bogey = Color(red: 0xB5 / 255, green: 0x86 / 255, blue: 0x2A / 255)
     /// Low-opacity ochre fill for bogey grid cells.
     public static let bogeyFill = bogey.opacity(0.22)
+
+    // MARK: - Round Play accent
+
+    //
+    // **Documented exception.** DESIGN.md sets the accent budget to zero
+    // ("no accent color ever"). The Round Play "Thread" redesign is a
+    // deliberate, user-approved carve-out: a single muted fairway green
+    // marks *good / active* shot outcomes (fairway found, green hit,
+    // putt holed, the live tracer) so the eye can read a hole's success
+    // at a glance on a dense, fast-input screen. Same notation rationale
+    // as `sgPos` / `bogey` above — it encodes outcome, not decoration.
+    // Used only inside ScorlyFeatureRound's live-play surfaces
+    // (TargetField, ThreadView, HoleSummaryCard, ShotInputSheet). Do not
+    // reach for it elsewhere; the rest of the app stays accent-free.
+
+    /// Muted fairway green for good / active shot outcomes. `#3F7A52`.
+    public static let acc = Color(red: 0x3F / 255, green: 0x7A / 255, blue: 0x52 / 255)
+    /// Low-opacity green wash for good-state fills. ~`rgba(63,122,82,0.10)`.
+    public static let accFill = acc.opacity(0.10)
 }

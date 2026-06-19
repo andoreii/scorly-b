@@ -284,15 +284,15 @@ private struct AccuracyWindrose: View {
         Sector(direction: .long, word: "LONG", centerAngle: 0),
         Sector(direction: .right, word: "RIGHT", centerAngle: 90),
         Sector(direction: .short, word: "SHORT", centerAngle: 180),
-        Sector(direction: .left, word: "LEFT", centerAngle: 270)
+        Sector(direction: .left, word: "LEFT", centerAngle: 270),
     ]
 
     /// Geometry constants, scaled to the canvas side length. Match the
     /// design's reference (240 px) ratios.
     private struct Geometry {
         let center: CGPoint
-        let r0: CGFloat      // disc zone radius
-        let labelR: CGFloat  // ring where direction labels sit
+        let r0: CGFloat // disc zone radius
+        let labelR: CGFloat // ring where direction labels sit
         let maxOuter: CGFloat
         let halfAngle: Double
 
@@ -371,7 +371,7 @@ private struct AccuracyWindrose: View {
             let stacks: [(count: Int, color: Color)] = [
                 (m.clean, AccuracyHazardPalette.rough),
                 (m.bunker, AccuracyHazardPalette.bunker),
-                (m.ob + m.water, AccuracyHazardPalette.ob)
+                (m.ob + m.water, AccuracyHazardPalette.ob),
             ]
             var travelled: CGFloat = 0
             for layer in stacks where layer.count > 0 {
@@ -438,8 +438,7 @@ private struct AccuracyWindrose: View {
     // MARK: - Geometry helpers
 
     private func stack(for direction: AccuracyRoseValues.Direction)
-        -> AccuracyRoseValues.DirectionStack
-    {
+    -> AccuracyRoseValues.DirectionStack {
         values.byDirection[direction] ?? .init()
     }
 
@@ -501,8 +500,8 @@ private struct AccuracyHitLineChart: View {
             let values = points.map { $0.hitRate * 100 }
             let lo = values.min() ?? 0
             let hi = values.max() ?? 100
-            let yMin = max(0, (floor((lo - 8) / 10)) * 10)
-            let yMax = min(100, (ceil((hi + 8) / 10)) * 10)
+            let yMin = max(0, floor((lo - 8) / 10) * 10)
+            let yMax = min(100, ceil((hi + 8) / 10) * 10)
 
             let padL: CGFloat = 30
             let padR: CGFloat = 40

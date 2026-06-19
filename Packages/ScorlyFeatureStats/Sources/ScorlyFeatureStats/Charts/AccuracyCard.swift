@@ -63,8 +63,7 @@ struct AccuracyCard: View {
     }
 
     private func sharedDirection(_ direction: WindRoseData.Direction)
-        -> AccuracyRoseValues.Direction
-    {
+    -> AccuracyRoseValues.Direction {
         switch direction {
         case .left: .left
         case .right: .right
