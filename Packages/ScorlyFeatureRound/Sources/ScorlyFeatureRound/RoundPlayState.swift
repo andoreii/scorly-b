@@ -13,13 +13,16 @@ import ScorlyDomain
 ///    fields hold an optional "Bunker" or "Water" companion. Both
 ///    are decoded into a typed `HoleStat` only when derivation runs.
 public struct HoleEntry: Equatable, Sendable, Codable {
+    public var radarPositionVersion: Int?
     public var strokes: Int?
     public var putts: Int
     public var puttDistances: [Int?]
+    public var puttCompletionState: PuttCompletionState?
     public var teeShot: String?
     public var teeShotModifier: String?
     public var teeClub: String?
     public var teeShotDistance: Int?
+    public var teeTargetPosition: ShotTargetPosition?
     public var approach: String?
     public var approachModifier: String?
     public var approachClub: String?
@@ -28,6 +31,7 @@ public struct HoleEntry: Equatable, Sendable, Codable {
     /// where the tee shot finished (par 3). Optional — when nil, the
     /// SG calculator falls back to a lie-based default.
     public var approachLandingDistance: Int?
+    public var approachTargetPosition: ShotTargetPosition?
     /// One entry per around-the-green shot, ordered by stroke. Length
     /// is expected to match the inferred ARG count. Optional — missing
     /// entries fall back to lie-based defaults at SG time.
@@ -39,51 +43,65 @@ public struct HoleEntry: Equatable, Sendable, Codable {
     public var layupClub: String?
     /// Par-5 only: yards remaining to the pin after the layup.
     public var layupDistance: Int?
+    public var layupTargetPosition: ShotTargetPosition?
+    public var puttTargetPositions: [ShotTargetPosition?]?
     public var pinPosition: String?
     public var penaltyStrokes: Int
     public var upAndDownOverride: Bool?
     public var sandSaveOverride: Bool?
 
     public init(
+        radarPositionVersion: Int? = 1,
         strokes: Int? = nil,
         putts: Int = 2,
         puttDistances: [Int?] = [],
+        puttCompletionState: PuttCompletionState? = .open,
         teeShot: String? = nil,
         teeShotModifier: String? = nil,
         teeClub: String? = nil,
         teeShotDistance: Int? = nil,
+        teeTargetPosition: ShotTargetPosition? = nil,
         approach: String? = nil,
         approachModifier: String? = nil,
         approachClub: String? = nil,
         approachDistance: Int? = nil,
         approachLandingDistance: Int? = nil,
+        approachTargetPosition: ShotTargetPosition? = nil,
         argShots: [ARGShotEntry]? = nil,
         layupLie: String? = nil,
         layupLieModifier: String? = nil,
         layupClub: String? = nil,
         layupDistance: Int? = nil,
+        layupTargetPosition: ShotTargetPosition? = nil,
+        puttTargetPositions: [ShotTargetPosition?] = [],
         pinPosition: String? = nil,
         penaltyStrokes: Int = 0,
         upAndDownOverride: Bool? = nil,
         sandSaveOverride: Bool? = nil
     ) {
+        self.radarPositionVersion = radarPositionVersion
         self.strokes = strokes
         self.putts = putts
         self.puttDistances = puttDistances
+        self.puttCompletionState = puttCompletionState
         self.teeShot = teeShot
         self.teeShotModifier = teeShotModifier
         self.teeClub = teeClub
         self.teeShotDistance = teeShotDistance
+        self.teeTargetPosition = teeTargetPosition
         self.approach = approach
         self.approachModifier = approachModifier
         self.approachClub = approachClub
         self.approachDistance = approachDistance
         self.approachLandingDistance = approachLandingDistance
+        self.approachTargetPosition = approachTargetPosition
         self.argShots = argShots
         self.layupLie = layupLie
         self.layupLieModifier = layupLieModifier
         self.layupClub = layupClub
         self.layupDistance = layupDistance
+        self.layupTargetPosition = layupTargetPosition
+        self.puttTargetPositions = puttTargetPositions
         self.pinPosition = pinPosition
         self.penaltyStrokes = penaltyStrokes
         self.upAndDownOverride = upAndDownOverride
@@ -99,11 +117,18 @@ public struct ARGShotEntry: Equatable, Sendable, Codable {
     public var lie: String?
     public var lieModifier: String?
     public var distanceYards: Int?
+    public var targetPosition: ShotTargetPosition?
 
-    public init(lie: String? = nil, lieModifier: String? = nil, distanceYards: Int? = nil) {
+    public init(
+        lie: String? = nil,
+        lieModifier: String? = nil,
+        distanceYards: Int? = nil,
+        targetPosition: ShotTargetPosition? = nil
+    ) {
         self.lie = lie
         self.lieModifier = lieModifier
         self.distanceYards = distanceYards
+        self.targetPosition = targetPosition
     }
 }
 
@@ -213,17 +238,20 @@ public final class RoundPlayState {
         entry.approachClub = nil
         entry.approachDistance = nil
         entry.approachLandingDistance = nil
+        entry.approachTargetPosition = nil
         entry.argShots = nil
         entry.layupLie = nil
         entry.layupLieModifier = nil
         entry.layupClub = nil
         entry.layupDistance = nil
+        entry.layupTargetPosition = nil
     }
 
     /// Mutates a tee-shot result while keeping its dependent approach state valid.
     public func setTeeShotResult(_ result: String?, at index: Int) {
         guard entries.indices.contains(index) else { return }
         entries[index].teeShot = result
+        entries[index].teeTargetPosition = nil
         if result?.hasPrefix("OB ") == true {
             entries[index].teeShotDistance = nil
         }
@@ -242,6 +270,7 @@ public final class RoundPlayState {
             restoreDefaultPutts(at: index)
         }
         entries[index].approach = result
+        entries[index].approachTargetPosition = nil
         if result == "Green" || result == "On In 2" || result == Self.holedShotRaw || result?.hasPrefix("OB ") == true {
             entries[index].approachLandingDistance = nil
             entries[index].argShots = nil
@@ -289,6 +318,7 @@ public final class RoundPlayState {
         entries[index].argShots = nil
         entries[index].putts = 0
         entries[index].puttDistances = []
+        entries[index].puttCompletionState = .open
         entries[index].strokes = approachShotNumber(at: index)
     }
 
@@ -315,6 +345,7 @@ public final class RoundPlayState {
 
         entries[index].putts = 0
         entries[index].puttDistances = []
+        entries[index].puttCompletionState = .open
         entries[index].strokes = preARGShotCount(at: index) + slot + 1
         current[slot].lie = Self.holedShotRaw
         current[slot].lieModifier = nil
@@ -603,6 +634,8 @@ public final class RoundPlayState {
         guard entries.indices.contains(index) else { return }
         entries[index].putts = 2
         entries[index].puttDistances = []
+        entries[index].puttCompletionState = .open
+        entries[index].puttTargetPositions = []
     }
 
     // MARK: - Lie decoding

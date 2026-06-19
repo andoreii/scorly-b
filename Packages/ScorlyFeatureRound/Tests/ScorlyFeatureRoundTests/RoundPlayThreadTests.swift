@@ -185,6 +185,43 @@ struct RoundPlayThreadTests {
         #expect(stat.bunkerCount == 1)
     }
 
+    // MARK: - Pin tap holes a green-mode shot
+
+    @Test("Thread pin tap on an approach holes it out, matching the In flow")
+    func par4PinTapHoles() {
+        let thread = makeState()
+        thread.applyPick(pick("Fairway", good: true), to: .tee, at: 0)
+        let holedGreen = TargetField.Pick(
+            value: "Green", pos: CGPoint(x: 0.5, y: 0.493), good: true,
+            label: "HOLED", proximityFeet: 0, holed: true
+        )
+        thread.applyPick(holedGreen, to: .approach, at: 0)
+
+        let old = makeState()
+        old.entries[0] = HoleEntry(strokes: 2, putts: 0, teeShot: "Fairway", approach: "In")
+
+        let stat = thread.derivedStat(for: 0)
+        #expect(stat == old.derivedStat(for: 0))
+        #expect(stat.strokes == 2)
+        #expect(stat.putts == 0)
+        #expect(thread.isSlotHoled(.approach, at: 0))
+    }
+
+    // MARK: - Hazard tag composes with the directional tap
+
+    @Test("Bunker tag composes with a directional miss into a bunker lie")
+    func bunkerComposesWithDirection() {
+        let thread = makeState()
+        thread.applyPick(pick("Miss Left", good: false), to: .tee, at: 1)
+        thread.applyHazard(.bunker, to: .tee, at: 1)
+        #expect(thread.derivedStat(for: 1).teeShotLie == .bunkerLeft)
+
+        // Re-tapping the target clears the bunker (a fresh result).
+        thread.applyPick(pick("Fairway", good: true), to: .tee, at: 1)
+        #expect(thread.derivedStat(for: 1).teeShotLie == .fairway)
+        #expect(thread.derivedStat(for: 1).bunkerCount == 0)
+    }
+
     // MARK: - Tee OB direction preserved through the hazard tag
 
     @Test("Thread OB hazard tag records a directional penalty event")
@@ -251,7 +288,13 @@ struct RoundPlayThreadTests {
     // MARK: - Helpers
 
     private func pick(_ value: String?, modifier: String? = nil, good: Bool) -> TargetField.Pick {
-        TargetField.Pick(value: value, pos: CGPoint(x: 0.5, y: 0.5), good: good, label: value ?? "", modifier: modifier)
+        TargetField.Pick(
+            value: value,
+            pos: CGPoint(x: 0.5, y: 0.5),
+            good: good,
+            label: value ?? "",
+            modifier: modifier
+        )
     }
 
     private var holedPutt: TargetField.Pick {

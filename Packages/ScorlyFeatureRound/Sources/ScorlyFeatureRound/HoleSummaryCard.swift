@@ -34,35 +34,39 @@ struct HoleSummaryCard: View {
                     .kerning(0.8)
                     .foregroundStyle(done ? BrutalistColor.acc : BrutalistColor.muted)
             }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 8)
+            .padding(.horizontal, BrutalistSpacing.md)
+            .frame(height: HoleSummaryLayout.headerHeight)
             .overlay(alignment: .bottom) { Rectangle().fill(BrutalistColor.hair).frame(height: 1) }
 
-            HStack(spacing: 0) {
-                scoreBlock
-                statCell(label: "FIR", value: hitText(stats.fir), accent: stats.fir == .hit, dim: isDim(stats.fir))
-                statCell(label: "GIR", value: hitText(stats.gir), accent: stats.gir == .hit, dim: isDim(stats.gir))
-                statCell(label: "PUTTS", value: "\(stats.putts)", accent: false, dim: stats.putts == 0)
-                statCell(label: "PEN", value: "\(stats.pen)", accent: false, dim: stats.pen == 0)
+            GeometryReader { proxy in
+                HStack(spacing: 0) {
+                    scoreBlock
+                        .frame(width: HoleSummaryLayout.scoreWidth(availableWidth: proxy.size.width))
+                    statCell(label: "FIR", value: hitText(stats.fir), accent: stats.fir == .hit, dim: isDim(stats.fir))
+                    statCell(label: "GIR", value: hitText(stats.gir), accent: stats.gir == .hit, dim: isDim(stats.gir))
+                    statCell(label: "PUTTS", value: "\(stats.putts)", accent: false, dim: stats.putts == 0)
+                    statCell(label: "PEN", value: "\(stats.pen)", accent: false, dim: stats.pen == 0)
+                }
             }
+            .frame(height: HoleSummaryLayout.bodyHeight)
         }
-        .overlay(Rectangle().stroke(BrutalistColor.fg, lineWidth: 1.6))
+        .overlay(Rectangle().stroke(BrutalistColor.fg, lineWidth: 1.25))
     }
 
     private var scoreBlock: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 0) {
             Text("SCORE · TO PAR")
                 .font(BrutalistType.mono(.medium, size: 8))
                 .kerning(1.4)
                 .foregroundStyle(BrutalistColor.muted)
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: BrutalistSpacing.xs) {
                 Text(stats.score.map { "\($0)" } ?? "–")
-                    .font(BrutalistType.heroSecondary)
-                    .kerning(-1.6)
+                    .font(BrutalistType.sans(.bold, size: 36))
+                    .kerning(-1.2)
                     .monospacedDigit()
                     .foregroundStyle(stats.score == nil ? BrutalistColor.dim : BrutalistColor.fg)
                 Text(toParText)
-                    .font(BrutalistType.mono(.semibold, size: 11))
+                    .font(BrutalistType.mono(.semibold, size: 12))
                     .foregroundStyle(underPar ? BrutalistColor.acc : BrutalistColor.fg)
             }
             Text(stats.score.map { ScoreLabel.text(strokes: $0, par: hole.par) } ?? "—")
@@ -70,13 +74,13 @@ struct HoleSummaryCard: View {
                 .kerning(0.8)
                 .foregroundStyle(underPar ? BrutalistColor.acc : BrutalistColor.muted)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(minWidth: 104, alignment: .leading)
+        .padding(.horizontal, BrutalistSpacing.md)
+        .padding(.vertical, BrutalistSpacing.xs)
+        .frame(maxHeight: .infinity, alignment: .leading)
     }
 
     private func statCell(label: String, value: String, accent: Bool, dim: Bool) -> some View {
-        VStack(spacing: 5) {
+        VStack(spacing: BrutalistSpacing.sm) {
             Text(label)
                 .font(BrutalistType.mono(.medium, size: 8))
                 .kerning(1.4)
@@ -86,8 +90,7 @@ struct HoleSummaryCard: View {
                 .monospacedDigit()
                 .foregroundStyle(dim ? BrutalistColor.dim : accent ? BrutalistColor.acc : BrutalistColor.fg)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .leading) { Rectangle().fill(BrutalistColor.hair).frame(width: 1) }
     }
 

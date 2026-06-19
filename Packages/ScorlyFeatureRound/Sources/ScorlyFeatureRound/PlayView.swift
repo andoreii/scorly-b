@@ -19,7 +19,8 @@ public struct PlayView: View {
     @State private var lastHoleIdx = 0
     @State private var openSlot: RoundPlayState.ShotSlot?
     @State private var quickScoreOpen = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion)
+    private var reduceMotion
 
     public init(
         state: RoundPlayState,
@@ -44,26 +45,26 @@ public struct PlayView: View {
     }
 
     public var body: some View {
-        ZStack(alignment: .bottom) {
-            content
-            shotSheetOverlay
-        }
-        .background(BrutalistColor.bg.ignoresSafeArea())
-        .foregroundStyle(BrutalistColor.fg)
-        .onChange(of: state.holeIdx, initial: true) { _, newValue in
-            lastHoleIdx = newValue
-            openSlot = nil
-            onAutosave()
-        }
-        .sheet(isPresented: $state.scorecardOpen) {
-            ScorecardSheetView(state: state)
-        }
-        .sheet(isPresented: $state.penaltySheetOpen) {
-            PenaltySheetView(state: state)
-        }
-        .sheet(isPresented: $quickScoreOpen) {
-            QuickScoreSheet(state: state, onClose: { quickScoreOpen = false })
-        }
+        content
+            .background(BrutalistColor.bg.ignoresSafeArea())
+            .foregroundStyle(BrutalistColor.fg)
+            .onChange(of: state.holeIdx, initial: true) { _, newValue in
+                lastHoleIdx = newValue
+                openSlot = nil
+                onAutosave()
+            }
+            .sheet(isPresented: shotSheetBinding) {
+                shotSheetContent
+            }
+            .sheet(isPresented: $state.scorecardOpen) {
+                ScorecardSheetView(state: state)
+            }
+            .sheet(isPresented: $state.penaltySheetOpen) {
+                PenaltySheetView(state: state)
+            }
+            .sheet(isPresented: $quickScoreOpen) {
+                QuickScoreSheet(state: state) { quickScoreOpen = false }
+            }
     }
 
     private var content: some View {
@@ -97,28 +98,30 @@ public struct PlayView: View {
 
     private func open(_ slot: RoundPlayState.ShotSlot) {
         Haptics.light()
-        withAnimation(Motion.adaptive(Motion.snap, reduceMotion: reduceMotion)) {
-            openSlot = slot
-        }
+        openSlot = slot
     }
 
-    // MARK: - Shot sheet overlay
+    // MARK: - Shot sheet
 
-    @ViewBuilder
-    private var shotSheetOverlay: some View {
+    private var shotSheetBinding: Binding<Bool> {
+        Binding(
+            get: { openSlot != nil },
+            set: { presented in if !presented { openSlot = nil } }
+        )
+    }
+
+    @ViewBuilder private var shotSheetContent: some View {
         if let slot = openSlot,
-           let i = nodes.firstIndex(where: { $0.slot == slot }) {
+           let position = nodes.firstIndex(where: { $0.slot == slot }) {
             ShotInputSheet(
                 state: state,
-                node: nodes[i],
+                node: nodes[position],
                 total: nodes.count,
-                prevSlot: i > 0 ? nodes[i - 1].slot : nil,
-                nextSlot: i < nodes.count - 1 ? nodes[i + 1].slot : nil,
+                prevSlot: position > 0 ? nodes[position - 1].slot : nil,
+                nextSlot: position < nodes.count - 1 ? nodes[position + 1].slot : nil,
                 onSelect: { openSlot = $0 },
-                onClose: { withAnimation(Motion.snap) { openSlot = nil } }
+                onClose: { openSlot = nil }
             )
-            .zIndex(1)
-            .transition(.opacity)
         }
     }
 
@@ -250,13 +253,12 @@ public struct PlayView: View {
                 title: "←  PREV",
                 caption: prevHoleNumber,
                 kind: .ghost,
-                isDisabled: state.holeIdx == 0,
-                action: {
-                    withAnimation(Motion.adaptive(Motion.easeOutQuart(0.32), reduceMotion: reduceMotion)) {
-                        state.move(delta: -1)
-                    }
+                isDisabled: state.holeIdx == 0
+            ) {
+                withAnimation(Motion.adaptive(Motion.easeOutQuart(0.32), reduceMotion: reduceMotion)) {
+                    state.move(delta: -1)
                 }
-            )
+            }
             .frame(maxWidth: .infinity)
 
             cardButton
@@ -265,18 +267,17 @@ public struct PlayView: View {
                 title: isLast ? "FINISH  →" : "NEXT  →",
                 caption: nextHoleNumber,
                 kind: .fg,
-                isDisabled: false,
-                action: {
-                    if isLast {
-                        state.commitParIfNil(at: state.holeIdx)
-                        onFinish()
-                    } else {
-                        withAnimation(Motion.adaptive(Motion.easeOutQuart(0.32), reduceMotion: reduceMotion)) {
-                            state.move(delta: 1)
-                        }
+                isDisabled: false
+            ) {
+                if isLast {
+                    state.commitParIfNil(at: state.holeIdx)
+                    onFinish()
+                } else {
+                    withAnimation(Motion.adaptive(Motion.easeOutQuart(0.32), reduceMotion: reduceMotion)) {
+                        state.move(delta: 1)
                     }
                 }
-            )
+            }
             .frame(maxWidth: .infinity)
         }
     }

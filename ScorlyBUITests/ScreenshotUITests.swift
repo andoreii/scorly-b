@@ -7,7 +7,7 @@ import XCTest
 /// Relies on the DEBUG-only "DEV BYPASS" row on the auth screen to get past
 /// sign-in, which lands on the home screen backed by in-memory sample data.
 final class ScreenshotUITests: XCTestCase {
-    func testCaptureMainScreens() throws {
+    func testCaptureMainScreens() {
         let app = XCUIApplication()
         app.launch()
 

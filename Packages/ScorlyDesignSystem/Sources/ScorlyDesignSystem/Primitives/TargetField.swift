@@ -98,69 +98,25 @@ public struct TargetField: View {
             .frame(width: side, height: side)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onEnded { value in
-                        // Re-centre the tap into the square the Canvas
-                        // actually occupies, then into 300-space.
-                        let originX = (geo.size.width - side) / 2
-                        let originY = (geo.size.height - side) / 2
-                        let x = (value.location.x - originX) / scale
-                        let y = (value.location.y - originY) / scale
-                        guard x >= 0, x <= Self.vb, y >= 0, y <= Self.vb else { return }
-                        Haptics.soft()
-                        onPick(classify(x: x, y: y))
-                    }
-            )
+            // SpatialTapGesture fires reliably for a stationary tap (a bare
+            // DragGesture(minimumDistance: 0) does not), so any point in the
+            // field registers — and it won't fight a parent sheet's drag.
+            .gesture(SpatialTapGesture(coordinateSpace: .local).onEnded { value in
+                place(value.location, geo: geo, side: side, scale: scale)
+            })
         }
         .aspectRatio(1, contentMode: .fit)
     }
 
-    // MARK: - Classification (mirror of rpiResult)
-
-    private func classify(x: CGFloat, y: CGFloat) -> Pick {
-        let dx = x - Self.cx
-        let dy = y - Self.cy
-        let ratio = min(1, hypot(dx, dy) / Self.maxR)
-        let pos = CGPoint(x: x / Self.vb, y: y / Self.vb)
-        let horiz = dx >= 0 ? "Right" : "Left"
-        let vert = dy <= 0 ? "Long" : "Short" // dy<0 = past the pin = long
-        let dominant = abs(dy) > abs(dx) ? vert : horiz
-
-        switch mode {
-        case .putt: return classifyPutt(pos: pos, ratio: ratio, dominant: dominant)
-        case .green: return classifyGreen(pos: pos, ratio: ratio, dominant: dominant)
-        case .fairway: return classifyFairway(pos: pos, dx: dx, horiz: horiz)
-        }
-    }
-
-    private func classifyPutt(pos: CGPoint, ratio: CGFloat, dominant: String) -> Pick {
-        if ratio <= 0.10 {
-            return Pick(value: nil, pos: pos, good: true, label: "HOLED", proximityFeet: 0, holed: true)
-        }
-        let feet = max(0, Int((ratio * 15).rounded()))
-        let label = "\(feet) FT \(dominant.uppercased())"
-        return Pick(value: nil, pos: pos, good: false, label: label, proximityFeet: max(1, feet))
-    }
-
-    private func classifyGreen(pos: CGPoint, ratio: CGFloat, dominant: String) -> Pick {
-        let edge: CGFloat = 0.46
-        let feet = max(0, Int((ratio / edge * 32).rounded()))
-        if ratio <= edge {
-            let label = feet <= 4 ? "STIFF" : "ON GREEN"
-            return Pick(value: "Green", pos: pos, good: true, label: label, proximityFeet: max(2, feet))
-        }
-        return Pick(value: "Miss \(dominant)", pos: pos, good: false, label: "MISS \(dominant.uppercased())")
-    }
-
-    private func classifyFairway(pos: CGPoint, dx: CGFloat, horiz: String) -> Pick {
-        let lat = abs(dx) / Self.maxR
-        if lat <= 0.27 {
-            return Pick(value: "Fairway", pos: pos, good: true, label: "FAIRWAY")
-        }
-        let modifier = lat <= 0.56 ? nil : "Bunker"
-        let label = lat <= 0.56 ? "ROUGH \(horiz.uppercased())" : "\(horiz.uppercased()) BUNKER"
-        return Pick(value: "Miss \(horiz)", pos: pos, good: false, label: label, modifier: modifier)
+    /// Map a tap/drag point (local space) into 300-space and emit a pick.
+    private func place(_ location: CGPoint, geo: GeometryProxy, side: CGFloat, scale: CGFloat) {
+        let originX = (geo.size.width - side) / 2
+        let originY = (geo.size.height - side) / 2
+        let x = (location.x - originX) / scale
+        let y = (location.y - originY) / scale
+        guard x >= 0, x <= Self.vb, y >= 0, y <= Self.vb else { return }
+        Haptics.soft()
+        onPick(TargetFieldClassifier.classify(mode: mode, x: x, y: y))
     }
 
     // MARK: - Drawing (300-space)
@@ -173,8 +129,7 @@ public struct TargetField: View {
 
         // Fairway corridor.
         if mode == .fairway {
-            let corridorWidth = Self.maxR * 0.54
-            let rect = CGRect(x: Self.cx - corridorWidth / 2, y: 6, width: corridorWidth, height: Self.vb - 12)
+            let rect = TargetFieldClassifier.fairwayRect
             ctx.fill(Path(rect), with: .color(acc.opacity(0.10)))
             ctx.stroke(Path(rect), with: .color(acc), style: StrokeStyle(lineWidth: 0.8, dash: [3, 5]))
         }
@@ -291,23 +246,29 @@ public struct TargetField: View {
         let anchor: UnitPoint
     }
 
+    static func axisLabelTexts(for mode: Mode) -> [String] {
+        switch mode {
+        case .fairway, .green: ["LONG", "SHORT", "LEFT", "RIGHT"]
+        case .putt: ["PAST", "SHORT"]
+        }
+    }
+
     private func axisLabels() -> [AxisLabel] {
+        let labels = Self.axisLabelTexts(for: mode)
         let left = AxisLabel(text: "LEFT", point: CGPoint(x: Self.cx - 132, y: Self.cy + 3), anchor: .leading)
         let right = AxisLabel(text: "RIGHT", point: CGPoint(x: Self.cx + 132, y: Self.cy + 3), anchor: .trailing)
         switch mode {
         case .putt:
             return [
-                AxisLabel(text: "PAST", point: CGPoint(x: Self.cx, y: Self.cy - 130), anchor: .center),
-                AxisLabel(text: "SHORT", point: CGPoint(x: Self.cx, y: Self.cy + 126), anchor: .center),
+                AxisLabel(text: labels[0], point: CGPoint(x: Self.cx, y: Self.cy - 130), anchor: .center),
+                AxisLabel(text: labels[1], point: CGPoint(x: Self.cx, y: Self.cy + 126), anchor: .center),
             ]
-        case .green:
+        case .fairway, .green:
             return [
-                AxisLabel(text: "LONG", point: CGPoint(x: Self.cx, y: Self.cy - 130), anchor: .center),
-                AxisLabel(text: "SHORT", point: CGPoint(x: Self.cx, y: Self.cy + 126), anchor: .center),
+                AxisLabel(text: labels[0], point: CGPoint(x: Self.cx, y: Self.cy - 130), anchor: .center),
+                AxisLabel(text: labels[1], point: CGPoint(x: Self.cx, y: Self.cy + 126), anchor: .center),
                 left, right,
             ]
-        case .fairway:
-            return [left, right]
         }
     }
 }

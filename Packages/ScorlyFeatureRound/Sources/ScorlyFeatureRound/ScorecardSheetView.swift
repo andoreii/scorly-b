@@ -8,7 +8,8 @@ import SwiftUI
 struct ScorecardSheetView: View {
     @Bindable var state: RoundPlayState
 
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dismiss)
+    private var dismiss
 
     var body: some View {
         ScrollView {
@@ -24,9 +25,10 @@ struct ScorecardSheetView: View {
             }
             .padding(.horizontal, 18)
             .padding(.top, BrutalistSpacing.s)
-            .padding(.bottom, BrutalistSpacing.xxl)
+            .padding(.bottom, RoundPlaySheetLayout.extraBottomPadding)
         }
         .background(BrutalistColor.bg)
+        .ignoresSafeArea(.container, edges: .bottom)
         .presentationDetents([.fraction(0.8)])
         .presentationDragIndicator(.hidden)
     }
@@ -171,8 +173,8 @@ struct ScorecardSheetView: View {
 
     private func groupBlock(label: String, range: Range<Int>) -> some View {
         let strokes = range.reduce(0) { $0 + (state.entries[$1].strokes ?? 0) }
-        let par = range.reduce(0) { acc, i in
-            state.entries[i].strokes != nil ? acc + state.holes[i].par : acc
+        let par = range.reduce(0) { total, index in
+            state.entries[index].strokes != nil ? total + state.holes[index].par : total
         }
         let runningText: String = {
             guard strokes > 0 else { return "—" }

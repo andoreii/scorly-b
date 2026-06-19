@@ -220,19 +220,18 @@ public extension RoundPlayState {
         )
     }
 
-    private func nodeGood(_ slot: ShotSlot, value: String?, at index: Int) -> Bool {
+    func nodeGood(_ slot: ShotSlot, value: String?, at index: Int) -> Bool {
         switch slot {
         case .putt:
-            // A putt node reads "good" only when it was the one holed.
-            return shotHoled(at: index) == false && holeFinalised(at: index) && isLastPutt(slot, at: index)
+            return isPuttHoled(at: index) && isLastPutt(slot, at: index)
         default:
             return value == "Fairway" || value == "Green" || value == "On In 2" || value == RoundPlayState.holedShotRaw
         }
     }
 
-    private func nodeResultLabel(_ slot: ShotSlot, value: String?, modifier: String?, at index: Int) -> String {
+    func nodeResultLabel(_ slot: ShotSlot, value: String?, modifier: String?, at index: Int) -> String {
         if case let .putt(shotIndex) = slot {
-            if isLastPutt(slot, at: index), holeFinalised(at: index), !shotHoled(at: index) { return "HOLED" }
+            if isPuttHoled(at: index), isLastPutt(slot, at: index) { return "HOLED" }
             if let ft = entries[index].puttDistances[safe: shotIndex].flatMap({ $0 }) { return "\(ft) FT" }
             return "PUTT"
         }
@@ -241,7 +240,8 @@ public extension RoundPlayState {
         if value == "Fairway" { return "FAIRWAY" }
         if value == "Green" || value == "On In 2" { return "ON GREEN" }
         if value.hasPrefix("OB ") {
-            return modifier == "Water" ? "WATER" : "OB"
+            let direction = value.dropFirst(3).uppercased()
+            return modifier == "Water" ? "WATER \(direction)" : "OB \(direction)"
         }
         if value.hasPrefix("Miss ") {
             let dir = value.dropFirst(5).uppercased()
@@ -294,11 +294,11 @@ public extension RoundPlayState {
 
     /// The hole has been signed off (strokes committed) — used to mark the
     /// final putt as holed for display.
-    private func holeFinalised(at index: Int) -> Bool {
+    func holeFinalised(at index: Int) -> Bool {
         entries[index].strokes != nil
     }
 
-    private func isLastPutt(_ slot: ShotSlot, at index: Int) -> Bool {
+    func isLastPutt(_ slot: ShotSlot, at index: Int) -> Bool {
         guard case let .putt(shotIndex) = slot else { return false }
         return shotIndex == recordedPuttCount(at: index) - 1
     }
@@ -349,9 +349,15 @@ public extension RoundPlayState {
         guard entries.indices.contains(index) else { return false }
         if shotHoled(at: index) { return true }
         guard greenReached(at: index) else { return false }
+        return isPuttHoled(at: index)
+    }
+
+    func isPuttHoled(at index: Int) -> Bool {
+        if let state = entries[index].puttCompletionState {
+            return state == .holed
+        }
         let recorded = recordedPuttCount(at: index)
-        let pending = entries[index].putts > recorded
-        return recorded >= 1 && !pending
+        return recorded >= 1 && entries[index].putts <= recorded && holeFinalised(at: index)
     }
 
     private func loggedShotNodeCount(at index: Int) -> Int {
@@ -375,22 +381,48 @@ public extension RoundPlayState {
     /// the dependent state (and the running stroke count) valid.
     func applyPick(_ pick: TargetField.Pick, to slot: ShotSlot, at index: Int) {
         guard entries.indices.contains(index) else { return }
+        // A dead-centre (pin) tap on a green-mode shot holes it out — route
+        // through the same holed-out mutators the HOLED button uses.
+        if pick.holed, slotMode(slot) == .green {
+            setTargetPosition(pick.pos, for: slot, at: index)
+            ensureHoledOut(slot, at: index)
+            syncStrokes(at: index)
+            return
+        }
         switch slot {
         case .tee:
             setTeeShotResult(pick.value, at: index)
             entries[index].teeShotModifier = pick.modifier
+            entries[index].teeTargetPosition = ShotTargetPosition(point: pick.pos)
         case .teeToGreen, .approach:
             setApproachResult(pick.value, at: index)
             entries[index].approachModifier = pick.modifier
+            entries[index].approachTargetPosition = ShotTargetPosition(point: pick.pos)
         case .second:
             entries[index].layupLie = pick.value
             entries[index].layupLieModifier = pick.modifier
+            entries[index].layupTargetPosition = ShotTargetPosition(point: pick.pos)
         case let .chip(shotIndex):
             setChip(value: pick.value, modifier: pick.modifier, slot: shotIndex, at: index)
+            setTargetPosition(pick.pos, for: slot, at: index)
         case let .putt(shotIndex):
             recordPutt(holed: pick.holed, remaining: pick.proximityFeet, slot: shotIndex, at: index)
+            setTargetPosition(pick.pos, for: slot, at: index)
         }
         syncStrokes(at: index)
+    }
+
+    /// Force the green-mode `slot` into its holed state (idempotent — a
+    /// second pin tap won't toggle it back off).
+    private func ensureHoledOut(_ slot: ShotSlot, at index: Int) {
+        switch slot {
+        case .teeToGreen, .approach:
+            if !isApproachIn(at: index) { markApproachIn(at: index) }
+        case let .chip(shotIndex):
+            if !isARGIn(slot: shotIndex, at: index) { markARGIn(slot: shotIndex, at: index) }
+        default:
+            break
+        }
     }
 
     /// Distance dial write.
@@ -429,8 +461,9 @@ public extension RoundPlayState {
             return
         }
 
-        // Bunker / OB / Water are lie outcomes — toggle on/off and route
-        // through applyPick so penalty events derive in the usual place.
+        // Bunker / OB / Water are lie outcomes. Preserve the independently
+        // selected radar coordinate while routing the lie through applyPick.
+        let targetPosition = currentTargetPosition(for: slot, at: index)
         var newValue: String?
         var newModifier: String?
         var label = ""
@@ -453,12 +486,25 @@ public extension RoundPlayState {
             return
         }
         applyPick(latPick(value: newValue, modifier: newModifier, label: label), to: slot, at: index)
+        setTargetPosition(targetPosition?.point, for: slot, at: index)
     }
 
     /// Builds a non-good lateral/penalty `Pick` (the hazard tags and the
     /// reconstructed-placement helpers all share this shape).
     private func latPick(value: String?, modifier: String?, label: String) -> TargetField.Pick {
         TargetField.Pick(value: value, pos: CGPoint(x: 0.5, y: 0.5), good: false, label: label, modifier: modifier)
+    }
+
+    /// Whether the given green-mode `slot` is currently holed — drives the
+    /// HOLED button's selected state (distinct from "good", which is true
+    /// for any on-green result).
+    func isSlotHoled(_ slot: ShotSlot, at index: Int) -> Bool {
+        switch slot {
+        case .teeToGreen, .approach: return isApproachIn(at: index)
+        case let .chip(shotIndex): return isARGIn(slot: shotIndex, at: index)
+        case .putt: return isPuttHoled(at: index) && isLastPutt(slot, at: index)
+        default: return false
+        }
     }
 
     /// "Holed ✓" on a full shot or chip (ace, drained approach, chip-in).
@@ -481,6 +527,7 @@ public extension RoundPlayState {
         // Ensure the current putt has a length, then open a new pending one.
         if recorded <= shotIndex { padPuttDistances(to: shotIndex + 1, at: index) }
         entries[index].putts = max(entries[index].putts, recordedPuttCount(at: index) + 1)
+        entries[index].puttCompletionState = .open
         syncStrokes(at: index)
     }
 
@@ -517,9 +564,10 @@ public extension RoundPlayState {
         padPuttDistances(to: shotIndex + 1, at: index)
         if holed {
             entries[index].putts = recordedPuttCount(at: index)
+            entries[index].puttCompletionState = .holed
         } else {
-            // Leave the open putt in place; its length is set via the dial.
-            entries[index].putts = max(entries[index].putts, shotIndex + 1)
+            entries[index].putts = recordedPuttCount(at: index) + 1
+            entries[index].puttCompletionState = .open
         }
     }
 
@@ -558,64 +606,8 @@ public extension RoundPlayState {
     }
 
     private func directionOffset(_ value: String?) -> CGFloat {
-        guard let value else { return 0 }
-        if value.hasSuffix("Left") { return -0.7 }
-        if value.hasSuffix("Right") { return 0.7 }
+        if value?.hasSuffix("Left") == true { return -0.7 }
+        if value?.hasSuffix("Right") == true { return 0.7 }
         return 0
-    }
-
-    /// Rebuild an approximate ball position for redraw from the stored
-    /// lie (tap positions aren't persisted — that would change the codec).
-    private func approximatePlacement(
-        _ slot: ShotSlot,
-        value: String?,
-        modifier: String?,
-        at index: Int
-    ) -> TargetField.Pick? {
-        let good = nodeGood(slot, value: value, at: index)
-        let label = nodeResultLabel(slot, value: value, modifier: modifier, at: index)
-        switch slotMode(slot) {
-        case .fairway: return fairwayPlacement(value: value, modifier: modifier, good: good, label: label)
-        case .green: return greenPlacement(value: value, modifier: modifier, label: label)
-        case .putt: return puttPlacement(slot, at: index)
-        }
-    }
-
-    private static let placeCX: CGFloat = 0.5
-    private static let placeCY: CGFloat = 0.493
-
-    private func fairwayPlacement(value: String?, modifier: String?, good: Bool, label: String) -> TargetField.Pick {
-        let lat: CGFloat = value == "Fairway" ? 0 : modifier == "Bunker" ? 0.30 : 0.16
-        let sign: CGFloat = value?.hasSuffix("Left") == true ? -1 : 1
-        let pos = CGPoint(x: Self.placeCX + lat * sign, y: 0.30)
-        return TargetField.Pick(value: value, pos: pos, good: good, label: label, modifier: modifier)
-    }
-
-    private func greenPlacement(value: String?, modifier: String?, label: String) -> TargetField.Pick {
-        let cx = Self.placeCX, cy = Self.placeCY
-        if value == "Green" || value == "On In 2" || value == RoundPlayState.holedShotRaw {
-            let holed = value == RoundPlayState.holedShotRaw
-            let pos = CGPoint(x: cx, y: cy + 0.05)
-            return TargetField.Pick(value: value, pos: pos, good: true, label: label, modifier: modifier, holed: holed)
-        }
-        var x = cx, y = cy
-        if value?.hasSuffix("Left") == true { x = cx - 0.34 }
-        if value?.hasSuffix("Right") == true { x = cx + 0.34 }
-        if value?.hasSuffix("Long") == true { y = cy - 0.34 }
-        if value?.hasSuffix("Short") == true { y = cy + 0.34 }
-        return TargetField.Pick(value: value, pos: CGPoint(x: x, y: y), good: false, label: label, modifier: modifier)
-    }
-
-    private func puttPlacement(_ slot: ShotSlot, at index: Int) -> TargetField.Pick? {
-        guard case let .putt(shotIndex) = slot else { return nil }
-        let cx = Self.placeCX, cy = Self.placeCY
-        if isLastPutt(slot, at: index), holeFinalised(at: index), !shotHoled(at: index) {
-            let pos = CGPoint(x: cx, y: cy)
-            return TargetField.Pick(value: nil, pos: pos, good: true, label: "HOLED", proximityFeet: 0, holed: true)
-        }
-        let feet = entries[index].puttDistances[safe: shotIndex].flatMap { $0 } ?? 6
-        let radius = min(1, CGFloat(feet) / 15) * 0.40
-        let pos = CGPoint(x: cx, y: cy + radius)
-        return TargetField.Pick(value: nil, pos: pos, good: false, label: "\(feet) FT", proximityFeet: feet)
     }
 }

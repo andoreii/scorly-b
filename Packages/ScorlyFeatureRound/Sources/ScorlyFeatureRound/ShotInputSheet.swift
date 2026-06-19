@@ -32,34 +32,36 @@ struct ShotInputSheet: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Color.black.opacity(0.42)
-                .ignoresSafeArea()
-                .onTapGesture(perform: onClose)
-
-            panel
+        GeometryReader { geometry in
+            ZStack {
+                ScrollView {
+                    panel(radarSide: ShotInputLayout.radarSide(availableWidth: geometry.size.width))
+                }
                 .background(BrutalistColor.bg)
-                .overlay(alignment: .top) { Rectangle().fill(BrutalistColor.fg).frame(height: 1.8) }
-                .transition(.move(edge: .bottom))
+                .ignoresSafeArea(.container, edges: .bottom)
 
-            if clubOpen {
-                ClubKeypadSheet(club: clubBinding) { clubOpen = false }
+                if clubOpen {
+                    ClubKeypadSheet(club: clubBinding) { clubOpen = false }
+                }
             }
         }
+        .presentationDetents([.fraction(0.92)])
+        .presentationDragIndicator(.hidden)
     }
 
-    private var panel: some View {
+    private func panel(radarSide: CGFloat) -> some View {
         VStack(spacing: 0) {
             grabberHeader
-            TargetField(mode: node.mode, placement: node.placement) { pick in
-                state.applyPick(pick, to: slot, at: idx)
-            }
-            .frame(height: 280)
-            .padding(.horizontal, 8)
-
+            // Pin selector sits above the directional field (green shots only).
             if node.mode == .green {
                 pinRow
             }
+            TargetField(mode: node.mode, placement: node.placement) { pick in
+                state.applyPick(pick, to: slot, at: idx)
+            }
+            .frame(width: radarSide, height: radarSide)
+            .padding(.horizontal, 8)
+            .padding(.top, 4)
 
             if isPutt { puttActions } else { shotActions }
 
@@ -72,7 +74,7 @@ struct ShotInputSheet: View {
 
     private var grabberHeader: some View {
         VStack(spacing: 10) {
-            Rectangle().fill(BrutalistColor.hair).frame(width: 36, height: 4)
+            Rectangle().fill(BrutalistColor.fg).frame(width: 44, height: 3)
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("SHOT \(String(format: "%02d", node.displayIndex)) · \(node.title.uppercased())")
@@ -117,16 +119,31 @@ struct ShotInputSheet: View {
 
     // MARK: - Pin (green mode)
 
+    /// Front / Middle / Back, styled to match the hazard button row.
     private var pinRow: some View {
-        HStack(spacing: 8) {
-            Text("PIN")
-                .font(BrutalistType.mono(.medium, size: 8))
-                .kerning(1.2)
-                .foregroundStyle(BrutalistColor.muted)
-            PinSelect(value: pinBinding)
+        HStack(spacing: 6) {
+            ForEach(["Front", "Middle", "Back"], id: \.self) { option in
+                pinButton(option)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.top, 8)
+    }
+
+    private func pinButton(_ option: String) -> some View {
+        let on = state.pinPosition(at: idx) == option
+        return Text(option.uppercased())
+            .font(BrutalistType.mono(.semibold, size: 9))
+            .kerning(0.5)
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
+            .background(on ? BrutalistColor.fg : .clear)
+            .foregroundStyle(on ? BrutalistColor.bg : BrutalistColor.muted)
+            .overlay(Rectangle().stroke(on ? BrutalistColor.fg : BrutalistColor.hair, lineWidth: 1.3))
+            .brutalistTap {
+                Haptics.light()
+                state.setPinPosition(on ? nil : option, at: idx)
+            }
     }
 
     // MARK: - Actions
@@ -137,10 +154,10 @@ struct ShotInputSheet: View {
                 hazardButton(tag)
             }
             if node.mode == .green {
-                actionButton("HOLED ✓", filled: node.good, accent: true) {
-                    let wasHoled = node.good
+                let holed = state.isSlotHoled(slot, at: idx)
+                actionButton("HOLED ✓", filled: holed, accent: true) {
                     state.holeOutShot(slot, at: idx)
-                    if !wasHoled { onClose() }
+                    if !holed { onClose() }
                 }
             }
         }
@@ -149,23 +166,17 @@ struct ShotInputSheet: View {
     }
 
     private var puttActions: some View {
-        HStack(spacing: 6) {
-            actionButton("MISSED · ADD PUTT", filled: false, accent: false) {
-                state.addPutt(after: slot, at: idx)
-                if let next = nextSlot { onSelect(next) }
-            }
-            actionButton("HOLED ✓", filled: node.good, accent: true) {
-                let pick = TargetField.Pick(
-                    value: nil,
-                    pos: CGPoint(x: 0.5, y: 0.493),
-                    good: true,
-                    label: "HOLED",
-                    proximityFeet: 0,
-                    holed: true
-                )
-                state.applyPick(pick, to: slot, at: idx)
-                onClose()
-            }
+        actionButton("HOLED ✓", filled: state.isSlotHoled(slot, at: idx), accent: true) {
+            let pick = TargetField.Pick(
+                value: nil,
+                pos: CGPoint(x: 0.5, y: 0.493),
+                good: true,
+                label: "HOLED",
+                proximityFeet: 0,
+                holed: true
+            )
+            state.applyPick(pick, to: slot, at: idx)
+            onClose()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -262,7 +273,7 @@ struct ShotInputSheet: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.bottom, 14)
+        .padding(.bottom, RoundPlaySheetLayout.extraBottomPadding)
         .padding(.top, 4)
     }
 
@@ -314,13 +325,6 @@ struct ShotInputSheet: View {
         Binding(
             get: { state.slotClub(slot, at: idx) },
             set: { if let club = $0 { state.setSlotClub(club, to: slot, at: idx) } }
-        )
-    }
-
-    private var pinBinding: Binding<String?> {
-        Binding(
-            get: { state.pinPosition(at: idx) },
-            set: { state.setPinPosition($0, at: idx) }
         )
     }
 
