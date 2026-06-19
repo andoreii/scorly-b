@@ -570,7 +570,7 @@ public final class RoundPlayState {
         return max(0, strokes - preARGShotCount(at: index) - entry.putts)
     }
 
-    private func approachShotNumber(at index: Int) -> Int {
+    func approachShotNumber(at index: Int) -> Int {
         guard holes.indices.contains(index) else { return 2 }
         return switch holes[index].par {
         case 3: 1
@@ -579,7 +579,7 @@ public final class RoundPlayState {
         }
     }
 
-    private func preARGShotCount(at index: Int) -> Int {
+    func preARGShotCount(at index: Int) -> Int {
         guard holes.indices.contains(index) else { return 2 }
         // Par 3 with off-green tee: chip count = strokes - 1 (tee) - putts.
         // Par 4: chip count = strokes - 2 (tee + approach) - putts.
@@ -591,7 +591,7 @@ public final class RoundPlayState {
         }
     }
 
-    private func approachResultImpliesARG(at index: Int) -> Bool {
+    func approachResultImpliesARG(at index: Int) -> Bool {
         guard entries.indices.contains(index) else { return false }
         guard let result = entries[index].approach else { return false }
         if result == "Green" || result == "On In 2" || result == Self.holedShotRaw { return false }
@@ -599,7 +599,7 @@ public final class RoundPlayState {
         return true
     }
 
-    private func restoreDefaultPutts(at index: Int) {
+    func restoreDefaultPutts(at index: Int) {
         guard entries.indices.contains(index) else { return }
         entries[index].putts = 2
         entries[index].puttDistances = []
@@ -701,7 +701,7 @@ public final class RoundPlayState {
         }
     }
 
-    private static let holedShotRaw = "In"
+    static let holedShotRaw = "In"
 }
 
 /// JSON codec for `[HoleEntry]` ↔ `Data`. The draft repo trades in
