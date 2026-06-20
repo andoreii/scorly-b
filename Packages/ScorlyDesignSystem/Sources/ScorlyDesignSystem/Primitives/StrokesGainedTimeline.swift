@@ -39,11 +39,13 @@ struct SGHoleTimeline: View {
                     style: StrokeStyle(lineWidth: 0.6, dash: [2, 3])
                 )
             }
-            let label = tick > 0 ? "+\(tick)" : "\(tick)"
-            let labelText = Text(label)
-                .font(BrutalistType.monoMicro)
-                .foregroundColor(tick == 0 ? BrutalistColor.fg : BrutalistColor.muted)
-            ctx.draw(labelText, at: CGPoint(x: layout.padL - 6, y: yPos), anchor: .trailing)
+            if sgTimelineShouldLabel(tick: tick, yMaxCeil: yMaxCeil) {
+                let label = tick > 0 ? "+\(tick)" : "\(tick)"
+                let labelText = Text(label)
+                    .font(BrutalistType.monoMicro)
+                    .foregroundColor(tick == 0 ? BrutalistColor.fg : BrutalistColor.muted)
+                ctx.draw(labelText, at: CGPoint(x: layout.padL - 6, y: yPos), anchor: .trailing)
+            }
         }
     }
 
@@ -136,6 +138,10 @@ struct SGHoleTimeline: View {
             anchor: .trailing
         )
     }
+}
+
+func sgTimelineShouldLabel(tick: Int, yMaxCeil: Int) -> Bool {
+    yMaxCeil <= 2 || tick.isMultiple(of: 2)
 }
 
 /// Pre-computed coordinate transforms for the timeline. Keeping these

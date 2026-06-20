@@ -22,8 +22,14 @@ struct RoundDetailMetricsTests {
         let metrics = RoundDetailMetrics(round: round)
 
         #expect(metrics.playedHoleCount == 3)
+        #expect(metrics.scoreToPar == 0)
         #expect(metrics.totalPutts == 5)
         #expect(metrics.averagePuttsPerHole == 5.0 / 3.0)
+        #expect(metrics.puttingAverageProfile.map(\.holeNumber) == [1, 2, 3])
+        #expect(metrics.puttingAverageProfile.map(\.averagePuttsPerHole) == [2, 2, 5.0 / 3.0])
+        #expect(metrics.puttDistribution.onePutt == 1)
+        #expect(metrics.puttDistribution.twoPutt == 2)
+        #expect(metrics.puttDistribution.threePuttPlus == 0)
         #expect(metrics.fairwayRose.opportunities == 2)
         #expect(metrics.fairwayRose.hitRate == 0.5)
         #expect(metrics.greenRose.opportunities == 3)
@@ -85,6 +91,8 @@ struct RoundDetailMetricsTests {
         #expect(metrics.playedHoleCount == 2)
         #expect(metrics.totalPutts == 4)
         #expect(metrics.averagePuttsPerHole == 2.0)
+        #expect(metrics.puttingAverageProfile.map(\.holeNumber) == [1, 2])
+        #expect(metrics.puttingAverageProfile.map(\.averagePuttsPerHole) == [2, 2])
     }
 
     @Test("Direct init renders a back-9 single group numbered 10–18")
@@ -94,6 +102,30 @@ struct RoundDetailMetricsTests {
 
         #expect(metrics.scorecardGroups.count == 1)
         #expect(metrics.scorecardGroups[0].holes.map(\.number) == Array(10...18))
+        #expect(metrics.puttingAverageProfile.map(\.holeNumber) == Array(10...18))
+    }
+
+    @Test("Score to par sums played holes only")
+    func scoreToPar() {
+        let metrics = RoundDetailMetrics(
+            holeStats: [
+                hole(par: 4, strokes: 6, putts: 2),
+                hole(par: 3, strokes: 2, putts: 1),
+                hole(par: 5, strokes: 0, putts: 0),
+            ],
+            holesPlayed: .front9
+        )
+
+        #expect(metrics.scoreToPar == 1)
+    }
+
+    @Test("Empty rounds expose empty putting analysis")
+    func emptyRoundPuttingAnalysis() {
+        let metrics = RoundDetailMetrics(holeStats: [], holesPlayed: .front9)
+
+        #expect(metrics.scoreToPar == 0)
+        #expect(metrics.puttingAverageProfile.isEmpty)
+        #expect(metrics.puttDistribution.total == 0)
     }
 
     private func hole(

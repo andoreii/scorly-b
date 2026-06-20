@@ -269,7 +269,7 @@ enum AccuracyHazardPalette {
 /// Four-sector hazard-stacked windrose. Center disc radius scales with
 /// hit rate; each sector grows outward as that direction's miss share
 /// grows, stacked rough→bunker→OB.
-private struct AccuracyWindrose: View {
+struct AccuracyWindrose: View {
     let values: AccuracyRoseValues
 
     /// Compass-style directions, 0° = up, clockwise. We render all four

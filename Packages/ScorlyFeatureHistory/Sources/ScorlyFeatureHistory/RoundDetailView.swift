@@ -5,7 +5,7 @@ import ScorlyReviewKit
 import SwiftUI
 
 /// Round Detail — pushed from a History row tap. Header + dark hero
-/// stamp (literal port of the Claude Design mockup, minus the
+/// stamp (literal port of the reference design mockup, minus the
 /// "Card · Shots · Distance · Trouble" subtitle) followed by the
 /// Strokes Gained card. Additional sections (score distribution,
 /// hole-by-hole grid, dispersion, distance) are deferred.
@@ -62,16 +62,14 @@ public struct RoundDetailView: View {
             )
             RoundScorecardCard(groups: metrics.scorecardGroups)
                 .padding(.top, BrutalistSpacing.l)
-            StrokesGainedCard(
+            RoundStrokesGainedCard(
                 meta: "ROUND \(refString(round.id)) · \(round.courseName?.uppercased() ?? "—")",
                 total: sgProjection.totals.map(SGCardMapping.cardValues),
                 holes: sgProjection.holes?.map(SGCardMapping.cardValues),
                 seasonAverages: sgProjection.activeReference == .scratch
                     ? sgSeasonAverages(excluding: round.id, from: seasonRounds).map(SGCardMapping.cardValues)
                     : nil,
-                referenceLabel: sgProjection.referenceLabel,
-                summaryStyle: .categoryExtremes,
-                breakdownDensity: .spacious
+                referenceLabel: sgProjection.referenceLabel
             )
             .padding(.top, BrutalistSpacing.l)
             AccuracyRoseCard(kind: .fairway, values: metrics.fairwayRose)
@@ -81,12 +79,14 @@ public struct RoundDetailView: View {
             PuttingSummaryCard(
                 totalPutts: metrics.totalPutts,
                 averagePuttsPerHole: metrics.averagePuttsPerHole,
-                stats: metrics.puttMakeStats
+                profile: metrics.puttingAverageProfile,
+                distribution: metrics.puttDistribution
             )
             .padding(.top, BrutalistSpacing.l)
-            ScoringDistributionCard(
+            RoundScoringDistributionCard(
                 counts: metrics.outcomes,
-                total: metrics.playedHoleCount
+                total: metrics.playedHoleCount,
+                scoreToPar: metrics.scoreToPar
             )
             .padding(.top, BrutalistSpacing.l)
             deleteSection

@@ -7,7 +7,8 @@ struct SGDivergingBars: View {
     let values: SGCardValues
     let seasonAverages: SGCardValues?
     let density: SGBreakdownDensity
-    private let scaleMax = 3.0
+    var categories = sgCategories
+    var scaleMax = 3.0
     private let labelColumn: CGFloat = 120
 
     private var tickRange: [Int] {
@@ -22,8 +23,8 @@ struct SGDivergingBars: View {
                     .fill(BrutalistColor.fg)
                     .frame(height: 1)
             }
-            ForEach(Array(sgCategories.enumerated()), id: \.offset) { index, cat in
-                categoryRow(for: cat, isLast: index == sgCategories.count - 1)
+            ForEach(Array(categories.enumerated()), id: \.offset) { index, cat in
+                categoryRow(for: cat, isLast: index == categories.count - 1)
             }
         }
     }
@@ -235,5 +236,92 @@ struct SGDivergingBars: View {
     private func barColor(for value: Double) -> Color {
         if value == 0 { return BrutalistColor.muted }
         return value > 0 ? BrutalistColor.sgPos : BrutalistColor.sgNeg
+    }
+}
+
+/// Compact single-round variant of the Trends card's category bars.
+/// Each track keeps the center-axis treatment and optional season
+/// marker while ordering categories from worst to best.
+struct SGTrendDivergingBars: View {
+    let values: SGCardValues
+    let seasonAverages: SGCardValues?
+    let categories: [SGCategorySpec]
+    var scaleMax = 3.0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(categories.enumerated()), id: \.offset) { _, category in
+                SGTrendDivergingRow(
+                    category: category,
+                    value: sgDecimalToDouble(values[keyPath: category.totalsKeyPath]),
+                    seasonAverage: seasonAverages.map {
+                        sgDecimalToDouble($0[keyPath: category.totalsKeyPath])
+                    },
+                    scaleMax: scaleMax
+                )
+            }
+        }
+    }
+}
+
+private struct SGTrendDivergingRow: View {
+    let category: SGCategorySpec
+    let value: Double
+    let seasonAverage: Double?
+    let scaleMax: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(category.label)
+                    .font(BrutalistType.monoLabel)
+                    .kerning(1.0)
+                    .foregroundStyle(BrutalistColor.muted)
+                Spacer()
+                Text(sgFormat(Decimal(value)))
+                    .font(BrutalistType.mono(.semibold, size: 14))
+                    .kerning(0.4)
+                    .monospacedDigit()
+                    .foregroundStyle(value >= 0 ? BrutalistColor.sgPos : BrutalistColor.sgNeg)
+            }
+            track
+        }
+    }
+
+    private var track: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let midpoint = width / 2
+            let safeScale = max(0.0001, scaleMax)
+            let magnitude = CGFloat(min(abs(value) / safeScale, 1))
+            let barWidth = magnitude * midpoint
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .stroke(BrutalistColor.rule, lineWidth: 1)
+                Rectangle()
+                    .fill(BrutalistColor.rule)
+                    .frame(width: 1)
+                    .offset(x: midpoint)
+                Rectangle()
+                    .fill(value >= 0 ? BrutalistColor.sgPos.opacity(0.18) : BrutalistColor.sgNeg.opacity(0.16))
+                    .frame(width: max(0, barWidth), height: 30)
+                    .overlay(Rectangle().stroke(value >= 0 ? BrutalistColor.sgPos : BrutalistColor.sgNeg, lineWidth: 1))
+                    .offset(x: value >= 0 ? midpoint : midpoint - barWidth)
+                if let seasonAverage {
+                    seasonMarker(value: seasonAverage, midpoint: midpoint)
+                }
+            }
+        }
+        .frame(height: 30)
+    }
+
+    private func seasonMarker(value: Double, midpoint: CGFloat) -> some View {
+        let magnitude = CGFloat(min(abs(value) / max(0.0001, scaleMax), 1))
+        let x = value >= 0 ? midpoint + magnitude * midpoint : midpoint - magnitude * midpoint
+        return Circle()
+            .fill(BrutalistColor.bg)
+            .frame(width: 7, height: 7)
+            .overlay(Circle().stroke(BrutalistColor.muted, lineWidth: 1))
+            .offset(x: x - 3.5, y: 11.5)
     }
 }
