@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Compact horizontal distance ruler. A ticked strip that scrubs under
 /// a fixed centre needle — drag left/right to change the value. Ticks
-/// every unit, majors + labels every ten. Yards for full shots, feet
-/// for putts. Mirrors the React `RPIDial`: a low-profile dial that sits
+/// every unit, with unit-specific major marks and labels. Yards for full
+/// shots, feet for putts. Mirrors the React `RPIDial`: a low-profile dial that sits
 /// under the shot sheet's big numeric readout (which shows the value),
 /// so the dial itself stays quiet.
 public struct DistanceDial: View {
@@ -17,11 +17,27 @@ public struct DistanceDial: View {
 
         /// Points of travel per unit of value.
         var pointsPerUnit: CGFloat {
-            self == .feet ? 11 : 5.2
+            self == .feet ? 11 : 8
         }
 
         var range: ClosedRange<Int> {
-            self == .feet ? 1...60 : 1...340
+            self == .feet ? 0...60 : 0...340
+        }
+
+        func isMajorMark(_ mark: Int) -> Bool {
+            mark > 0 && mark.isMultiple(of: self == .feet ? 3 : 10)
+        }
+
+        func isMidMark(_ mark: Int) -> Bool {
+            self == .yards && mark > 0 && mark.isMultiple(of: 5) && !isMajorMark(mark)
+        }
+
+        func labels(for mark: Int) -> (top: String?, bottom: String?) {
+            guard isMajorMark(mark) else { return (nil, nil) }
+            if self == .feet {
+                return ("\(mark)", "\(mark / 3)")
+            }
+            return ("\(mark)", nil)
         }
     }
 
@@ -84,20 +100,14 @@ public struct DistanceDial: View {
         let hi = min(unit.range.upperBound, value + reach)
         for mark in lo...hi {
             let x = cx + CGFloat(mark - value) * ppu
-            let major = mark.isMultiple(of: 10)
-            let mid = mark.isMultiple(of: 5)
+            let major = unit.isMajorMark(mark)
+            let mid = unit.isMidMark(mark)
             let tickHeight: CGFloat = major ? 22 : mid ? 13 : 7
             var tick = Path()
             tick.move(to: CGPoint(x: x, y: base))
             tick.addLine(to: CGPoint(x: x, y: base - tickHeight))
             ctx.stroke(tick, with: .color(major ? muted : hair), lineWidth: major ? 1.1 : 0.8)
-            if major {
-                ctx.draw(
-                    Text("\(mark)").font(BrutalistType.mono(.medium, size: 8)).foregroundStyle(muted),
-                    at: CGPoint(x: x, y: base - 30),
-                    anchor: .center
-                )
-            }
+            drawLabels(for: mark, at: x, base: base, color: muted, into: &ctx)
         }
 
         // Edge fades.
@@ -130,5 +140,29 @@ public struct DistanceDial: View {
         cap.addLine(to: CGPoint(x: cx, y: 12))
         cap.closeSubpath()
         ctx.fill(cap, with: .color(acc))
+    }
+
+    private func drawLabels(
+        for mark: Int,
+        at x: CGFloat,
+        base: CGFloat,
+        color: Color,
+        into ctx: inout GraphicsContext
+    ) {
+        let labels = unit.labels(for: mark)
+        if let top = labels.top {
+            ctx.draw(
+                Text(top).font(BrutalistType.mono(.medium, size: 8)).foregroundStyle(color),
+                at: CGPoint(x: x, y: base - 30),
+                anchor: .center
+            )
+        }
+        if let bottom = labels.bottom {
+            ctx.draw(
+                Text(bottom).font(BrutalistType.mono(.medium, size: 7)).foregroundStyle(color),
+                at: CGPoint(x: x, y: base + 7),
+                anchor: .center
+            )
+        }
     }
 }

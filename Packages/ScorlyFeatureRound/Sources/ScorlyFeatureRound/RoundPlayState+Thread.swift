@@ -381,6 +381,7 @@ public extension RoundPlayState {
     /// the dependent state (and the running stroke count) valid.
     func applyPick(_ pick: TargetField.Pick, to slot: ShotSlot, at index: Int) {
         guard entries.indices.contains(index) else { return }
+        persistResolvedDistanceIfNeeded(for: slot, at: index)
         // A dead-centre (pin) tap on a green-mode shot holes it out — route
         // through the same holed-out mutators the HOLED button uses.
         if pick.holed, slotMode(slot) == .green {
@@ -509,6 +510,7 @@ public extension RoundPlayState {
 
     /// "Holed ✓" on a full shot or chip (ace, drained approach, chip-in).
     func holeOutShot(_ slot: ShotSlot, at index: Int) {
+        persistResolvedDistanceIfNeeded(for: slot, at: index)
         switch slot {
         case .teeToGreen, .approach:
             markApproachIn(at: index)
@@ -528,6 +530,22 @@ public extension RoundPlayState {
         if recorded <= shotIndex { padPuttDistances(to: shotIndex + 1, at: index) }
         entries[index].putts = max(entries[index].putts, recordedPuttCount(at: index) + 1)
         entries[index].puttCompletionState = .open
+        syncStrokes(at: index)
+    }
+
+    /// Record the current putt as missed without requiring a radar tap.
+    func recordMissedPutt(distance: Int, for slot: ShotSlot, at index: Int) {
+        guard case let .putt(shotIndex) = slot, entries.indices.contains(index) else { return }
+        setPuttDistance(distance, slot: shotIndex, at: index)
+        recordPutt(holed: false, remaining: nil, slot: shotIndex, at: index)
+        syncStrokes(at: index)
+    }
+
+    /// Record the current putt as holed without requiring a radar tap.
+    func recordHoledPutt(distance: Int, for slot: ShotSlot, at index: Int) {
+        guard case let .putt(shotIndex) = slot, entries.indices.contains(index) else { return }
+        setPuttDistance(distance, slot: shotIndex, at: index)
+        recordPutt(holed: true, remaining: 0, slot: shotIndex, at: index)
         syncStrokes(at: index)
     }
 
@@ -574,6 +592,11 @@ public extension RoundPlayState {
     private func setPuttDistance(_ distance: Int, slot shotIndex: Int, at index: Int) {
         padPuttDistances(to: shotIndex + 1, at: index)
         entries[index].puttDistances[shotIndex] = distance
+    }
+
+    private func persistResolvedDistanceIfNeeded(for slot: ShotSlot, at index: Int) {
+        guard slotDistance(slot, at: index) == nil else { return }
+        setSlotDistance(resolvedSlotDistance(slot, at: index), to: slot, at: index)
     }
 
     /// Grow `puttDistances` so index `count-1` exists, seeding new slots

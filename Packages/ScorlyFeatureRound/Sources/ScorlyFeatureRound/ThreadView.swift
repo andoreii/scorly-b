@@ -102,7 +102,7 @@ private struct ThreadRow: View {
             .monospacedDigit()
             .foregroundStyle(nodeColor)
             .frame(width: 26, height: 26)
-            .background(node.good ? BrutalistColor.accFill : (editing ? BrutalistColor.panel : BrutalistColor.bg))
+            .background { badgeBackground }
             .overlay(
                 Group {
                     if isPutt {
@@ -112,6 +112,16 @@ private struct ThreadRow: View {
                     }
                 }
             )
+    }
+
+    @ViewBuilder private var badgeBackground: some View {
+        let fill = node.good ? BrutalistColor.accFill : (editing ? BrutalistColor.panel : BrutalistColor.bg)
+        switch ThreadNodeBadgeShape(mode: node.mode) {
+        case .circle:
+            Circle().fill(fill)
+        case .rectangle:
+            Rectangle().fill(fill)
+        }
     }
 
     private var strokeStyle: StrokeStyle {
