@@ -66,6 +66,17 @@ public enum BrutalistColor {
     /// Low-opacity ochre fill for bogey grid cells.
     public static let bogeyFill = bogey.opacity(0.22)
 
+    // MARK: - Review spectrum
+
+    /// Charcoal ink for the par segment in scoring distributions.
+    public static let parInk = Color(red: 0x33 / 255, green: 0x33 / 255, blue: 0x2F / 255)
+    /// Warm stone for the bogey segment.
+    public static let stone = Color(red: 0xB8 / 255, green: 0xB2 / 255, blue: 0xA6 / 255)
+    /// Bunker sand used in accuracy windroses.
+    public static let bunker = Color(red: 0xC9 / 255, green: 0xA8 / 255, blue: 0x6B / 255)
+    /// Out-of-bounds ink used in accuracy windroses.
+    public static let ob = sgNeg
+
     // MARK: - Round Play accent
 
     //

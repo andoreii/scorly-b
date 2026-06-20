@@ -103,12 +103,14 @@ public struct ConfirmView: View {
             PuttingSummaryCard(
                 totalPutts: metrics.totalPutts,
                 averagePuttsPerHole: metrics.averagePuttsPerHole,
-                stats: metrics.puttMakeStats
+                profile: metrics.puttingAverageProfile,
+                distribution: metrics.puttDistribution
             )
             .padding(.top, BrutalistSpacing.l)
-            ScoringDistributionCard(
+            RoundScoringDistributionCard(
                 counts: metrics.outcomes,
-                total: metrics.playedHoleCount
+                total: metrics.playedHoleCount,
+                scoreToPar: metrics.scoreToPar
             )
             .padding(.top, BrutalistSpacing.l)
             notesField
@@ -152,14 +154,14 @@ public struct ConfirmView: View {
                         refineSheetOpen = true
                     }
             }
-            StrokesGainedCard(
+            RoundStrokesGainedCard(
                 meta: "ROUND \(ref) · \(state.course.name.uppercased())",
                 total: projection.totals.map(SGCardMapping.cardValues),
                 holes: projection.holes?.map(SGCardMapping.cardValues),
-                seasonAverages: nil,
-                referenceLabel: projection.referenceLabel,
-                summaryStyle: .categoryExtremes,
-                breakdownDensity: .spacious
+                seasonAverages: projection.activeReference == .scratch
+                    ? SGReferenceProjection.personalBaseline(from: baselineRounds).map(SGCardMapping.cardValues)
+                    : nil,
+                referenceLabel: projection.referenceLabel
             )
         }
     }

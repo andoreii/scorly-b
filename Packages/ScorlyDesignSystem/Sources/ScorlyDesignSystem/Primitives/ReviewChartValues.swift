@@ -98,6 +98,40 @@ public struct PuttMakeValues: Sendable, Equatable {
     }
 }
 
+public struct PuttingAveragePoint: Sendable, Equatable, Identifiable {
+    public let holeNumber: Int
+    public let averagePuttsPerHole: Double
+
+    public init(holeNumber: Int, averagePuttsPerHole: Double) {
+        self.holeNumber = holeNumber
+        self.averagePuttsPerHole = averagePuttsPerHole
+    }
+
+    public var id: Int {
+        holeNumber
+    }
+}
+
+public struct PuttDistributionValues: Sendable, Equatable {
+    public let onePutt: Int
+    public let twoPutt: Int
+    public let threePuttPlus: Int
+
+    public init(onePutt: Int = 0, twoPutt: Int = 0, threePuttPlus: Int = 0) {
+        self.onePutt = onePutt
+        self.twoPutt = twoPutt
+        self.threePuttPlus = threePuttPlus
+    }
+
+    public var total: Int {
+        onePutt + twoPutt + threePuttPlus
+    }
+
+    public func share(_ count: Int) -> Double {
+        total > 0 ? Double(count) / Double(total) : 0
+    }
+}
+
 public enum ScoringOutcome: String, CaseIterable, Sendable, Identifiable {
     case birdiePlus
     case par

@@ -9,8 +9,11 @@ import ScorlyDomain
 /// stays Domain-free.
 public struct RoundDetailMetrics {
     public let playedHoleCount: Int
+    public let scoreToPar: Int
     public let totalPutts: Int
     public let averagePuttsPerHole: Double?
+    public let puttingAverageProfile: [PuttingAveragePoint]
+    public let puttDistribution: PuttDistributionValues
     public let fairwayRose: AccuracyRoseValues
     public let greenRose: AccuracyRoseValues
     public let puttMakeStats: [PuttDistanceBucket: PuttMakeValues]
@@ -27,15 +30,54 @@ public struct RoundDetailMetrics {
     public init(holeStats: [HoleStat], holesPlayed: HolesPlayed) {
         let played = holeStats.filter { $0.strokes > 0 }
         playedHoleCount = played.count
+        scoreToPar = played.reduce(0) { $0 + $1.strokes - $1.par }
         totalPutts = played.reduce(0) { $0 + $1.putts }
         averagePuttsPerHole = played.isEmpty
             ? nil
             : Double(totalPutts) / Double(played.count)
+        puttingAverageProfile = Self.puttingAverageProfile(from: holeStats, holesPlayed: holesPlayed)
+        puttDistribution = Self.puttDistribution(from: played)
         fairwayRose = Self.fairwayRose(from: played)
         greenRose = Self.greenRose(from: played)
         puttMakeStats = Self.puttStats(from: played)
         outcomes = Self.outcomes(from: played)
         scorecardGroups = Self.scorecardGroups(stats: holeStats, holesPlayed: holesPlayed)
+    }
+
+    private static func puttingAverageProfile(
+        from holes: [HoleStat],
+        holesPlayed: HolesPlayed
+    ) -> [PuttingAveragePoint] {
+        var totalPutts = 0
+        var playedHoles = 0
+        return holes.enumerated().compactMap { index, hole in
+            guard hole.strokes > 0 else { return nil }
+            totalPutts += hole.putts
+            playedHoles += 1
+            return PuttingAveragePoint(
+                holeNumber: printedHoleNumber(index: index, holesPlayed: holesPlayed, count: holes.count),
+                averagePuttsPerHole: Double(totalPutts) / Double(playedHoles)
+            )
+        }
+    }
+
+    private static func puttDistribution(from holes: [HoleStat]) -> PuttDistributionValues {
+        var onePutt = 0
+        var twoPutt = 0
+        var threePuttPlus = 0
+        for hole in holes {
+            switch hole.putts {
+            case 1: onePutt += 1
+            case 2: twoPutt += 1
+            case 3...: threePuttPlus += 1
+            default: break
+            }
+        }
+        return PuttDistributionValues(
+            onePutt: onePutt,
+            twoPutt: twoPutt,
+            threePuttPlus: threePuttPlus
+        )
     }
 
     private static func fairwayRose(from holes: [HoleStat]) -> AccuracyRoseValues {
@@ -109,14 +151,8 @@ public struct RoundDetailMetrics {
         holesPlayed: HolesPlayed
     ) -> [ScorecardGroupValues] {
         let values = stats.enumerated().map { index, hole in
-            let number: Int
-            if holesPlayed == .back9, stats.count <= 9 {
-                number = index + 10
-            } else {
-                number = index + 1
-            }
-            return ScorecardHoleValues(
-                number: number,
+            ScorecardHoleValues(
+                number: printedHoleNumber(index: index, holesPlayed: holesPlayed, count: stats.count),
                 par: hole.par,
                 strokes: hole.strokes > 0 ? hole.strokes : nil
             )
@@ -128,6 +164,10 @@ public struct RoundDetailMetrics {
             ScorecardGroupValues(label: "FRONT NINE", holes: Array(values.prefix(9))),
             ScorecardGroupValues(label: "BACK NINE", holes: Array(values.dropFirst(9).prefix(9))),
         ]
+    }
+
+    private static func printedHoleNumber(index: Int, holesPlayed: HolesPlayed, count: Int) -> Int {
+        holesPlayed == .back9 && count <= 9 ? index + 10 : index + 1
     }
 
     private static func roseDirection(for lie: Lie?) -> AccuracyRoseValues.Direction? {
