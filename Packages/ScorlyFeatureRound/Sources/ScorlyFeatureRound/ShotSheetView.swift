@@ -80,8 +80,8 @@ struct ShotSheetView: View {
             VStack(alignment: .leading, spacing: 0) {
                 ShotEditor(
                     target: "Fairway",
-                    clubs: BrutalistClubs,
-                    clubDistanceDefaults: BrutalistClubDistances,
+                    clubs: brutalistClubs,
+                    clubDistanceDefaults: brutalistClubDistances,
                     clearsDistanceWhenOB: true,
                     extraTopRight: drivenGreen,
                     lie: obAwareTeeBinding,
@@ -103,8 +103,8 @@ struct ShotSheetView: View {
                 pinPositionSection
                 ShotEditor(
                     target: "Green",
-                    clubs: BrutalistClubs,
-                    clubDistanceDefaults: BrutalistClubDistances,
+                    clubs: brutalistClubs,
+                    clubDistanceDefaults: brutalistClubDistances,
                     distanceLabel: "Distance to Pin",
                     fieldOrder: .distanceFirst,
                     extraTopLeft: approachIn,

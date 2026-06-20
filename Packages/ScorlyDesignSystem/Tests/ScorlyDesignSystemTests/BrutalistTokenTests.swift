@@ -44,6 +44,37 @@ struct BrutalistTokenTests {
     }
 }
 
+struct DistanceDialConfigurationTests {
+    @Test("Yard dial starts at zero and uses wider drag spacing")
+    func yardConfiguration() {
+        let unit = DistanceDial.Unit.yards
+
+        #expect(unit.range == 0...340)
+        #expect(unit.pointsPerUnit == 8)
+        #expect(unit.isMajorMark(10))
+        #expect(unit.isMidMark(5))
+        #expect(unit.labels(for: 10).top == "10")
+        #expect(unit.labels(for: 10).bottom == nil)
+    }
+
+    @Test("Putt dial labels every third foot with distance and ordinal")
+    func puttConfiguration() {
+        let unit = DistanceDial.Unit.feet
+
+        #expect(unit.range == 0...60)
+        #expect(!unit.isMajorMark(0))
+        #expect(unit.isMajorMark(3))
+        #expect(unit.isMajorMark(18))
+        #expect(!unit.isMidMark(5))
+        #expect(unit.labels(for: 3).top == "3")
+        #expect(unit.labels(for: 3).bottom == "1")
+        #expect(unit.labels(for: 18).top == "18")
+        #expect(unit.labels(for: 18).bottom == "6")
+        #expect(unit.labels(for: 60).top == "60")
+        #expect(unit.labels(for: 60).bottom == "20")
+    }
+}
+
 struct PipScoringTests {
     @Test("Score label maps differences to authentic golf shorthand")
     func scoreLabelKnownValues() {

@@ -166,17 +166,14 @@ struct ShotInputSheet: View {
     }
 
     private var puttActions: some View {
-        actionButton("HOLED ✓", filled: state.isSlotHoled(slot, at: idx), accent: true) {
-            let pick = TargetField.Pick(
-                value: nil,
-                pos: CGPoint(x: 0.5, y: 0.493),
-                good: true,
-                label: "HOLED",
-                proximityFeet: 0,
-                holed: true
-            )
-            state.applyPick(pick, to: slot, at: idx)
-            onClose()
+        HStack(spacing: 6) {
+            actionButton("MISSED", filled: false, accent: false) {
+                state.recordMissedPutt(distance: dialValue, for: slot, at: idx)
+            }
+            actionButton("HOLED ✓", filled: state.isSlotHoled(slot, at: idx), accent: true) {
+                state.recordHoledPutt(distance: dialValue, for: slot, at: idx)
+                onClose()
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -301,17 +298,7 @@ struct ShotInputSheet: View {
     // MARK: - Bindings & helpers
 
     private var dialValue: Int {
-        state.slotDistance(slot, at: idx) ?? defaultDistance
-    }
-
-    private var defaultDistance: Int {
-        switch node.mode {
-        case .putt: return 6
-        case .fairway: return 240
-        case .green:
-            if case .chip = slot { return 20 }
-            return 150
-        }
+        state.resolvedSlotDistance(slot, at: idx)
     }
 
     private var dialBinding: Binding<Int> {
@@ -324,7 +311,7 @@ struct ShotInputSheet: View {
     private var clubBinding: Binding<String?> {
         Binding(
             get: { state.slotClub(slot, at: idx) },
-            set: { if let club = $0 { state.setSlotClub(club, to: slot, at: idx) } }
+            set: { if let club = $0 { state.selectClub(club, for: slot, at: idx) } }
         )
     }
 

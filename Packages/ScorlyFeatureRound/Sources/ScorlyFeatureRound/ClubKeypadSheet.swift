@@ -2,7 +2,7 @@ import ScorlyDesignSystem
 import SwiftUI
 
 /// Club picker popup raised from the shot sheet's club button. Reuses the
-/// established `BrutalistClubs` vocabulary (Driver / 3-Wood / 50 / 54 /
+/// established club vocabulary (Driver / 3-Wood / 50 / 54 /
 /// 58 / Putter) via `ClubGrid`, in a bottom-anchored brutalist card.
 struct ClubKeypadSheet: View {
     @Binding var club: String?
@@ -25,7 +25,7 @@ struct ClubKeypadSheet: View {
                         .foregroundStyle(BrutalistColor.muted)
                         .brutalistTap(action: onClose)
                 }
-                ClubGrid(options: BrutalistClubs, selection: clubBinding)
+                ClubGrid(options: brutalistClubs, selection: clubBinding)
             }
             .padding(13)
             .background(BrutalistColor.bg)

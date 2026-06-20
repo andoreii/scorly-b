@@ -60,7 +60,9 @@ struct RoundPlayThreadTests {
             putts: 1,
             puttDistances: [8],
             teeShot: "Fairway",
-            approach: "Green"
+            teeShotDistance: 0,
+            approach: "Green",
+            approachDistance: 0
         )
 
         let stat = thread.derivedStat(for: 0)
@@ -89,7 +91,9 @@ struct RoundPlayThreadTests {
             putts: 3,
             puttDistances: [30, 5, 2],
             teeShot: "Fairway",
-            approach: "Green"
+            teeShotDistance: 0,
+            approach: "Green",
+            approachDistance: 0
         )
 
         let stat = thread.derivedStat(for: 0)
@@ -140,8 +144,8 @@ struct RoundPlayThreadTests {
         let old = makeState()
         old.entries[0] = HoleEntry(
             strokes: 3, putts: 0,
-            teeShot: "Fairway",
-            approach: "Miss Right",
+            teeShot: "Fairway", teeShotDistance: 0,
+            approach: "Miss Right", approachDistance: 0,
             argShots: [ARGShotEntry(lie: "In", distanceYards: 15)]
         )
 
@@ -198,7 +202,11 @@ struct RoundPlayThreadTests {
         thread.applyPick(holedGreen, to: .approach, at: 0)
 
         let old = makeState()
-        old.entries[0] = HoleEntry(strokes: 2, putts: 0, teeShot: "Fairway", approach: "In")
+        old.entries[0] = HoleEntry(
+            strokes: 2, putts: 0,
+            teeShot: "Fairway", teeShotDistance: 0,
+            approach: "In", approachDistance: 0
+        )
 
         let stat = thread.derivedStat(for: 0)
         #expect(stat == old.derivedStat(for: 0))
